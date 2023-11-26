@@ -1,3 +1,3 @@
 # Introduction
 
-BackupHub is a ...
+BackupHub is a simple and easy to use Backup Control server
