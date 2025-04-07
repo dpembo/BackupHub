@@ -1,0 +1,112 @@
+<%
+function isInternal(inItem){
+  if(inItem.jobName.indexOf("||INTERNAL||")==0)return true;
+  else return false;
+}
+function processInternalJob(inItem){
+  if(inItem.jobName.indexOf("||INTERNAL||")==0){
+    inItem.icon="restart_alt";
+  }
+  return inItem;
+}
+
+function getSchedule(jobName){
+  for(var i=0;i<schedules.length;i++)
+  {
+    if(schedules[i].jobName==jobName) return i;
+  }
+  return -1;
+} 
+
+function displaySecs(secs) {
+  
+  var ret;
+
+  //Secs
+  if (secs < 300) ret = secs + " secs";
+
+  if (secs >= 300 && secs < 7200) {
+    //Mins
+    var mins = Math.floor(secs / 60);
+    secs = secs % 60;
+
+    ret = mins + " mins ";
+
+  }
+  if (secs >= 7200 && secs < 86400) {
+    //hours
+    var mins = Math.floor(secs / 60);
+    var secs = secs % 60;
+    var hours = Math.floor(mins / 60);
+    mins = mins % 60;
+    ret = hours + "h " + mins + " mins";
+  }
+
+  if (secs >= 86400) {
+    var mins = Math.floor(secs / 60);
+    var secs = secs % 60;
+    var hours = Math.floor(mins / 60);
+    var days = Math.floor(hours / 24);
+    hours = hours - (days * 24);
+    //hours = days %24;
+    mins = mins % 60;
+    ret = days + " days " + hours + "h ";
+
+  }
+
+  return ret;
+}
+
+%>
+
+
+        <!-- RUNNING ITEMS -->
+
+        <% for(var i = 0; i<runningList.length;i++) {%>
+
+          <tr class="runningHighlight runningItem">
+            <td><span class="material-icons vertMid" style="color:<%=runningList[i].color%>;font-size:24pt"><%=runningList[i].icon%></span></td>
+            <td><span class="orange-text blinking"><%=runningList[i].jobName%></span></td>
+            
+            <td>
+              <% var runType="schedule"; var runDesc="Scheduled Execution";%>
+              <% 
+              if(runningList[i].manual!==undefined && runningList[i].manual==true){
+                runType="play_arrow";runDesc="Manual Execution";
+              }
+              if(runningList[i].manual!==undefined && runningList[i].manual=="manual"){
+                runType="play_arrow";runDesc="Manual Execution";
+              }
+              if(runningList[i].manual!==undefined && runningList[i].manual=="update"){
+                runType="system_update_alt";runDesc="Agent Update";
+              }
+              if(runningList[i].manual!==undefined && runningList[i].manual=="threshold-cpu"){
+                runType="data_thresholding";runDesc="CPU Threshold Exceeded";
+              }
+              if(runningList[i].manual!==undefined && runningList[i].manual=="threshold-disk"){
+                runType="disc_full";runDesc="Mount Threshold Exceeded";
+              }
+              %>
+              <span title="<%=runDesc%>" class="orange-text blinking material-icons"><%=runType%></span>
+            </td>
+
+
+              <td><span class="orange-text blinking"><%=runningList[i].startTime%></span></td>
+              
+              <% 
+                var dateNow = new Date().getTime();
+                var dateStart = new Date(runningList[i].startTime).getTime();
+                var diff = dateNow - dateStart;
+                diff = diff / 1000;
+                var diffDisp =displaySecs(diff);
+              %>
+
+              <td><span title="Run time" class="blinking orange-text"><%=diffDisp%></span></td>
+              <td>-</td>
+              <td><span title="Running" class="blinking orange-text material-icons">pending</span></td>
+              <td>
+                <a href="scheduleInfo.html?index=<%=getSchedule(runningList[i].jobName)%>" title="view log" class="modal-trigger"><span class="material-icons vertTop runningIcons">visibility</span></a>
+          </tr>
+          <%}%>
+
+        

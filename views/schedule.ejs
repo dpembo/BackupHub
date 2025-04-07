@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0"/>
+  
+  <title>BackupHub | Job Schedule</title>
+
+  <%- include('./partials/_head'); %>
+  <%- include('./partials/_scripts'); %>
+  
+  <script>
+
+  function doNotify(status,msg)
+  {
+      $.pnotify({
+      title: 'Backup Job',
+      text: msg,
+      type: status,
+      history: false,
+      styling: 'jqueryui'
+      });
+  }
+
+  //Generate the dialogs 
+<% for(i = 0; i < config.length; i++) {%>
+
+    $(function() {
+       $( "#dialog<%=i%>" ).dialog({
+          autoOpen: false,
+          height: 600,
+          width: 1000     
+       });
+       $( "#opener<%=i%>" ).click(function() {
+          $( "#dialog<%=i%>" ).dialog( "open" );
+       });
+    });
+
+    
+<%}%>
+
+    function invokeJobCall(joblog,jobName) {
+        var len = joblog.length;
+        len = len -4;
+        newjoblog = joblog.substr(0,len);
+
+        var xhttp = new XMLHttpRequest();
+        xhttp.open("GET", "http://192.168.1.24:1880/backup-init?dest=" + newjoblog, false);
+        xhttp.send(null);
+ 
+        if (xhttp.status === 200) {
+          var obj = JSON.parse(xhttp.responseText);
+          if(obj.status=="Job Started")
+          {
+            doNotify("success","Job [" + jobName + "] Successfully Queued - Please wait for this to start" );
+          }
+          else
+          {
+            doNotify("error","Job [" + jobName + "] Not Queued - another job [" + obj.job + "] is already queued" );
+          }
+        }
+    };
+    
+    
+  
+  </script>
+
+  <style type="text/css">
+
+    /* Set the size, colour, font properties for the blinking text */
+        .blinking {
+            animation: blinkingText 1s infinite;
+            color: white;
+        }
+        
+        /* Specifies the animation and transparency for the blinking text */
+        @keyframes blinkingText {
+   
+            0% {
+                opacity: 0;
+            }
+            50% {
+                opacity: .5;
+            }
+            100% {
+                opacity: 1;
+            }
+        }
+
+        .tableIconButton
+        {
+          color: #63ade9;
+        }
+
+        .tableIconButton:hover
+        {
+          color: #2049b9;
+        }
+
+        .tableIconButtonDisabled
+        {
+          color: #cccccc;
+        }
+
+      
+    </style>
+</head>
+<body>
+  <%- include('./partials/_header'); %>
+  <div class="section no-pad-bot" id="index-banner">
+    <div class="container">
+
+      <h5 class="header orange-text">Schedule</h5>
+      <iframe style="width: 100%;height:500px" src="http://192.168.1.24:1880/ui/"></iframe>
+    </div>
+  </div>
+
+
+  <div class="container">
+    <h2>Scheduler</h2>
+    <form action="/scheduler" method="POST">
+      <div class="input-field">
+        <input type="text" name="jobName" required>
+        <label for="jobName">Job Name</label>
+      </div>
+      <div class="input-field">
+        <select name="scheduleType" required>
+          <option value="" disabled selected>Select Schedule Type</option>
+          <option value="daily">Daily</option>
+          <option value="weekly">Weekly</option>
+          <option value="monthly">Monthly</option>
+        </select>
+        <label for="scheduleType">Schedule Type</label>
+      </div>
+      <!-- dayOfWeek -->
+      <!-- dayInMonth -->
+      
+      <div class="input-field">
+        <input type="text" name="scheduleTime" required>
+        <label for="scheduleTime">Schedule Time (e.g., '12:00' for 12 PM)</label>
+      </div>
+      <button class="btn waves-effect waves-light" type="submit" name="action">Create Schedule</button>
+    </form>
+    </div>
+
+<!--  
+
+  <div class="container">
+    <div class="section">
+
+      <div class="row">
+        <div class="col s12 m4">
+          <div class="icon-block">
+            <h2 class="center light-blue-text"><i class="material-icons">flash_on</i></h2>
+            <h5 class="center">Speeds up development</h5>
+
+            <p class="light">We did most of the heavy lifting for you to provide a default stylings that incorporate our custom components. Additionally, we refined animations and transitions to provide a smoother experience for developers.</p>
+          </div>
+        </div>
+
+        <div class="col s12 m4">
+          <div class="icon-block">
+            <h2 class="center light-blue-text"><i class="material-icons">group</i></h2>
+            <h5 class="center">User Experience Focused</h5>
+
+            <p class="light">By utilizing elements and principles of Material Design, we were able to create a framework that incorporates components and animations that provide more feedback to users. Additionally, a single underlying responsive system across all platforms allow for a more unified user experience.</p>
+          </div>
+        </div>
+
+        <div class="col s12 m4">
+          <div class="icon-block">
+            <h2 class="center light-blue-text"><i class="material-icons">settings</i></h2>
+            <h5 class="center">Easy to work with</h5>
+
+            <p class="light">We have provided detailed documentation as well as specific code examples to help new users get started. We are also always open to feedback and can answer any questions a user may have about Materialize.</p>
+          </div>
+        </div>
+      </div>
+
+    </div>
+    <br><br>
+  </div>
+-->
+
+  <%- include('./partials/_footer'); %>
+
+
+
+  </body>
+</html>
+

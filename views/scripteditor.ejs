@@ -1,0 +1,604 @@
+<%
+function escapeShell(inData){
+  return base64Encode(inData);
+}
+
+// Base64 Encode a String
+function base64Encode(str) {
+  return Buffer.from(str).toString('base64');
+}
+
+// Base64 Decode a String
+function base64Decode(base64Str) {
+  return Buffer.from(base64Str, 'base64').toString('utf-8');
+}
+
+
+function sanitizeVariableName(name) {
+  // 1. Remove any characters that are not letters, numbers, $, or _
+  // 2. Replace spaces or hyphens with underscores
+  // 3. Ensure the name doesn't start with a number by prepending an underscore if necessary
+
+  let sanitized = name
+    .replace(/[^a-zA-Z0-9_$]/g, '_')  // Replace any invalid character with _
+    .replace(/^[0-9]/, '_$&');        // If starts with a number, prepend an underscore
+
+  // Optionally: Remove leading and trailing underscores
+  sanitized = sanitized.replace(/^_+|_+$/g, '');
+  return sanitized;
+}
+
+function displaySecs(secs) {
+  
+  var ret;
+
+  //Secs
+  if (secs < 300) ret = secs + " secs";
+
+  if (secs >= 300 && secs < 7200) {
+    //Mins
+    var mins = Math.floor(secs / 60);
+    secs = secs % 60;
+
+    ret = mins + " mins ";
+
+  }
+  if (secs >= 7200 && secs < 86400) {
+    //hours
+    var mins = Math.floor(secs / 60);
+    var secs = secs % 60;
+    var hours = Math.floor(mins / 60);
+    mins = mins % 60;
+    ret = hours + "h " + mins + " mins";
+  }
+
+  if (secs >= 86400) {
+    var mins = Math.floor(secs / 60);
+    var secs = secs % 60;
+    var hours = Math.floor(mins / 60);
+    var days = Math.floor(hours / 24);
+    hours = hours - (days * 24);
+    //hours = days %24;
+    mins = mins % 60;
+    ret = days + " days " + hours + "h ";
+
+  }
+
+  return ret;
+}
+
+ %>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0"/>
+
+  <title>BackupHub | Script Editor</title>
+
+  <%- include('./partials/_head'); %>
+  <%- include('./partials/_scripts'); %>
+  
+  <script>
+  var editor;
+  var overviewText=`#start-params
+#<b>SAMPLE DESCRIPTION</b>
+#<br/><br/><b>Parameters</b><br/>
+#<b>#1</b> - Param1<br/>
+#<b>#2</b> - Param2<br/>
+#end-params`;
+
+var onScript = "";
+
+// Base64 Decode in the browser
+function base64Decode(base64Str) {
+  return decodeURIComponent(escape(atob(base64Str)));
+}
+
+
+// Template
+<% if (templates && templates.getTemplateNames().length > 0) { %><% templates.getTemplateNames().forEach(function(script) { %><% var dispscript = script.split(".")[0]%>var <%=sanitizeVariableName(dispscript + "_Content")%>_Content=`<%- escapeShell(templates.getTemplateByName(script).content)%>`;<%});%><%}%>
+        
+
+function deSelectAllFiles(){
+  //Remove css from selection
+  var fileSelectors = document.querySelectorAll('div.fileselector');
+
+  // Iterate through the NodeList of fileSelectors
+  fileSelectors.forEach(function(div, index) {
+      //console.log('Div', index, 'Content:', div.innerHTML);
+      div.style.backgroundColor="";
+  });
+}
+function scriptSelected(element, inScript,inDescription)
+{
+
+  onScript = inScript;
+  //Remove css from selection
+  deSelectAllFiles();
+
+  if (window.getSelection) {window.getSelection().removeAllRanges();}
+  else if (document.selection) {document.selection.empty();}
+  if(inScript==""){
+    editor.setValue("#/bin/sh\n" + overviewText + "\n\n#Implement your shell script here");
+    //var desc = extractHTMLParams(data);
+    window.scrollTo(0, 0);
+    document.getElementById('scriptInfoDetail').innerHTML="";
+    return;
+  }
+  else{
+    var url = "/rest/script/" + inScript + "?mode=raw"; 
+    fetchApiData(url)
+    .then(data => {
+      // Handle the API data as a string here
+      //console.log(data);
+      //alert(data);
+      editor.setValue(data);
+      var desc = extractHTMLParams(data);
+      window.scrollTo(0, 0);
+      document.getElementById('scriptInfoDetail').innerHTML=desc;
+      //alert(element.innerHTML);
+      element.style.backgroundColor="rgba(0,0,0,0.2)";
+      //element.style.color="red";
+    })
+    .catch(error => {
+      // Handle errors here or display them to the user
+      console.error('Error:', error);
+      document.getElementById('scriptInfoDetail').innerHTML="";
+    });
+  }
+}
+
+  function newCommand(select)
+  {
+
+    if(select.value=="")
+    {
+      editor.setValue("#/bin/sh\n" + overviewText + "\n\n#Implement your shell script here");
+      //var desc = extractHTMLParams(data);
+      window.scrollTo(0, 0);
+      return;
+    }
+    var url = "/rest/script/" + select.value + "?mode=raw";
+    if(select.value=="")
+    {
+      document.getElementById('scriptInfoDetail').innerHTML="";
+      return;
+    }
+    fetchApiData(url)
+    .then(data => {
+      // Handle the API data as a string here
+      //console.log(data);
+      //alert(data);
+      editor.setValue(data);
+      var desc = extractHTMLParams(data);
+      window.scrollTo(0, 0);
+      document.getElementById('scriptInfoDetail').innerHTML=desc;
+    })
+    .catch(error => {
+      // Handle errors here or display them to the user
+      console.error('Error:', error);
+      document.getElementById('scriptInfoDetail').innerHTML="";
+    });
+  }
+
+  function fetchApiData(url) {
+    return fetch(url)
+      .then(response => {
+        if (!response.ok) {
+          throw new Error('Network response was not ok');
+        }
+        return response.text(); // This will return the response body as a string
+      })
+      .catch(error => {
+        // Handle errors here or propagate them further
+        console.error('There was a problem with the fetch operation:', error);
+        //throw error; // ignore any error 
+      });
+  }
+
+  function doNotify(status,msg)
+  {
+      $.pnotify({
+      title: 'Backup Job',
+      text: msg,
+      type: status,
+      history: false,
+      styling: 'jqueryui'
+      });
+  }
+
+    function getUrlParam(name){
+      if(name=(new RegExp('[?&]'+encodeURIComponent(name)+'=([^&]*)')).exec(location.search))
+        return decodeURIComponent(name[1]);
+    }
+
+    function confirmName(newFileName){
+      //alert("ok");
+      //document.getElementById('agentcommand').value=document.getElementById('newfile').value;
+      //alert(document.getElementById('agentcommand').value);
+      //var select = document.getElementById('agentcommand');
+      //var option = document.createElement('option');
+      //option.value = document.getElementById('newfile').value;
+      //option.text = document.getElementById('newfile').value;
+      
+      //onScript;
+      onScript = newFileName;
+      var optionExists = false;
+      var fileSelectors = document.querySelectorAll('div.fileselector');
+      // Iterate through the NodeList of fileSelectors
+      fileSelectors.forEach(function(div, index) {
+          if(onScript == div.innerHTML)optionExists=true;
+      });
+
+      if (!optionExists) {
+        //var filecontainer=document.querySelector('div.filecontainer');
+
+        //filecontainer.appendChild(newDiv);
+        //select.add(option);
+        //option.selected = true;
+        //alert(document.getElementById('agentcommand').value);
+        //M.FormSelect.init(select);
+        //alert('saving');
+        //console.log('Saving');
+        $('#confirmationModal').modal('close');
+        save(true);
+
+        
+      }
+      else{
+        document.getElementById('helper-text').innerHTML="Script with this name already exists, please provide a new name";
+        //document.getElementById('modalerrormsg').innerHTML="Script with this name already exists, please provide a new name";
+        document.getElementById('newfile').className="validate invalid";
+      }
+      
+
+    }
+  </script>
+
+      <!-- Load the Monaco Editor styles -->
+      <!--<link rel="stylesheet" data-name="vs/editor/editor.main" href="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.23.0/min/vs/editor/editor.main.css" />-->
+      <link rel="stylesheet" data-name="vs/editor/editor.main" href="/monaco-editor/min/vs/editor/editor.main.css" />
+
+      <!-- Load the Monaco Editor's JavaScript files -->
+      <script src="/monaco-editor/min/vs/loader.js"></script>
+      <script>
+          require.config({ paths: { 'vs': '/monaco-editor/min/vs' } });
+  
+          // Load the Monaco Editor
+          require(['vs/editor/editor.main'], function() {
+              // Initialize the editor
+                  editor = monaco.editor.create(document.getElementById('editor'), {
+                  value: '# Write you shell script here...',
+                  language: 'shell',
+                  theme: 'vs-dark'
+              });
+  
+              // Handle editor content changes
+              editor.getModel().onDidChangeContent(function() {
+                  // Access the editor content
+                  var scriptContent = editor.getValue();
+                  // You can perform further actions with the script content here
+                  var desc = extractHTMLParams(scriptContent);
+                  //window.scrollTo(0, 0);
+                  document.getElementById('scriptInfoDetail').innerHTML=desc;
+              });
+          });
+
+          function extractHTMLParams(data) {
+            const startTag = '#start-params';
+            const endTag = '#end-params';
+            
+            // Find the positions of the start and end tags
+            const startIndex = data.indexOf(startTag);
+            const endIndex = data.indexOf(endTag);
+
+            // If both tags are found and the start tag comes before the end tag
+            if (startIndex !== -1 && endIndex !== -1 && startIndex < endIndex) {
+              // Extract the HTML content between the tags
+              let htmlContent = data.substring(startIndex + startTag.length, endIndex);
+              // Remove the hash symbols at the beginning of each line specifically
+              htmlContent = htmlContent.replace(/^#/gm, '');
+              return htmlContent;
+            } else {
+              // Return an empty string or some other value to indicate that the tags were not found
+              return '';
+            }
+          }
+
+          function createNew(){
+            //deselect all other files
+            deSelectAllFiles();
+            onScript="";
+            editor.setValue("");
+            window.scrollTo(0, 0);
+            document.getElementById('scriptInfoDetail').innerHTML="";
+            //Add the overview
+            addOverview();
+          }
+
+          function addOverview()
+          {
+            var scriptContent = editor.getValue();
+            var lines = scriptContent.split('\n');
+            if(lines!==undefined && lines!==null && lines.length>=1)
+            {
+              if(lines[0]=="#!/bin/sh")
+              {
+                scriptContent = lines[0] + "\n" + overviewText + "\n";
+                for(var i=1;i<lines.length;i++)
+                {
+                  scriptContent+=lines[i] + "\n";
+                }
+              }
+              else
+              {
+                scriptContent = "#!/bin/sh\n" + overviewText + "\n\n" + scriptContent; 
+              }
+            }
+            //scriptContent += overviewText;
+            editor.setValue(scriptContent);
+            //alert(scriptContent);
+          }
+
+          function newFromTemplate(){
+            $('#templateModal').modal('open');
+          }
+          function save(doReload)
+          {
+            if(doReload===undefined)doReload=false;
+            if(onScript==""){
+              $('#confirmationModal').modal('open');
+            }
+            else{
+              //alert("now saving");sa
+              enableLoader();
+              gosave();
+              disableLoader();
+              setTimeout(function() {
+                if(doReload)document.location.reload();
+              }, 1000);
+              
+            }
+            
+          }
+
+          function gosave()
+          {
+            
+
+            const scriptContent = editor.getValue();
+            const scriptName = onScript;
+
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', '/saveScript');
+            xhr.setRequestHeader('Content-Type', 'application/json');
+            xhr.onload = function() {
+              if (xhr.status === 200) {
+                console.log(xhr.responseText);
+                M.toast({html: "Script Saved", displayLength: 5000});
+              } else {
+                M.toast({html: "Unable to save script", displayLength: 5000});
+                console.error(xhr.statusText);
+              }
+            };
+            xhr.onerror = function() {
+              M.toast({html: "Unable to save script", displayLength: 5000});
+              console.error(xhr.statusText);
+            };
+            xhr.send(JSON.stringify({
+              script: scriptContent,
+              scriptName: scriptName
+            }));
+            }
+
+          function enableLoader()
+          {
+            var elem = document.getElementById("loader");
+            elem.style.display="";  
+          }
+
+          function disableLoader()
+          {
+            var elem = document.getElementById("loader");
+            elem.style.display="none";  
+          }
+
+          function toggleLoader()
+          {
+            //alert("changing loader");
+            var elem = document.getElementById("loader");
+            //alert(elem);
+            //alert(elem.style.display);
+            if(elem.style.display=="none"){
+              elem.style.display="";
+            }
+            else{
+              elem.style.display="none";
+            }
+          }
+
+          function previewTemplate(script,data){
+            var contentElem = document.getElementById(script + "-content");
+            var paramsElem = document.getElementById(script + "-parameters");
+            var descElem = document.getElementById(script + "-description");
+            var scriptElem = document.getElementById(script + "-script");
+            
+            var toSetParams = document.getElementById('script-parameters');
+            var toSetContent= document.getElementById('script-content');
+
+            toSetParams.innerHTML = extractHTMLParams(base64Decode(data));
+            toSetContent.innerText = base64Decode(data);
+
+          }
+
+          function useTemplate(script,data){
+            var descElem = document.getElementById(script + "-description");
+            var scriptElem = document.getElementById(script + "-content");
+            var paramsElem = document.getElementById(script + "-parameters");
+            editor.setValue(base64Decode(data));
+            var desc = extractHTMLParams(data);
+            window.scrollTo(0, 0);
+            $('#templateModal').modal('close');
+
+
+          }
+
+      </script>
+      
+ 
+  
+</head>
+<body>
+  <%- include('./partials/_header'); %>
+
+
+  <div id="templateModal" class="modal">
+    <div class="modal-content">
+        <h4>Template Selection</h4>
+          <div class="row">
+            <div class="col s7 noPadding"> 
+              <div class="template-list" style="display: flex; flex-wrap: wrap; gap: 16px;">
+        <% if (templates && templates.getTemplateNames().length > 0) { %>
+            <% templates.getTemplateNames().forEach(function(script) { %>
+              <% var dispscript = script.split(".")[0]%>
+                <div class="card" style="max-width:110px; flex: 1 1 calc(33.333% - 16px); min-width: 250px; display: flex; flex-direction: column;">
+                    <div class="card-content" style="flex-grow: 1;" onclick="previewTemplate('<%=dispscript%>',<%=sanitizeVariableName(dispscript + "_Content")%>_Content)">
+                        <span class="card-title"><%=dispscript%></span>
+                        <div id="<%=dispscript%>-script"><%=script%></div>
+                        <div id="<%=dispscript%>-description"><%- templates.getTemplateByName(script).description%></div>
+                        <div id="<%=dispscript%>-parameters" style="display:none"><%- templates.getTemplateByName(script).parameters %></div>
+                    </div>
+                    <div class="card-action">
+                        <a href="#" onclick="useTemplate('<%=dispscript%>',<%=sanitizeVariableName(dispscript + "_Content")%>_Content)">Use Template</a>
+                    </div>
+                </div>
+            <% }); %>
+        <% } else { %>
+            <div class="card-panel red lighten-4">
+                <p>No scripts available.</p>
+            </div>
+        <% } %>
+    </div>
+
+            </div>
+            
+            <div id="data-preview" class="col s5 noPadding" style="border-left:0px solid #cccccc;"> 
+              <div style="background-color:#000000;color:#ffffff;height:265px;overflow-y: scroll;font-family: courier new;" id="script-content"></div>
+              <div id="script-parameters" style="overflow-y: scroll;height: 140px;"></div>
+            </div>
+          </div>
+        <br><span id="modalerrormsg" style="color:red">&nbsp;</span>
+        
+        
+    </div>
+    <div class="modal-footer" style="flex-shrink: 0;position: sticky;bottom: 0;z-index:20">
+        <a href="#!" class="modal-close waves-effect waves-green btn-flat">Cancel</a>
+
+    </div>
+  </div>
+
+  <div id="confirmationModal" class="modal">
+    <div class="modal-content">
+        <h4>Shell Script Name</h4>
+        <p>Please provide a name for the backup script, then press 'Save'<br><br></p>
+          <div class="input-field">
+            <input type="text" id="newfile">
+            <label for="newfile">File Name:</label>
+            <span class="helper-text" id="helper-text" data-error="Script with this name already exists, please provide a new name"></span>
+          </div>
+          
+        <br><span id="modalerrormsg" style="color:red">&nbsp;</span>
+        
+        
+    </div>
+    <div class="modal-footer">
+        <a href="#!" class="modal-close waves-effect waves-green btn-flat">Cancel</a>
+        <a href="#!" onclick="confirmName(document.getElementById('newfile').value)" id="confirmButton" class="waves-effect waves-green btn-flat">Save</a>
+    </div>
+  </div>
+
+
+  <main class="scriptEditorMain">
+    <div id="loader" style="display:none">
+    <div style="display:block;position:absolute;z-index:199;top:0px;left:0px;width:100%;height:100%;background-color: rgba(180, 180, 180, 0.5)"></div>
+    <div style="height:0px;width:0px;z-index:200">
+      <div class="preloader-wrapper big active" style="display:block;position:relative;z-index:200;top:200px;left:640px;">
+        <div class="spinner-layer spinner-blue-only">
+          <div class="circle-clipper left">
+            <div class="circle"></div>
+          </div><div class="gap-patch">
+            <div class="circle"></div>
+          </div><div class="circle-clipper right">
+            <div class="circle"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    </div>
+    <div class="container containerlargeScriptEditor" style="width:100%;position:relative;top:-20px;margin-left:0px;padding-left:0px;height:100%">
+      <div class="row">
+        <div class="col resizable s4 noPadding" style="border-left:0px solid #cccccc">
+         
+          <div class="row">
+          <div class="col s12">
+            <!--<button onclick="save()" class="waves-effect green btn-flat">Save</button>
+            <button onclick="addOverview()" class="btn-flat green">Overview</button>-->
+            <span style="width:10px">&nbsp;</span>
+            <span onclick="createNew()" title="New Script" style="cursor:pointer;font-size:20pt" class="material-icons vertMid tableIconButton ">library_add</span>
+            
+            <%if(templates){%>
+            <span onclick="newFromTemplate()" title="New Script from Template" style="cursor:pointer;font-size:20pt" class="material-icons vertMid tableIconButton ">library_books</span>
+            <%}%>
+            <span class="separator"></span>
+            <span onclick="save()" title="Save" style="cursor:pointer;font-size:20pt" class="material-icons vertMid tableIconButton ">save</span>
+            
+  
+          </div>
+          </div>
+              
+          <div class="row">
+          <div class="col s12">
+            
+            <!--<select name="agentcommand" onchange="newCommand(this)" id="agentcommand">
+              <option value="" disabled selected>Command File</option>
+              <option value="">New</option>-->
+              <div class="filecontainer">
+              <% for (i=0;i<scripts.length;i++) { %>
+              <div class="fileselector" title="<%=scriptsDesc[i]%>" ondblclick="scriptSelected(this,'<%=scripts[i]%>')"><%=scripts[i]%></div>
+              <% } %>
+              </div>
+            <!--</select>-->
+          </div>
+          </div>
+  
+          <div class="row">
+            <div class="col s12">
+            <div id="scriptInfoDiv">
+              <div><label style="position: relative;top: -3px; padding-left:5px;">Script Details</label></div>
+              <div class="scriptInfo" id="scriptInfoDetail"></div>
+            </div>
+          </div>
+          </div>
+          </div>
+        <div class="col resizable s8 noPadding" style="height:100%">
+              <div id="editor" style="height:540px"></div>
+        </div>
+ 
+      </div>
+    </div>
+
+  </main>
+
+  <script>
+    M.FormSelect.init(document.querySelectorAll('select'));
+    $('.modal').modal();
+  </script>
+
+  <footer>
+  <%- include('./partials/_footer'); %>
+  </footer>
+
+  </body>
+</html>
+

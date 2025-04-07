@@ -1,0 +1,1172 @@
+/* Light CSS */
+
+
+.loader {
+  border: 5px solid #f3f3f3; /* Light grey */
+  border-top: 5px solid #ff9800 ; /* orange */
+  border-radius: 50%;
+  width: 27px;
+  height: 27px;
+  animation: spin 1s linear infinite;
+  display:inline-block;
+}
+
+
+
+.loader-large {
+  border: 15px solid #f3f3f3; /* Light grey */
+  border-top: 15px solid #ff9800 ; /* orange */
+  border-radius: 50%;
+  width: 200px;
+  height: 200px;
+  animation: spin 1s linear infinite;
+  display:inline-block;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.loader-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  /*background-color: rgba(255, 255, 255, 0.8);  Semi-transparent white */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9998;
+}
+
+.refreshloader {
+  border: 3px solid #f3f3f3; /* Light grey */
+  border-top: 3px solid #ff9800 ; /* orange */
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  animation: spin 1s linear infinite;
+  display:inline-block;
+}
+
+.refreshindicator{
+  margin-left:10px;
+
+  position:relative;
+  display:inline-block;
+}
+
+.preloader-wrapper {
+  /* Adjust the background color for light mode */
+  background-color: #fff; /* Replace with your desired background color */
+}
+
+/* Updated styles for the full-height panel to slide in from the top */
+.panel-wrapper::-webkit-scrollbar {
+  width: 10px; /* Width of the scrollbar */
+}
+
+.panel-wrapper::-webkit-scrollbar-track {
+  background-color: #444444; /* Color of the scrollbar track */
+}
+
+.panel-wrapper::-webkit-scrollbar-thumb {
+  background-color: #000000; /* Color of the scrollbar handle */
+  border-radius: 5px; /* Rounded corners for the handle */
+}
+
+.panel-wrapper::-webkit-scrollbar-corner {
+  background-color: #aaaaaa; /* Color of the scrollbar corner */
+}
+
+.panel-wrapper {
+  position: fixed;
+  top: 65px;
+  right: -400px; /* Initially hidden outside the viewport */
+  width: 400px; /* Set width to 400px */
+  /*height: 100vh;*/
+  /*background-color: #ff0000;*/
+  transition: right 0.3s ease-in-out; /* Use 'right' property for slide animation */
+  z-index: 999; /* Ensure it's above other content */
+  /*box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);  Optional: Add shadow for better visibility */
+  /*max-height: calc(100% - 50px);*/ /* Adjust the max-height as needed */
+  /*max-height: 100%;*/
+  max-height: calc(100% - 65px);
+  overflow-y: auto; /* Enable vertical scrolling within this container */  
+}
+
+.content-panel {
+  /*padding: 20px;*/
+}
+
+.panel-open {
+  right: 0; /* Slide in to the right side of the viewport */
+}
+
+#notificationsList{
+  /*max-height: calc(100% - 50px);  Adjust the max-height as needed */
+  overflow-y: auto; /* Enable vertical scrolling within this container */
+  overflow-x: hidden; /* Enable vertical scrolling within this container */
+  /*background-color: rgba(0, 0, 0, 0.4);*/
+  width: 100% !important;  
+  height:100%;
+}
+
+.close-panel{
+  font-size: 18pt;
+  float:right;
+  cursor: pointer;
+  display:none;
+}
+
+.notification{
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.4);
+  background-color: rgba(255,255,255,0.9);
+  padding: 20px;
+  margin-bottom: 15px;
+  border-radius: 10px;
+  overflow: hidden; /* Hide overflow content */
+  word-wrap: break-word; /* Wrap long words onto the next line */
+  width: 370px;
+  margin-right:10px;
+}
+
+.notify-status-icon{
+  font-size:12pt;
+}
+
+.notify-actions{
+  font-size:8pt;
+  float:right;
+  cursor:pointer;
+}
+
+.notify-delete{
+  font-size:8pt;
+  float:right;
+  cursor:pointer;
+}
+
+.notification-error div.notify-icon{
+  color: rgba(150,0,0,0.7);
+
+}
+
+.notify-title{
+  font-size:10pt;
+  font-weight:700;
+}
+
+.notify-time{
+  font-size:10pt;
+}
+
+
+.notify-text{
+  font-size:9pt;
+}
+
+.circle {
+  display: inline-flex; /* Use flexbox to center horizontally and vertically */
+  width: 5px; /* Set the width of the circle */
+  height: 5px; /* Set the height of the circle */
+  background-color: #000000; /* Set the color of the circle */
+  border-radius: 50%; /* Make it a circle using border-radius */
+  align-items: center; /* Center vertically */
+  justify-content: center; /* Center horizontally */
+  margin-bottom:2px;
+  margin-left:5px;
+  margin-right:4px;
+}
+
+.close-panel{
+  visibility: hidden;
+}
+
+.notify-animate {
+  /*width: calc(33.33% - 20px);  Adjust width based on your layout */
+  margin: 10px;
+  transition: all 0.3s ease; /* Apply transition for smooth animation */
+  opacity: 1;
+  transform: scale(1);
+}
+
+.notify-animate.hidden {
+  opacity: 0;
+  transform: scale(0);
+  width: 0;
+  margin: 0;
+}
+
+.panel-animate {
+  display: flex;
+  flex-wrap: wrap;
+  /* Other container styles */
+}
+
+#notificationMenu{
+  height:64px;
+}
+
+
+
+span.themeModeLight{
+  position: relative;
+  left: 15px;
+  color: #ffffff;
+}
+
+span.themeModeDark{
+  position: relative;
+  left: -15px;
+  color: #ffffff;
+}
+
+
+.runningHighlight{
+  background-color:rgba(255, 152, 0, 0.2);
+  color: #ff9800;
+}
+
+.runningIcons{
+  color: #ff9800;
+}
+
+.errorHighlight{
+  /*background-color: #ffebee;*/
+  background-color: rgba(255,0,0,0.1);
+  color: #CF6679;
+}
+
+.notification-badge-hidden {
+  display:none;
+}
+.notification-badge {
+  position: relative;
+  margin-top:-50px;
+  margin-bottom: 0px;
+  /*top:-50px;*/
+  left: 15px;
+  background-color: #CF6679;
+  color: white;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  font-size: 12px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.notify-text{
+  width:315px;
+  word-wrap: break-word; /* Wrap long words onto the next line */
+}
+
+.errorIcons{
+  color: #CF6679;
+}
+
+.successIcons {
+  color: #63ade9;
+}
+
+.headerColor{
+  background-color: #03a9f4;
+}
+
+/** Core **/
+nav ul a{
+  padding-left:5px;
+  padding-right:5px;
+}
+.section.no-pad-bot{
+  padding-bottom: 1rem;
+}
+
+#titletext {
+  top: -23px;
+  position: relative;
+  left: 10px;
+  font-size: 28pt;
+}
+
+mdisize{
+  font-size:24pt !important;
+}
+
+input {
+  color:#000000;
+}
+header {
+  margin-top: 0;
+  position: fixed;
+  top: 0;
+  display: block;
+  width: 100%;
+  /*height: 168px;*/
+  z-index: 999;
+  background-color: #ffffff;
+}
+
+main {
+  margin-left: 5%;
+  margin-top: 140px;
+  width: 90%;
+}
+
+.container{
+  width:95%;
+}
+
+.ui-pnotify-history-containerwell {
+  display: none;
+}
+
+.ui-pnotify-title {
+  font-size: 12pt;
+  font-weight: bold;
+}
+
+.ui-pnotify-text {
+  font-size: 10pt;
+  font-weight: 100;
+}
+
+.ui-icon-close {
+  visibility: visible;
+}
+
+.logoimg {
+  display: inline-block;
+  width: 100px; /* Adjust as needed */
+  height: 70px; /* Adjust as needed */
+  background-image: url('/images/BackupHubColorWhite.png');
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  /*position: relative;*/
+}
+
+.loginimg {
+  width: 310px;
+  height: 116px;
+  display: inline-block;
+  background-image: url('/images/BackupHubColor.png');
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+
+
+/* ------------------------*/
+
+.sortableHeader {
+  color: black;
+}
+
+/* Set the size, colour, font properties for the blinking text */
+.blinking {
+  animation: blinkingText 1s infinite;
+  color: white;
+}
+
+/* Specifies the animation and transparency for the blinking text */
+@keyframes blinkingText {
+
+  0% {
+    opacity: 0;
+  }
+
+  50% {
+    opacity: .5;
+  }
+
+  100% {
+    opacity: 1;
+  }
+}
+
+.vertMid
+      {
+        vertical-align: middle;
+      }
+
+.headerInRow{
+  width: 150px;
+  display:inline-block;
+  font-weight: 500;
+}
+
+.logView{
+  min-height: 200px;
+  overflow: auto;
+  border: 1px solid #cccccc;
+  padding:5px;
+}
+
+.fillWidth{
+  width:97%;
+}
+
+.executionLog{
+  position:relative;
+  top:-25px;
+}
+
+/* Adjust the top position of the dropdown menu */
+.dropdown-content {
+  top: -50px; /* You can adjust this value as needed */ 
+}
+
+/* Customize focus styles for .dropdown-content */
+.dropdown-content:focus {
+  outline: none; /* Remove the outline */
+  outline: 2px solid transparent;
+  /* You can apply other custom styles here if needed */
+}
+
+*:focus {
+outline: 2px solid transparent; /* Use a transparent outline */
+/* You can also set a box-shadow, change border color, or adjust other styles */
+}
+
+/*____________________________________________________________________________________________________*/
+
+/** Index **/
+    .card-content{
+      background-color: #ffffff;
+    }
+    .dashtitle{
+      position:relative;
+      left:33px;
+      top:20px;
+      font-size:8pt;
+    }
+    .onlinediv {
+      position:relative;
+      display:block;
+      float:left;
+      left:100px;
+      top:-60px;
+    }
+
+    .offlinediv {
+      position:relative;
+      display:block;
+      float:left;
+      left:150px;
+      top:-60px;
+    }
+
+    .runningdiv {
+      position:relative;
+      display:block;
+      float:left;
+      left:200px;
+      top:-60px;
+    }
+
+    .unknowndiv {
+      position:relative;
+      display:block;
+      float:left;
+      left:240px;
+      top:-60px;
+    }
+
+    .onlinecnt{
+      color:#63ade9;
+      font-size:36pt;
+    }
+
+    .offlinecnt{
+      color:#CF6679;
+      font-size:36pt;
+    }
+
+    .runningcnt{
+      color:#ff9800;
+      font-size:36pt;
+    }
+
+    .unknowncnt{
+      color:#666666;
+      font-size:36pt;
+    }
+
+/*_____________________________________________________________________________________________ */    
+
+/** Lists **/
+.logstable {
+  position: relative;
+  
+}
+
+div#refreshLabel {
+  color: #63ade9;
+}
+
+#buttons {
+  border: 0px solid;
+  width: 200px;
+  padding-top: 5px;
+  padding-left: 5px;
+  background-color: #eeeeee;
+  background-color: rgba(0,0,0,0.2);
+  height: 80px;
+  position: relative;
+  top: -32px;
+  /*left: -10px;*/
+  margin-right:5px;
+  display: block;
+  float: right;
+  border-bottom: 1px solid rgba(0,0,0,0.1);
+  z-index:500;
+}
+
+.refreshTime {
+  display: block;
+  float: left;
+  position: relative;
+  top: -20px;
+  left: 5px;
+}
+
+.refreshTimeInput{
+  color:black;
+}
+
+
+#refreshSwitch {
+  position: relative;
+  left: 20px;
+  top: 5px;
+}
+
+.modal {
+  width:95%;
+  height:90% !important;
+  max-height:95%;
+  top: 5% !important;
+}
+
+.highlight {
+  background-color: yellow;
+}
+
+.tableIconButton {
+  color: #63ade9;
+}
+
+.tableIconButton:hover {
+  color: #2049b9;
+}
+
+.tableIconButtonDisabled {
+  color: #cccccc;
+}
+
+.tableIconButtonError {
+  color: #CF6679;
+}
+
+.tableIconButtonError:hover {
+  color: #8B5568;
+}
+
+.tableIconButtonErrorDisabled {
+  color: #cccccc;
+}
+
+#confirmationModal{
+  height:350px !important;
+}
+
+
+/*______________________________________________________________________________________*/
+
+/* Calendar */
+
+#currentDay{
+  position: relative;top:-7px;
+}
+
+.calendar-container {
+  overflow: scroll;
+  height: 800px;
+  width: 100%;
+}
+
+.headcol {
+  position:sticky;
+  width: 5em;
+  left: 0;
+  top: auto;
+  border-top-width: 1px;
+  /*only relevant for first row*/
+  margin-top: -1px;
+  background-color: #ffffff;
+  z-index: 299;
+  /*compensate for top border*/
+}
+
+.calendar-table {
+  border-collapse: collapse;
+}
+
+.calendar-table th {
+  max-width: 300px;
+  padding: 8px 16px;
+  border: 1px solid #ddd;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  z-index:200;
+}
+
+.calendar-table td {
+  max-width: 300px;
+  padding: 8px 16px;
+  border: 1px solid #ddd;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.calendarThead {
+  position: sticky;
+  inset-block-start: 0;
+  background-color: #ddd;
+  z-index:800
+}
+
+/* Calendar View */
+.calendar-table th,
+.calendar-table td {
+  text-align: center;
+}
+
+
+.calendar-table td {
+  height: 80px;
+  padding: 5px;
+  overflow: visible;
+}
+
+.schedule-card {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background-color: #f9fafb;
+  border: 1px solid #ddd;
+  z-index: 999;
+}
+
+.calendarAgentDaily
+{
+  float: right;
+  margin-right: 40px;
+}
+
+.calrow1
+{
+  border-top:dashed #dddddd;
+}
+.calrow2{
+  border-top:solid #dddddd;
+}
+
+
+.card_daily{
+  position:relative;
+  top:-15px;
+  cursor: pointer;
+}
+
+.card_weekly{
+  position:relative;
+  top:-15px;
+  cursor: pointer;
+}
+
+.card_monthly{
+  position:relative;
+  top:-15px;
+  cursor: pointer;
+}
+
+.card-container-weekly
+{
+  position:relative;
+  top:5px;  
+}
+
+.card-container-monthly
+{
+  position:relative;
+  top:5px;
+}
+
+.entryheader
+{
+  font-weight:bold;
+}
+
+.tbentry
+{
+  border: none;
+}
+
+.tbentry td
+{
+  border:none;
+}
+
+.tbentry tr
+{
+  border:none;
+}
+
+.timeSlotBox:hover{
+  cursor:pointer;
+}
+
+.timeSlotBox:hover::after{
+  content: "+";
+  font-size: 32pt;
+}
+
+/* __________________________________________________________________________________ */
+
+/* Scheduler */
+
+.sp-replacer
+{
+    position: relative;
+    top: 10px;
+    left: 0px;
+}
+
+.scriptInfo{
+  height:180px;
+  background-color: #eeeeee;
+  border: 1px solid #cccccc;
+  padding: 5px;
+  overflow: auto scroll;
+}
+
+/* _________________________________________________________________________________ */
+/* Schedule info */
+
+.logmin {
+  height: 200px;
+  overflow: auto;
+}
+
+#cardStatusIndicatorScheduleInfo
+{
+  position:relative;
+  top:-30px;
+  float:right;
+  font-size:48pt;
+}
+
+/* ________________________________________________________________________________ */
+/* Settings */
+
+.tabs{
+  background-color: transparent;
+}
+
+.tab a{
+  color: #ff9800 !important;
+}
+
+.tabs .tab a.active {
+  color: #000; /* Change the text color of the active tab */
+}
+
+.tabs .indicator {
+  background-color: #ff9800; /* Change the underline color of the active tab */
+}
+
+/* _______________________________________________________________________________ */
+/* About */
+.imgframe {
+  display: block;
+  text-align:center;
+}
+
+/* _______________________________________________________________________________ */
+/* Script Editor */
+
+#editor {
+  height: 500px;
+  border: 1px solid #ccc;
+}
+
+.scriptEditorMain{
+  max-width: 100%;
+  width:100%;
+  margin-left:0;
+  margin-right:0;
+  margin-top:10px !important;
+  margin-bottom:-30px;
+}    
+
+.containerlargeScriptEditor{
+  max-width:100%;
+  margin-left:0;
+  margin-right:0;
+  padding-top:15px;
+  margin-left:20px;
+
+}
+
+
+.dropdown-content {
+  max-height: 300px; /* Adjust the height as per your preference */
+  overflow-y: auto; /* Add scrollbar if content overflows the height */
+}
+
+/* __________________________________________________________________________ */
+/* Agent info */
+
+.chart-container{
+  width:100%;
+  min-width: 100%;
+}
+.bar-container{
+  height:23px;
+  position:relative;left:10px;
+}
+.timestamp-container {
+  overflow:hidden;
+  width:100%;
+  min-width: 100%;
+}
+.markers {
+  height:15px;
+  position:relative;
+  top: -8px;
+  left:10px;
+}
+.timestampMarker {
+  width: 60px;
+  min-width: 60px;
+  border-left: solid #888;   
+  display:inline-block; 
+  height:10px;
+  overflow:hidden;
+}
+.timestamp {
+  text-align: left;
+  font-size: 10px;
+  color: #888;
+  width: 60px;
+  min-width: 60px;
+  display:inline-block;
+  overflow:visible;
+  position:relative;
+  top:-5px;
+}
+
+.agentInfo{
+  width:100%;
+}
+
+.wide-table{
+  max-width: 95% !important;
+  width: 95% !important;
+}
+
+/* __________________________________________________________________________ */
+/* Agent History */
+
+.timeline {
+  margin-top: 20px;
+  position: relative;
+  height: 50px;
+  width:100%;
+  display:inline-flex;
+}
+
+.status-bar {
+  position: relative;
+  height: 100%;
+  display: inline-block;
+  align-items: center;
+}
+
+.status {
+  height: 100%;
+  display: inline-block;
+  justify-content: center;
+  align-items: center;
+  font-size: 8pt;
+  color: #fff;
+  text-align: left;
+  position: relative;
+  padding-left:2px;
+  overflow:hidden;
+}
+
+.marker {
+  position: absolute; 
+  padding-top: 20px;
+  padding-left: 124px;
+  font-size: 6pt; 
+  display:block;
+}
+
+.marker-line {
+  position: absolute; 
+  /*bottom: -20px; */
+  padding-left: 134px;
+  font-size: 6pt; 
+  display:block;
+}
+
+.noPadding{
+  padding: 0px !important;
+}
+
+.filecontainer{
+  background-color: rgba(0,0,0,0.2);
+  padding-left:15px;
+  height: 270px;
+  overflow-y: scroll;
+}
+
+.fileselector {
+  width: 99%
+}
+
+.fileselector:hover{
+  background-color: rgba(0,0,0,0.2);
+  cursor: pointer;
+}
+
+/*List*/
+
+.collection-item{
+  background-color: transparent !important;
+}
+
+.list-item {
+  display: block;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  padding: 10px;
+  cursor: move;
+  z-index: 1; /* Ensure the list item is above other elements */
+}
+.ui-sortable-placeholder {
+  border: 2px dashed #333;
+  visibility: visible !important;
+  height: 50px; /* Match the height of your list items */
+  line-height: 50px; /* Align text vertically if needed */
+  z-index: 0; /* Place below the dragged item */
+}
+.ui-sortable-helper {
+  opacity: 0.6;
+  border: 1px solid #aaa;
+  height: 30px; /* Smaller height for dragged item */
+  line-height: 30px; /* Align text vertically */
+  z-index: 2; /* Ensure it appears above the placeholder */
+}
+
+.input-wrapper {
+  position: relative;
+  top: -23px;
+}
+
+.separator {
+  display: inline-block;
+  width: 1px;
+  height: 24px; /* Adjust height as needed */
+  background-color: lightgrey;
+  margin: 0 10px; /* Adjust margin as needed */
+  vertical-align: middle;
+}
+
+tr.group-header {
+  cursor: pointer;
+}
+
+tr.group-header td {
+  padding: 5px;
+}
+
+
+.jobType {
+  width: 83px;
+}
+
+.jobName{
+  width:340px;
+}
+
+.jobMode{
+  width:90px;
+}
+
+.jobRunDate{
+  width: 300px;
+}
+
+.jobRunTime{
+  width: 167px;
+}
+
+.jobSuccess{
+  width: 154px;
+}
+.jobStatus{
+  width: 44px;
+}
+.jobActions{
+  width: 175px;
+}
+
+
+.notify-status-icon-error {
+  color:#CF6679
+}
+.notify-status-icon-warning {
+  color:#ff9800
+}
+
+.notify-status-icon-info {
+  color:#63ade9 
+}
+
+.notify-title-error {
+  color:#CF6679
+}
+
+.notify-title-warning {
+  color:#ff9800
+}
+
+.notify-title-info {
+  color:#63ade9 
+}
+
+
+
+.notify-delete-all-circle:hover {
+  background-color: #cc0000;
+}
+
+/* Ensure notifications don't overlap with the fixed delete all button */
+.notification {
+  z-index: 1000;
+}
+
+/* Ensure #notificationsList doesn't have extra padding at the bottom anymore */
+#notificationsList {
+  padding-bottom: 0; /* Remove the previous padding for the delete all circle */
+}
+
+
+
+.notify-delete-all-circle {
+  width: 50px;
+  height: 50px;
+  background-color: #9f9f9f;
+  border-radius: 50%;
+  color: white;
+  font-size: 24px;
+  line-height: 50px;
+  text-align: center;
+  cursor: pointer;
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 1001;
+  opacity: 0; /* Start with opacity 0 (hidden) */
+  transition: opacity 0.3s ease; /* Smooth transition for fading */
+  display: block; /* Keep display block, handle visibility with opacity */
+  pointer-events: none; /* Disable interactions when hidden */
+  margin-right:165px;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.4);
+}
+
+.notify-delete-all-circle.visible {
+  opacity: 1; /* Visible state */
+  pointer-events: auto; /* Enable interactions when visible */
+}
+
+.notify-delete-all-circle:hover {
+  background-color: #7f7f7f;
+}
+
+/* Ensure notifications don’t overlap with the fixed delete all button */
+.notification {
+  z-index: 1000;
+}
+
+/* Keep the animation for notifications */
+.notify-animate {
+  animation: slideIn 0.5s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+      opacity: 0;
+      transform: translateY(20px);
+  }
+  to {
+      opacity: 1;
+      transform: translateY(0);
+  }
+}
+
+/* Other existing styles remain unchanged */
+#notificationsContainer {
+  position: relative;
+  max-height: 70vh;
+  overflow-y: auto;
+  width: 300px;
+  margin-left: auto;
+  margin-right: 20px;
+}
+
+#notificationsList {
+  padding-bottom: 0;
+}
+
+#deleteAllNotifications {
+  opacity: 0;
+  transition: opacity 0.3s ease-in-out;
+  pointer-events: none; /* Prevent clicks when invisible */
+}
+
+#deleteAllNotifications.visible {
+  opacity: 1;
+  pointer-events: auto; /* Enable clicks when visible */
+}
+
+.shortcol{
+  width: 100px;
+}
+
+.template-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  height: calc(90vh - 220px); /* Dynamically calculated height */
+  overflow-y: auto;
+  padding: 10px;
+}

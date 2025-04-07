@@ -1,0 +1,128 @@
+<%  
+agentOnline=0;
+agentOffline=0;
+agentRunning=0;
+agentUnknown=0;
+for (const [key, value] of Object.entries(agents.getDict())) {
+    if(value.status=="online")agentOnline++;
+    if(value.status=="offline")agentOffline++;
+    if(value.status=="running")agentRunning++;
+    if(value.status=="unknown")agentUnknown++;
+}
+
+function outputArray(inArray)
+{
+  var str="";
+  for(var i=0;i<inArray.length;i++){
+    str+= '"';
+    str+= inArray[i] ;
+    str+= '"';
+    if(i!=inArray.length-1)str+=",";
+  }
+  return str;
+}
+%>
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0" />
+  <title>BackupHub | User Profile</title>
+
+  <%- include('./partials/_head'); %>
+</head>
+
+<body>
+  <%- include('./partials/_header'); %>
+    <!--<div class="section no-pad-bot" id="index-banner">
+    <div class="container">
+      <br><br>
+      <h1 class="header center orange-text">Pembo.co.uk Backup Controller</h1>
+      <div class="row center">
+        <h5 class="header col s12 light">A Simple backup controller tool to schedule, execute and monitor backups across multiple devices</h5>
+      </div>
+      <div class="row center">
+        <a href="logs.html" id="download-button" class="btn-large waves-effect waves-light orange">Get Started</a>
+      </div>
+      <br><br>
+
+    </div>
+  </div>-->
+  <div class="container">
+    <h5 class="header orange-text">User Information</h5>
+            
+    <div class="row">
+      <form class="col s12" action="/reset  /<%=user%>" method="POST">
+        <div class="row">
+          <div class="input-field col s12">
+            <input id="username" type="text" name="username" value="<%=user.username%>" readonly>
+            <label for="username">Username</label>
+          </div>
+          <div class="input-field col s12">
+            <input id="email" type="text" name="email" value="<%=user.email%>" required>
+            <label for="username">Email Address:</label>
+          </div>
+        </div>
+        <div class="row">
+          <div class="col s12">
+            <button class="btn waves-effect waves-light" type="submit">Save Changes</button>
+            <a href="/forgot.html" class="btn waves-effect waves-light">Reset Password</a>
+            <a class="btn waves-effect waves-light" style="float:right" href="/logout.html">Logout</a>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+    
+
+
+        <!--
+        <div class="col s12 m4">
+          <div class="icon-block">
+            <h2 class="center light-blue-text"><i class="material-icons">flash_on</i></h2>
+            <h5 class="center">See the status</h5>
+
+            <p class="light">Take a look at the status of each job, sort by different criteria and see the logs (both
+              success and faiulre) all in one location</p>
+          </div>
+        </div>
+
+        <div class="col s12 m4">
+          <div class="icon-block">
+            <h2 class="center light-blue-text"><i class="material-icons">group</i></h2>
+            <h5 class="center">Execute Backup</h5>
+
+            <p class="light">Start ad-hoc backups when required and monitor the execution of these.</p>
+          </div>
+        </div>
+
+        <div class="col s12 m4">
+          <div class="icon-block">
+            <h2 class="center light-blue-text"><i class="material-icons">settings</i></h2>
+            <h5 class="center">Schedule</h5>
+
+            <p class="light">See and Schedule backups for when they're needed to run, with a check to ensure only one
+              backup runs at a time! If another backup is long running, it will be skipped!</p>
+          </div>
+        </div>
+      </div>-->
+
+    </div>
+    <br><br>
+    </div>
+
+    <%- include('./partials/_footer'); %>
+
+      <%- include('./partials/_scripts'); %>
+
+</body>
+
+</html>
+
+
+
+
+
+  

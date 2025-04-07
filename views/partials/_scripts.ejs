@@ -1,0 +1,61 @@
+  <!--  Scripts-->
+  <script src="js/jquery/jquery-3.6.0.min.js"></script>
+  <script src="js/jquery/jquery-ui.js"></script>
+  <script src="js/materialize/materialize.js"></script>
+  <script src="js/init.js"></script>
+  <script src="js/jquery/jquery.pnotify.js"></script>
+
+  <script src="/socket.io/socket.io.js"></script>
+
+
+  <script> 
+    function doNotify(title,type,msg)
+  {
+      $.pnotify({
+      title: 'Backup Job',
+      text: msg,
+      type: status,
+      history: false,
+      styling: 'jqueryui'
+      });
+  }
+  </script>
+  
+  <script>
+    const socket = io();
+
+    // Handle incoming notifications from the server
+    socket.on('register', (message) => {
+      // Display the notification to the user
+      confirmRegister(message);
+    });
+
+    socket.on('notification', (message) => {
+      //update notification count
+      fetchDataFromAPI(true);
+      });
+
+    function messageServer(event,message)
+    {
+      socket.emit(event, message);
+    }
+
+    function confirmRegister(message)
+    {
+   
+      agent = JSON.parse(message);
+      var res= confirm("A new backup agent from [" + agent.server + "] has been connected, do you want to confugre this now?");
+      if(res)goToRegister(message);
+    }
+    
+    function goToRegister(message)
+    {
+      document.location.href="/agentregister.html?message=" + message;
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+    var elems = document.querySelectorAll('.sidenav');
+    M.Sidenav.init(elems);
+    });
+  
+  </script>

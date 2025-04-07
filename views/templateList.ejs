@@ -1,0 +1,227 @@
+<%
+function displaySecs(secs) {
+  
+  var ret;
+
+  //Secs
+  if (secs < 300) ret = secs + " secs";
+
+  if (secs >= 300 && secs < 7200) {
+    //Mins
+    var mins = Math.floor(secs / 60);
+    secs = secs % 60;
+
+    ret = mins + " mins ";
+
+  }
+  if (secs >= 7200 && secs < 86400) {
+    //hours
+    var mins = Math.floor(secs / 60);
+    var secs = secs % 60;
+    var hours = Math.floor(mins / 60);
+    mins = mins % 60;
+    ret = hours + "h " + mins + " mins";
+  }
+
+  if (secs >= 86400) {
+    var mins = Math.floor(secs / 60);
+    var secs = secs % 60;
+    var hours = Math.floor(mins / 60);
+    var days = Math.floor(hours / 24);
+    hours = hours - (days * 24);
+    //hours = days %24;
+    mins = mins % 60;
+    ret = days + " days " + hours + "h ";
+
+  }
+
+  return ret;
+}
+
+
+ %>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0"/>
+
+  <title>BackupHub | Backup Job Templates</title>
+
+  <%- include('./partials/_head'); %>
+  <%- include('./partials/_scripts'); %>
+  
+  <script>
+
+  function doNotify(status,msg)
+  {
+      $.pnotify({
+      title: 'Backup Job',
+      text: msg,
+      type: status,
+      history: false,
+      styling: 'jqueryui'
+      });
+  }
+
+    function getUrlParam(name){
+      if(name=(new RegExp('[?&]'+encodeURIComponent(name)+'=([^&]*)')).exec(location.search))
+        return decodeURIComponent(name[1]);
+    }
+  </script>
+
+  <style type="text/css">
+    /* ------------------------*/
+    /* Set the size, colour, font properties for the blinking text */
+    .blinking {
+      animation: blinkingText 1s infinite;
+      color: orange;
+    }
+  
+    /* Specifies the animation and transparency for the blinking text */
+    @keyframes blinkingText {
+  
+      0% {
+        opacity: 0;
+      }
+  
+      50% {
+        opacity: .5;
+      }
+  
+      100% {
+        opacity: 1;
+      }
+    }
+  
+    .logoimg {
+      padding-top: 15px;
+      height: 50px;
+    }
+  
+    .tableIconButton {
+      color: #63ade9;
+    }
+  
+    .tableIconButton:hover {
+      color: #2049b9;
+    }
+  
+    .tableIconButtonDisabled {
+      color: #cccccc;
+    }
+  
+    .vertMid {
+      vertical-align: middle;
+    }
+  
+    .refreshTime {
+      display: block;
+      float: left;
+      position: relative;
+      top: -60px;
+      left: 140px;
+    }
+  
+    .logstable {
+      position: relative;
+      top: -50px;
+    }
+  
+    #index-banner {
+      z-index: 999;
+      background-color: #ffffff;
+    }
+  
+    .ui-dialog {
+      z-index: 9999;
+      position: fixed;
+    }
+  
+    #buttons {
+      border: 0px solid;
+      width: 200px;
+      padding-top: 5px;
+      padding-left: 5px;
+      background-color: #eeeeee;
+      height: 80px;
+      position: relative;
+      top: -40px;
+      left: -120px;
+      display: block;
+      float: right;
+      border-bottom: 1px solid #bbbbbb;
+    }
+  
+    div#refreshLabel {
+      color: #63ade9;
+    }
+  
+    #loading {
+      display: inline-block;
+      position: relative;
+      left: 0px;
+      top: -75px;
+      width: 25px;
+      height: 25px;
+      border: 3px solid rgba(255, 255, 255, 0.3);
+      border-radius: 50%;
+      border-top-color: #63ade9;
+      animation: spin 1s ease-in-out infinite;
+      -webkit-animation: spin 1s ease-in-out infinite;
+    }
+  
+    .refreshTime {
+      display: block;
+      float: left;
+      position: relative;
+      top: -20px;
+      left: 5px;
+    }
+  
+  
+    #refreshSwitch {
+      position: relative;
+      left: 20px;
+      top: 5px;
+    }
+
+    .modal {
+      width:95%;
+      height:90% !important;
+      max-height:95%;
+      top: 5% !important;
+    }
+
+
+  </style>
+</head>
+<body>
+  <header>
+  <%- include('./partials/_header'); %>
+  <div class="section no-pad-bot" id="index-banner">
+      <h5 class="header orange-text" style="position:relative;left:55px;">
+        Title
+      </h5>
+  </div>      
+  </header> 
+  <main>
+
+    <div class="container" style="width:100%">
+    </div>
+
+  </main>
+
+  <footer>
+  <%- include('./partials/_footer'); %>
+  </footer>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      var elems = document.querySelectorAll('.modal');
+      var instances = M.Modal.init(elems, {});
+    });
+  </script>
+  </body>
+</html>
+

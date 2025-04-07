@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<!--
+<%
+if(inViewType!==undefined && inViewType!==null)viewType=inViewType;
+
+function getFontColor(color){
+  if(isColorLight(color)){
+    return "#000000";
+  }
+  else {
+    return "#FFFFFF";
+  }
+}
+function isColorLight(color) {
+  // Convert the color to RGB format
+  color = color.replace("#", "");
+  const red = parseInt(color.substr(0, 2), 16);
+  const green = parseInt(color.substr(2, 2), 16);
+  const blue = parseInt(color.substr(4, 2), 16);
+
+  // Calculate the relative luminance
+  const luminance = (0.2126 * red + 0.7152 * green + 0.0722 * blue) / 255;
+
+  // Check if the luminance indicates a light color
+  if (luminance > 0.5) {
+    return true; // Light color
+  } else {
+    return false; // Dark color
+  }
+}
+
+
+function getCurrMonthName(full)
+{
+  var dte = new Date();
+  if(full)return getFullMonthName(dte.getMonth());
+  else return getMonthName(dte.getMonth());
+}
+
+function getStartOfWeekDate(inDate)
+{
+  var iDayOfWeek = date.getDay();
+  var iDifference = date.getDate() - iDayOfWeek + (iDayOfWeek === 0 ?  -6:1);
+  return new Date(date.setDate(iDifference));
+}
+
+function getLastDayInMonth()
+{
+  var today = new Date();
+  var lastDayOfMonth = new Date(today.getFullYear(), today.getMonth()+1, 0);
+  return lastDayOfMonth;
+}
+
+function getDayOfWeek(day)
+{
+  var now = new Date();
+  now.setDate(day);
+  return now.getDay();
+}
+
+function getFullMonthName(monthIndex){
+  const monthNames = ["January", "February", "March", "April", "May", "June",
+  "July", "August","September", "October", "November", "December"];
+  return monthNames[monthIndex];
+}
+function getMonthName(monthIndex){
+  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "June",
+  "July", "Aug","Sept", "Oct", "Nov", "Dec"];
+  return monthNames[monthIndex];
+}
+
+function getDayName(dayIndex) { 
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  return days[dayIndex];
+} 
+
+
+
+function formatTime(hour, minute) {
+  const padZero = num => (num < 10 ? '0' + num : num);
+  return padZero(hour) + ':' + padZero(minute);
+}
+
+function getTimeSlot(day, hour, minute,date) {
+  day = date.getDay();
+  for (var i = 0; i < schedules.length; i++) {
+    var schedule = schedules[i];
+    var [scheduleHour, scheduleMinute] = schedule.scheduleTime.split(':');
+    scheduleHour = parseInt(scheduleHour);
+    scheduleMinute = parseInt(scheduleMinute);
+    var scheduleDay = parseInt(schedule.dayOfWeek);
+    var scheduleDayInMonth = parseInt(schedule.dayInMonth);
+
+    schedules[i].index=i;
+
+    if (schedule.scheduleType === 'daily') {
+      if (hour === scheduleHour && minute === scheduleMinute) {
+        return schedules[i];
+      }
+    } 
+    else if (schedule.scheduleType === 'weekly') {
+      if (day === scheduleDay && hour === scheduleHour && minute === scheduleMinute) {
+        return schedules[i];
+      }
+    } 
+    else if (schedule.scheduleType === 'monthly') {
+      scheduleDateObj = new Date(currentYear,currentMonth,scheduleDayInMonth);
+      var lastDayOfMonth = getLastDayInMonth().getDate();
+      if (datesMatch(date,scheduleDateObj) && hour === scheduleHour && minute === scheduleMinute) {
+        return schedules[i];
+      }
+    }
+  }
+  return null;
+}
+
+// JavaScript code to get the current day/date and adjust the table header
+var showDate=new Date();
+showDate.setHours(12);
+showDate.setMinutes(0);
+if(inDate!==undefined && inDate!==null)showDate=new Date(inDate);
+
+var currentDate = showDate.getDate();
+var currentDay = showDate.getDay();
+var currentMonthName = getMonthName(showDate.getMonth());
+var currentMonth = showDate.getMonth()  ;
+var currentYear = showDate.getFullYear();
+
+//console.log("************ WORKIGN ON DATE");
+//console.log("Date Obj: " + showDate);
+//console.log("Date val: " + currentDate);
+//console.log("Date Day: " + currentDay);
+//console.log("Date Mon: " + currentMonth);
+
+// Get today's date
+const today = showDate;
+//var currentDay = today.getDay();
+// Calculate the number of days to subtract to get to the first day of the week (assuming Monday is the first day)
+//var daysToSubtract = currentDay === 0 ? 6 : currentDay - 1;
+//var daysToSubtract = currentDay === 0 ? 6 : currentDay -1
+//daysToSubtract = daysToSubtract - 1;
+//const firstDayOfWeek = new Date(today.getFullYear(), today.getMonth(), today.getDate() - daysToSubtract);
+
+//const now = new Date();
+//const dayOfWeek = today.getDay(); // Sunday: 0, Monday: 1, ..., Saturday: 6
+//const diff = today.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1); // Adjusting for Sunday
+//const diff = today.getDate() - dayOfWeek + (dayOfWeek === 1 ? 0 : (dayOfWeek === 0 ? -6 : 1)); // Adjusting for Sunday and Monday
+
+
+var currentDayOfWeek = today.getDay();
+
+// Calculate the number of days to subtract to get to the Sunday
+var daysToSubtract = currentDayOfWeek;
+
+// Subtract the days to get to the Sunday
+var firstDayOfWeek = new Date(today.getTime() - (daysToSubtract * 24 * 60 * 60 * 1000));
+
+//var firstDayOfWeek = new Date(today.setDate(diff));
+
+//console.log(">>>>>");
+//console.log(firstDayOfWeek);
+
+function datesMatch(d1,d2){
+  d1d = d1.getDate();
+  d2d = d2.getDate();
+  d1m = d1.getMonth();
+  d2m = d2.getMonth();
+  d1y = d1.getFullYear()
+  d2y = d2.getFullYear();
+
+  if(d1d==d2d && d1m==d2m && d1y==d2y)return true;
+  else return false;
+}
+
+%> 
+-->
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0" />
+
+  <title>pembo.co.uk</title>
+
+  <%- include('./partials/_head'); %>
+    <%- include('./partials/_scripts'); %>
+
+      <script>
+
+        function getDayName(dayIndex) { 
+          const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+          return days[dayIndex];
+        }
+
+        function addEntry(time,day,type)
+        {
+          document.location.href="/scheduler.html?time=" + time + "&day=" + day + "&type=" + type;
+        }
+
+        function showCalendarEntry(index,name,desc,type,dayOfWeek,dayInMonth,time,lastUpdated,command,agent,eta,colour,icon)
+        {
+          var elem = document.getElementById('modalContent');
+          //alert(icon);
+          //set the indx of the edit
+          document.getElementById('editBtn').href="/scheduler.html?index=" + index + "&redir=" + document.location.href;
+          document.getElementById('statusBtn').href="scheduleInfo.html?index=" + index + "&redir=" + document.location.href;
+          document.getElementById('runBtn').href="runSchedule.html?index=" + index;
+          //alert(colour);
+          html = '<h4>';
+          html += '<span class="mdi vertMid ' + icon + ' mdisize" style="color:' + colour + ';font-size:24pt;"></span>&nbsp;'
+          //html += '<span class="material-icons vertMid" style="color:' + colour + '">trip_origin</span>&nbsp;'
+          html += name;
+          html += '</h4>';
+          html += '<hr>';
+          html += "<table cellspacing='0' cellpadding='0' style='border:none;' class='tbentry'>";
+          html += "<tr><td class='entryheader'>Type:</td><td>" + type + "</td></tr>";
+          html += "<tr><td class='entryheader'>Day of Week:</td><td>" + getDayName(dayOfWeek) + "</td></tr>";
+          html += "<tr><td class='entryheader'>Day in Month: </td><td>" + dayInMonth + "</td></tr>";
+          html += "<tr><td class='entryheader'>Time: </td><td>" + time + " (Estimate Completion Time: " + eta + ") </td></tr>";
+          html += "</table>";
+          html += '<hr>';
+          html += "<p>" + desc + "</p><hr>";
+          html += "<h5>Exection Information</h5>";
+          html += "<table class='tbentry'>";
+          html += "<tr><td class='entryheader'>Assigned Agent: </td><td>" + agent + "</td></tr>";
+          html += "<tr><td class='entryHeader'>Command: </td><td>" + command + "</td></tr>";
+          html += "</table>"
+          
+          //elem.style.background-olor=colour + "!important";
+          elem.innerHTML=html;
+          
+          
+          var elems = document.getElementById('modal');
+          var instance = M.Modal.getInstance(elems);
+          instance.open();
+
+          //Modify the modal data 
+        }
+
+        function nextDay(){
+          var now = new Date(<%=showDate.getFullYear()%>,<%=showDate.getMonth()%>,<%=showDate.getDate()%>,12,00);
+          now.setDate(now.getDate() + 1);
+          document.location.href="scheduleListCalendar.html?viewType=daily&inDate=" + now.getFullYear() + "-" + (now.getMonth()+1) + "-" + now.getDate();
+        }
+
+
+        function prevDay(){
+          var now = new Date(<%=showDate.getFullYear()%>,<%=showDate.getMonth()%>,<%=showDate.getDate()%>,12,00);
+          now.setDate(now.getDate() - 1);
+          document.location.href="scheduleListCalendar.html?viewType=daily&inDate=" + now.getFullYear() + "-" + (now.getMonth()+1) + "-" + now.getDate();
+        }
+
+        $(document).ready(function () {
+          $('select').formSelect();
+        });
+
+        function deleteAgent(agentName) {
+          var choice = confirm("Are you sure you want to delete the agent [" + agentName + "]");
+          if (choice) {
+            messageServer("delete", agentName);
+          }
+        }
+
+        function pingTest(agentName) {
+          //document.getElementById("hiddenspinner").style.display="";
+          alert(document.getElementById(agentName + "_ball").innerHTML);
+          document.getElementById(agentName + "_ball").innerHTML = '<div id="hiddenspinner"><div class="preloader-wrapper small active"><div class="spinner-layer spinner-orange-only"><div class="circle-clipper left"><div class="circle"></div></div><div class="gap-patch"><div class="circle"></div></div><div class="circle-clipper right"><div class="circle"></div></div></div></div></div>';
+          doNotify("success", "ping requested");
+
+          messageServer("ping", agentName);
+        }
+
+        function doNotify(status, msg) {
+          $.pnotify({
+            title: 'Agent Status',
+            text: msg,
+            type: status,
+            history: false,
+            styling: 'jqueryui'
+          });
+        }
+
+
+        function invokeJobCall(joblog, jobName) {
+          var len = joblog.length;
+          len = len - 4;
+          newjoblog = joblog.substr(0, len);
+
+          var xhttp = new XMLHttpRequest();
+          xhttp.open("GET", "http://192.168.1.24:1880/backup-init?dest=" + newjoblog, false);
+          xhttp.send(null);
+
+          if (xhttp.status === 200) {
+            //console.log("DONE: " + xhttp.responseText);
+            var obj = JSON.parse(xhttp.responseText);
+            if (obj.status == "Job Started") {
+              doNotify("success", "Job [" + jobName + "] Successfully Queued - Please wait for this to start");
+            }
+            else {
+              doNotify("error", "Job [" + jobName + "] Not Queued - another job [" + obj.job + "] is already queued");
+            }
+          }
+        }
+
+        //Init modal
+        document.addEventListener('DOMContentLoaded', function() {
+          var elems = document.querySelectorAll('.modal');
+          var instances = M.Modal.init(elems);
+        });
+
+
+        function scrollTodayIntoView()
+        {
+          document.getElementById("calday<%=currentDate%>").scrollIntoView();
+          document.querySelector('body > div.container > div.calendar-container').scroll({top:0, behavior:"smooth"});
+
+        }
+
+      </script>
+
+</head>
+
+<body onload="scrollTodayIntoView()">
+  <%- include('./partials/_header'); %>
+    <!-- Modal Structure -->
+  <div id="modal" class="modal modal-fixed-footer">
+    <div class="modal-content" id="modalContent">
+      <h4>Modal Header</h4>
+      <p>Modal content goes here.</p>
+    </div>
+    <div class="modal-footer">
+      <a id="runBtn" href="#!" class="waves-effect waves-green btn-flat orange-text">Run</a>
+      <a id="statusBtn" href="#!" class="waves-effect waves-green btn-flat orange-text">Last Run Info</a>
+      <a id="editBtn" href="#!" class="waves-effect waves-green btn-flat orange-text">Edit</a>
+      <a href="#!" class="modal-close waves-effect waves-green btn-flat brown-text">Close</a>
+    </div>
+  </div>
+  <div class="section no-pad-bot" id="index-banner">
+    <div class="container">
+      <div class="row">
+        <div class="col s6">
+          <h5 class="header orange-text">Schedule </h5>
+        </div>
+        <div class="col s6" style="text-align: right;padding-top:20px;">
+          <a style="position:relative;left:-10px;" title="add" href="scheduler.html"><span class="material-icons vertTop">add</span></a>
+          <a title="list" href="scheduleList.html"><span class="material-icons vertTop">view_list</span></a>
+          <a title="day" href="scheduleListCalendar.html?viewType=daily"><span class="material-icons vertTop">today</span></a>
+          <a title="week" href="scheduleListCalendar.html?viewType=weekly"><span class="material-icons vertTop">date_range</span></a>
+          <a title="month" href="scheduleListCalendar.html?viewType=monthly"><span class="material-icons vertTop">calendar_month</span></a>
+        </div>
+      </div>
+
+
+      <div class="row">
+        
+      </div>
+
+      <div class="calendar-container">
+        <% if (viewType==='daily' ) { %>
+          <!-- Daily View -->
+          <table class="calendar-table">
+            <thead class="calendarThead">
+              <tr>
+                <th>Time</th>
+                  <th>
+                    <a href="#" id="prevDayBtn" title="Previous" class="sortableHeader" onclick="prevDay()"><i class="material-icons sortableHeader">chevron_left</i></a>
+                    <span id="currentDay"><%= getDayName(currentDay) %> <%=currentDate%> <%=currentMonthName%></span>
+                    <a href="#" id="nextDayBtn" title="Next" class="sortableHeader" onclick="nextDay()"><i class="material-icons">chevron_right</i></button>
+                  </th>
+              </tr>
+            </thead>
+            <tbody>
+              <% for (let hour=0; hour < 24; hour++) { %>
+                <% for (let minute=0; minute < 60; minute +=30) { %>
+                  <% var rowCss; 
+                     if(minute==0){rowCss="calrow2";}else{rowCss="calrow1"}%>
+                  <tr class="<%=rowCss%>">
+                    <td style="vertical-align:top">
+                      <%= formatTime(hour, minute) %>
+                    </td>
+                      <% const timeSlot=getTimeSlot(getDayOfWeek(currentDay), hour, minute,showDate); %>
+                      <td <%if(timeSlot===undefined ||timeSlot===null){%>class="timeSlotBox" onclick="addEntry('<%=formatTime(hour, minute)%>','<%=currentDay%>','daily')"<%}%>>
+                        <% //console.log("@@@@@@@@@@@@@ " + currentDay + "@@@@@@@@@@@@@@@@@@@") %>
+                        
+                          <% if (timeSlot) { %>
+                            <% var cardheight = (Math.ceil(timeSlot.eta / 30) * 80)-7; %>
+                            
+                            <div id="cardContainer" style="height:50px;z-index:700" 
+                            onclick="showCalendarEntry(<%=timeSlot.index%>,'<%=timeSlot.jobName%>','desc','<%=timeSlot.scheduleType%>',
+                            '<%=timeSlot.dayOfWeek%>','<%=timeSlot.dayInMonth%>','<%=timeSlot.scheduleTime%>',
+                            '<%=timeSlot.lastUpdated%>','<%=timeSlot.command%>','<%=timeSlot.agent%>','<%=timeSlot.eta%>','<%=timeSlot.color%>','<%=timeSlot.icon%>');">
+                              <div class="card card_<%=timeSlot.scheduleType%> darken-1 card-content white-text"
+                                style="text-align:left;height:<%=cardheight%>px;background-color:<%=timeSlot.color%>">
+                                
+                                <span class="material-icons vertMid" style="display:inline-block;float:right;position:relative;top:5px;left:-10px;color:<%=getFontColor(timeSlot.color)%>;font-size:24pt;"><%=timeSlot.icon%></span>
+
+                                <span style="font-size:8pt;padding-left:5px;text-align: left;color:<%=getFontColor(timeSlot.color)%>">
+                                  <b><%= timeSlot.jobName %></b> - <span style="padding-left:10px"><%=timeSlot.description %></span><br>
+                                  <span style="padding-left:5px"><%= timeSlot.scheduleType %> / <%= getDayName(timeSlot.dayOfWeek) %> <%= timeSlot.scheduleTime %></span>
+                                  <br><span style="padding-left: 5px;position: absolute;margin-right: 10px;bottom: 5px;text-align: right;width: 100%;padding-right:12px;"><i><%=timeSlot.agent%></i></span>
+                                </span>
+                                  <!--<span style="font-size:8pt;text-align: left;color:<%=getFontColor(timeSlot.color)%>">
+                                  <b style="padding-left:10px;"><%=timeSlot.jobName %></b><br>
+                                  <span style="padding-left:10px"><%=timeSlot.description %></span>
+                                  <span style="padding-left:10px;">Schedule Type: <%=timeSlot.scheduleType%></span>
+                                  <span style="padding-left:10px;">Time: <%= timeSlot.scheduleTime %></span>
+                                </span>-->
+                                
+                              </div>
+                            </div>
+
+                            <% } %>
+                      </td>
+                      
+                  </tr>
+                  <% } %>
+                    <% } %>
+            </tbody>
+          </table>
+          <% } else if (viewType==='weekly' ) { %>
+            <!-- Weekly View -->
+            <table class="calendar-table">
+              <thead class="calendarThead">
+                <tr>
+                  <th>Time</th>
+                  <% for (let i=0; i < 7; i++) { %>
+                    <% var currentDate = new Date(firstDayOfWeek.getFullYear(), firstDayOfWeek.getMonth(), firstDayOfWeek.getDate() + i );%>
+                    <th>
+                      <%= getDayName(i)%> <%=currentDate.getDate()%> <%=getMonthName(currentDate.getMonth())%>
+                    </th>
+                    <% } %>
+                </tr>
+              </thead>
+              <tbody>
+                <% for (let hour=0; hour < 24; hour++) { %>
+                  <% for (let minute=0; minute < 60; minute +=30) { %>
+                    <% if(minute==0){rowCss="calrow2";}else{rowCss="calrow1"}%>
+                    <tr class="<%=rowCss%>"">
+                      <td style="vertical-align: top">
+                        <%= formatTime(hour, minute) %>
+                      </td>
+                      <% var now=new Date();%>
+                      
+                      <% //for (let day=currentDate ; day < currentDate+7; day++) { %>
+                      <% for (let i = 0; i < 7; i++) { %>
+                        <% //console.log(`${i}-FDOW-${firstDayOfWeek} - ${firstDayOfWeek.getMonth()} ${firstDayOfWeek.getDate() + i}`) %>
+                        <% var currentDate = new Date(firstDayOfWeek.getFullYear(), firstDayOfWeek.getMonth(), firstDayOfWeek.getDate() + i );%>
+                          <% //console.log(`WORKING DATE ${currentDate}`); // Replace with your desired code logic for each date %>
+                        
+                          <%var timeSlot=(getTimeSlot(currentDate.getDay(), hour, minute,currentDate)); %>
+                          <td <%if(timeSlot===undefined ||timeSlot===null){%>class="timeSlotBox" onclick="addEntry('<%=formatTime(hour, minute)%>','<%=i%>','weekly')"<%}%>>
+                            <% if (timeSlot) { %>
+                              <% var cardheight = (Math.ceil(timeSlot.eta / 30) * 80)-7; %>
+                              <div id="cardContainer" style="height:50px;z-index:700" 
+                            onclick="showCalendarEntry(<%=timeSlot.index%>,'<%=timeSlot.jobName%>','desc','<%=timeSlot.scheduleType%>',
+                            '<%=timeSlot.dayOfWeek%>','<%=timeSlot.dayInMonth%>','<%=timeSlot.scheduleTime%>',
+                            '<%=timeSlot.lastUpdated%>','<%=timeSlot.command%>','<%=timeSlot.agent%>','<%=timeSlot.eta%>','<%=timeSlot.color%>');">
+                              <div class="card card_<%=timeSlot.scheduleType%> darken-1 card-content white-text"
+                                style="text-align:left;height:<%=cardheight%>px;background-color:<%=timeSlot.color%>;width:160px;max-width:160px;overflow:hidden;">
+                                
+                                <span class="material-icons vertMid" style="display:inline-block;float:right;position:relative;top:2px;left:-5px;color:<%=getFontColor(timeSlot.color)%>;font-size:16pt;"><%=timeSlot.icon%></span>  
+
+                                <span style="font-size:8pt;padding-left:5px;text-align: left;color:<%=getFontColor(timeSlot.color)%>">
+                                    <b title="<%= timeSlot.jobName %>" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: inline-block; max-width: 80%;"><%=timeSlot.jobName %></b><br>
+                                    <span style="padding-left:5px"><%= timeSlot.scheduleType %> / <%= getDayName(timeSlot.dayOfWeek) %> <%= timeSlot.scheduleTime %></span>
+                                    <br><span style="padding-left: 5px;position: absolute;margin-right: 10px;bottom: 5px;text-align: right;width: 100%;padding-right:5px;"><i><%=timeSlot.agent%></i></span>
+
+
+                                    
+
+                                </span>
+                              </div>
+                            </div>
+                              <% } %>
+                        </td>
+                        <% } %>
+                    </tr>
+                    <% } %>
+                      <% } %>
+              </tbody>
+            </table>
+            <% } else if (viewType==='monthly' ) { %>
+              <h3>
+                <%=getCurrMonthName(true)%>
+              </h3>
+              <!-- Monthly View -->
+              <table class="calendar-table" class="horizontalScroll">
+                <thead class="calendarThead">
+                  <tr>
+                    <th class="headcol">Time</th>
+                    <% for (let i=1; i <=31; i++) { %>
+                      <th id="calday<%=i%>">
+                        <%= i %>
+                      </th>
+                      <% } %>
+                  </tr>
+                </thead>
+                <tbody>
+                  <% for (let hour=0; hour < 24; hour++) { %>
+                    <% for (let minute=0; minute < 60; minute +=30) { %>
+                      <% if(minute==0){rowCss="calrow2";}else{rowCss="calrow1"}%>
+                      <tr class="<%=rowCss%>">
+                        <td class="headcol">
+                          <%= formatTime(hour, minute) %>
+                        </td>
+                        <% for (let day=1; day <=getLastDayInMonth().getDate(); day++) { %>
+                          <% const currentDate = new Date(new Date().getFullYear(), new Date().getMonth(), day);%>
+                    
+                          <!--<td style="min-width:80px">-->
+                            <% const timeSlot=getTimeSlot(getDayOfWeek(day), hour, minute,currentDate); %>
+                            <td style="min-width:80px" <%if(timeSlot===undefined ||timeSlot===null){%>class="timeSlotBox" onclick="addEntry('<%=formatTime(hour, minute)%>','<%=currentDate.getDate()%>','monthly')"<%}%>>
+                              <% if (timeSlot) { %>
+                                <% var cardheight = (Math.ceil(timeSlot.eta / 30) * 80)-7; %>
+                                <div id="cardContainer" style="height:52px;z-index:700" 
+                            onclick="showCalendarEntry(<%=timeSlot.index%>,'<%=timeSlot.jobName%>','desc','<%=timeSlot.scheduleType%>',
+                            '<%=timeSlot.dayOfWeek%>','<%=timeSlot.dayInMonth%>','<%=timeSlot.scheduleTime%>',
+                            '<%=timeSlot.lastUpdated%>','<%=timeSlot.command%>','<%=timeSlot.agent%>','<%=timeSlot.eta%>','<%=timeSlot.color%>');">
+                              <div class="card card_<%=timeSlot.scheduleType%> darken-1 card-content white-text"
+                                style="text-align:left;height:<%=cardheight%>px;background-color:<%=timeSlot.color%>;width:160px;max-width:160px;overflow:hidden;">
+
+                                    <span class="material-icons vertMid" style="display:inline-block;float:right;position:relative;top:2px;left:-5px;color:<%=getFontColor(timeSlot.color)%>;font-size:16pt;"><%=timeSlot.icon%></span>  
+
+                                    <span style="font-size:8pt;padding-left:5px;text-align: left;color:<%=getFontColor(timeSlot.color)%>">
+                                    <b title="<%= timeSlot.jobName %>" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: inline-block; max-width: 80%;"><%= timeSlot.jobName %></b><br>
+                                    <span style="padding-left:5px"><%= timeSlot.scheduleType %> / <%= getDayName(timeSlot.dayOfWeek) %> <%= timeSlot.scheduleTime %></span>
+                                    <br><span style="padding-left: 5px;position: absolute;margin-right: 10px;bottom: 5px;text-align: right;width: 100%;padding-right:5px;"><i><%=timeSlot.agent%></i></span>
+                                  </span>
+                                </div>
+                                </div>
+                                
+                                <% } %>
+                          </td>
+                          <% } %>
+                      </tr>
+                      <% } %>
+                        <% } %>
+                </tbody>
+              </table>
+              <% } %>
+      </div>
+    </div>
+    </div>
+
+    <%- include('./partials/_footer'); %>
+
+
+
+</body>
+
+</html>

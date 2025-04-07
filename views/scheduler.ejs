@@ -1,0 +1,620 @@
+<%
+
+if(type!==undefined && type!==null && type.length>0)
+{
+  getSchedule().scheduleType = type;
+  getSchedule().scheduleTime = time;
+
+  if(type=="daily"){
+    getSchedule().dayInMonth = "";
+    getSchedule().dayOfWeek = "";
+  }
+  if(type=="weekly"){
+    getSchedule().dayOfWeek = day;
+    getSchedule().dayInMonth = "";
+  }
+
+  if(type=="monthly"){
+    getSchedule().dayInMonth = day;
+    getSchedule().dayOfWeek = "";
+  }
+}
+
+function getSchedule(){
+  
+  if(schedule===undefined||schedule===null){
+    schedule={};
+  }  
+  else return schedule;
+}
+
+function getRedir()
+{
+  if(redir===undefined||redir===null||redir.length<=0){
+    return "/scheduleList.html";
+  }
+  else return redir;
+}
+
+function isSelected(inValue,compareValue){
+  if(compareValue===undefined||compareValue==null)return"";
+  if(inValue==compareValue){
+    return " selected ";
+  }
+  else return "";
+}
+
+function noValue(inValue){
+  if(inValue===undefined||inValue===null)return " selected ";
+  else return "";
+}
+
+%>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0"/>
+  
+  <title>BackupHub | Scheduler</title>
+
+  <%- include('./partials/_head'); %>
+  <%- include('./partials/_scripts'); %>
+
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/spectrum/1.8.0/spectrum.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/spectrum/1.8.0/spectrum.min.js"></script>
+  
+  <script>
+  function newCommand(select)
+  {
+    var url = "/rest/script/" + select.value;
+    if(select.value=="")
+    {
+      document.getElementById('scriptInfoDetail').innerHTML="";
+      return;
+    }
+    fetchApiData(url)
+    .then(data => {
+      // Handle the API data as a string here
+      //console.log(data);
+      document.getElementById('scriptInfoDetail').innerHTML=data;
+    })
+    .catch(error => {
+      // Handle errors here or display them to the user
+      console.error('Error:', error);
+      document.getElementById('scriptInfoDetail').innerHTML="";
+    });
+  }
+
+  function fetchApiData(url) {
+    return fetch(url)
+      .then(response => {
+        if (!response.ok) {
+          throw new Error('Network response was not ok');
+        }
+        return response.text(); // This will return the response body as a string
+      })
+      .catch(error => {
+        // Handle errors here or propagate them further
+        console.error('There was a problem with the fetch operation:', error);
+        //throw error; // ignore any error 
+      });
+  }
+
+  function updateIconPreview(selectItem)
+  {
+    document.getElementById("preview").innerText =  selectItem.value;
+    //selectItem.value
+  }
+
+  function commandChange(selectItem)
+  {
+    //alert(selectItem.value);
+    if(selectItem.value=="custom")
+    {
+      //alert("showing the row");
+      document.getElementById("customRow").style.display="";
+      document.getElementById("custom").value="echo CUSTOM COMMAND";
+    }
+    else
+    {
+      document.getElementById("customRow").style.display="none";
+      document.getElementById("custom").value="";
+      document.getElementById("agentcommand").value=selectItem.value;
+    }
+  }
+
+  function customCommandChange(custom)
+  {
+    document.getElementById("agentcommand").value=custom.value;
+  }
+
+  function doNotify(status,msg)
+  {
+      $.pnotify({
+      title: 'Backup Job',
+      text: msg,
+      type: status,
+      history: false,
+      styling: 'jqueryui'
+      });
+  }
+
+
+    function invokeJobCall(joblog,jobName) {
+        var len = joblog.length;
+        len = len -4;
+        newjoblog = joblog.substr(0,len);
+
+        var xhttp = new XMLHttpRequest();
+        xhttp.open("GET", "http://192.168.1.24:1880/backup-init?dest=" + newjoblog, false);
+        xhttp.send(null);
+ 
+        if (xhttp.status === 200) {
+          var obj = JSON.parse(xhttp.responseText);
+          if(obj.status=="Job Started")
+          {
+            doNotify("success","Job [" + jobName + "] Successfully Queued - Please wait for this to start" );
+          }
+          else
+          {
+            doNotify("error","Job [" + jobName + "] Not Queued - another job [" + obj.job + "] is already queued" );
+          }
+        }
+    };
+    
+    function setPickerColor(inColor){
+      var colorPicker = $("#picker");
+      colorPicker.spectrum({
+        preferredFormat: "hex",
+        showInput: false,
+        color: inColor,
+        // Additional options for the color picker (if needed)
+      });
+      //alert(document.getElementById("preview"));
+      document.querySelector("span#preview").style.color=inColor;
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+      var colorPicker = $("#picker");
+      colorPicker.spectrum({
+        preferredFormat: "hex",
+        showInput: false,
+        color: "<%=getSchedule().color%>",
+        // Additional options for the color picker (if needed)
+      });
+      //document.getElementById('colour').display="block";
+    });
+
+    function doDelete()
+    {
+      //alert("Doing delete");
+      // Get all input fields with validation classes
+      const inputFields = document.querySelectorAll('.validate');
+
+      // Remove validation classes from input fields
+      inputFields.forEach(input => {
+        input.classList.remove('valid', 'invalid');
+      });
+      document.location.replace("/delete-schedule.html?jobName=<%=getSchedule().jobName%>");
+    }
+    function doCancel()
+    {
+      // Get all input fields with validation classes
+      const inputFields = document.querySelectorAll('.validate');
+
+      // Remove validation classes from input fields
+      inputFields.forEach(input => {
+        input.classList.remove('valid', 'invalid');
+      });
+
+      // Go back in history
+      
+      history.back();
+    }
+  
+  </script>
+
+</head>
+<body>
+  <%- include('./partials/_header'); %>
+  <!-- Modal Structure -->
+  <div id="confirmationModal" class="modal">
+    <div class="modal-content">
+        <h4>Delete Schedule Job?</h4>
+        <p>Are you sure you want to Delete the Scheduled Job<br><br><b>Job Name:</b> <%=getSchedule().jobName%>?</p>
+        
+    </div>
+    <div class="modal-footer">
+        <a href="#!" class="modal-close waves-effect waves-green btn-flat">Cancel</a>
+        <a href="#!" id="confirmButton" class="modal-close waves-effect waves-green btn-flat">OK</a>
+    </div>
+  </div>
+
+  <div class="section no-pad-bot" id="index-banner">
+    <div class="container">
+
+      <h5 class="header orange-text">Scheduler</h5>
+
+      <div >
+        <form action="/scheduler.html" method="POST" id="myForm" novalidate>
+          <input type="hidden" name="index" value="<%=index%>">
+          <input type="hidden" name="redir" value="<%=getRedir()%>">
+
+          <% if(internal=="true"){%>
+            <div class="row">
+              <div class="input-field col s12">
+                <div class="input-wrapper">
+                  <label for="jobName">Editable</label>
+                  <input type="text" id="editable" name="editable" value="false">
+                  <span class="helper-text" data-error="should be true or false"></span>
+                </div>
+              </div>
+            </div
+          <%}%>
+
+          <div class="row">
+            <div class="input-field col s5">
+              <div class="input-wrapper">
+                <label for="jobName">Job Name*</label>
+                <input type="text" id="jobName" name="jobName" value="<%=getSchedule().jobName%>" required>
+                <span class="helper-text" data-error="Please provide a job name"></span>
+              </div>
+            </div>
+
+            <div class="input-field col s3">
+              <label class="active" for="scheduleType">Icon</label>
+              <select id="icon_select" name="icon" onchange="updateIconPreview(this);">
+                <option value="" disabled selected>Select Material Icon</option>
+
+
+                <% for(iconCount=0;iconCount<icons.length;iconCount++){%>
+                
+                  <option data-icon="<%=icons[iconCount]%>" value="<%=icons[iconCount]%>" <%=isSelected(icons[iconCount],getSchedule().icon)%>><%=icons[iconCount]%></option>
+
+                <%
+                }
+                %>
+              </select>
+              <span class="helper-text" data-error="Please select an option"></span>
+            </div>
+            <div class="input-field col s1">
+            <div><span style="position: relative;top: 0px;text-align:left;font-size:24pt;" id="preview" class="material-icons vertMid"><%=getSchedule().icon%></span></div>
+            </div>
+
+            <div class="input-field col s2">
+              <div class="input-wrapper">
+                <label class="active" for="colour">Colour</label>
+
+                <% 
+                var savedcolor = getSchedule().color;
+                if(savedcolor===undefined||savedcolor===null||savedcolor.length==0)savedcolor="#000000";
+                 %>
+
+                <input onchange="setPickerColor(this.value);" type="text" value="<%=savedcolor%>" id="colour" name="colour" required>
+                <span class="helper-text" data-error="Please provide a colour (e.g. #000000)"></span>
+              </div>
+            </div>
+            <div class="input-field col s1">
+              <input type="text" id="picker" name="picker" value="<%=savedcolor%>" onchange="document.getElementById('colour').value=this.value;document.querySelector('span#preview').style.color=this.value;">
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="input-field col s12">
+            <textarea id="description" name="description" class="materialize-textarea" required><%=getSchedule().description%></textarea>
+            <label for="description">Description*</label>
+            <span class="helper-text" data-error="Please provide a description"></span>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="input-field col s12 m3">
+            <label class="active" for="scheduleType">Schedule Type</label>
+            <select id="scheduleType" name="scheduleType">
+              <option value="" <%=noValue(getSchedule().scheduleType)%>disabled>Choose your option</option>
+              <option value="daily" <%=isSelected("daily",getSchedule().scheduleType)%>>Daily</option>
+              <option value="weekly" <%=isSelected("weekly",getSchedule().scheduleType)%>>Weekly</option>
+              <option value="monthly" <%=isSelected("monthly",getSchedule().scheduleType)%>>Monthly</option>
+              <option value="cputhreshold" <%=isSelected("cputhreshold",getSchedule().scheduleType)%>>CPU Threshold</option>
+              <option value="storagethreshold" <%=isSelected("storagethreshold",getSchedule().scheduleType)%>>Storage Threshold</option>
+            </select>
+            <span class="helper-text" data-error="Please select an option"></span>
+          </div>
+          
+          
+          <div class="input-field col s12 m3">          
+            <div class="input-wrapper">
+              <label class="active" for="scheduleTime">Schedule Time</label>
+              <input value="<%=getSchedule().scheduleTime%>" type="time" step="1800" id="scheduleTime" name="scheduleTime">
+              <span class="helper-text" data-error="Please select a schedule time"></span>
+            </div>
+          </div>
+
+            <div class="input-field col s12 m3">
+            <label class="active" for="dayOfWeek">Day of Week</label>
+            <select id="dayOfWeek" name="dayOfWeek">
+              <option <%=noValue(getSchedule().dayOfWeek)%> value="" disabled selected>Choose your option</option>
+              <option <%=isSelected("0",getSchedule().dayOfWeek)%>value="0">Sunday</option>
+              <option <%=isSelected("1",getSchedule().dayOfWeek)%>value="1">Monday</option>
+              <option <%=isSelected("2",getSchedule().dayOfWeek)%>value="2">Tuesday</option>
+              <option <%=isSelected("3",getSchedule().dayOfWeek)%>value="3">Wednesday</option>
+              <option <%=isSelected("4",getSchedule().dayOfWeek)%>value="4">Thursday</option>
+              <option <%=isSelected("5",getSchedule().dayOfWeek)%>value="5">Friday</option>
+              <option <%=isSelected("6",getSchedule().dayOfWeek)%>value="6">Saturday</option>
+            </select>
+            <span class="helper-text" data-error="Required when 'weekly' schedule type is selected"></span>
+            </div>
+          
+          
+            <div class="input-field col s12 m3">
+            <label for="dayInMonth">Schedule Day</label>
+            <input type="number" id="dayInMonth" name="dayInMonth" min="1" max="31" value="<%=getSchedule().dayInMonth%>">
+            <span class="helper-text" data-error="Provide Enter day in month (e.g. 1 through 28") "></span>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="input-field col s12">
+              <select name="agentselect" id="agentselect">
+                <option value="" disabled selected>Agent</option>
+                <% for (const [key, value] of Object.entries(agents)) { %>
+                  <option <%=isSelected(value.name,getSchedule().agent)%> value="<%=value.name%>"><%=value.name%></option>
+                <% } %>
+              </select>
+              <label for="agentselect">Assigned Agent*</label>
+              <span class="helper-text" data-error="Please select an option"></span>
+            </div>
+          </div>
+
+          <div class="row" id="commandRow">
+            <div class="input-field col s7">
+              <select name="agentcommand" onchange="newCommand(this)" id="agentcommand">
+                <option <%=noValue(getSchedule().command)%>value="" disabled selected>Command File</option>
+                <option <%=isSelected("",getSchedule().command)%>value="">Custom - Input custom Command</option>
+                <% for (i=0;i<scripts.length;i++) { %>
+                <option <%=isSelected(scripts[i],getSchedule().command)%> value="<%=scripts[i]%>"><%=scripts[i]%><%=scriptsDesc[i]%></option>
+                <% } %>
+              </select>
+              <label for="agentcommand">Backup Command Script*</label>
+              <span class="helper-text" data-error="Please select an option"></span>
+            </div>
+            <div id="scriptInfoDiv" class="col s5">
+              <div><label style="position: relative;top: -3px;">Script Details</label></div>
+              <div class="scriptInfo" id="scriptInfoDetail"></div>
+            </div>
+          </div>
+
+          <div class="row" id="customRow" style="display:display;position: relative;top:-100px">
+            <div class="input-field col s7">
+              <textarea id="commandparams" name="commandparams" class="materialize-textarea"><%=getSchedule().commandParams%></textarea>
+              <label class="active" for="commandparams">Custom Command / Parameters</label>
+              <span class="helper-text" data-error="Please provide a custom command, or select a script above"></span>
+            </div>
+          </div>
+
+          
+          <div class="row" style="position:relative; top: -90px">
+            <a href="#" class="btn waves-effect waves-light" onclick="doCancel()">Cancel</a>
+            <button class="btn waves-effect waves-light" type="submit">Save</button>
+            <a href="#" id="openModalButton" class="btn waves-effect waves-light" style="background-color:red;float:right">Delete</a>
+        </div>
+        </form>
+      </div>
+
+     
+    </div>      
+  </div>
+  <script>
+    $(document).ready(function(){
+        // Initialize the modal
+        $('.modal').modal();
+
+        // Attach a click event to the button to open the confirmation dialog
+        $('#openModalButton').click(function(){
+            $('#confirmationModal').modal('open');
+        });
+
+        // Attach a click event to the "OK" button in the confirmation dialog
+        $('#confirmButton').click(function(){
+            // You can add your logic here for the "OK" action
+            // For example, redirect to another page or perform some action
+            //alert('OK button clicked.');
+            doDelete();
+        });
+    });
+
+    document.addEventListener('DOMContentLoaded', function() {
+      var timePicker = document.getElementById('scheduleTime');
+      
+      timePicker.addEventListener('change', function() {
+        var selectedTime = this.value.split(':');
+        var minutes = parseInt(selectedTime[1]);
+
+        if (minutes !== 0 && minutes !== 30) {
+          // Round the minutes to the nearest allowed value (00 or 30)
+          minutes = Math.round(minutes / 30) * 30;
+          if (minutes === 60) {
+            minutes = 0;
+            // Adjust hours if needed
+            var hours = parseInt(selectedTime[0]);
+            hours = (hours + 1) % 24; // Increment hours and handle rollover
+            selectedTime[0] = hours.toString().padStart(2, '0');
+          }
+          selectedTime[1] = minutes.toString().padStart(2, '0');
+          this.value = selectedTime.join(':');
+        }
+      });
+    });
+
+
+    
+
+  </script>
+
+<script>
+  M.FormSelect.init(document.querySelectorAll('select'));
+
+  document.addEventListener('DOMContentLoaded', function() {
+    // Manually initialize text areas if needed
+    setPickerColor("<%=savedcolor%>");
+});
+
+  // Add icons to the select options
+        var selectElement = document.getElementById('icon_select');
+        var instance = M.FormSelect.getInstance(selectElement);
+
+        // Get the dropdown content element
+        var dropdownContent = instance.dropdownOptions;
+
+        // Add icons to each option
+        dropdownContent.querySelectorAll('li').forEach((li, index) => {
+            if (index > 0) { // Skip the first disabled option
+                var option = selectElement.querySelectorAll('option')[index];
+                var icon = option.getAttribute('data-icon');
+                var iconElement = document.createElement('i');
+                iconElement.className = 'material-icons left vertMid';
+                iconElement.style.position="relative";
+                iconElement.style.top="13px";
+                iconElement.textContent = icon;
+                li.prepend(iconElement);
+                
+                var imgElement = li.querySelector('img');
+                if (imgElement) {
+                    imgElement.remove();
+                }
+            }
+        });
+
+</script>
+
+<script>
+  function resetValidation(inputElement){
+    var inputWrapper = inputElement.parentNode;  // The parent div with class 'input-field'
+    //alert(inputWrapper.outerHTML);
+    inputWrapper.classList.remove('invalid');
+    inputElement.classList.remove('invalid');
+    //alert(inputWrapper.outerHTML);
+    var errorText = inputWrapper.querySelector('.helper-text[data-error]');
+    if (errorText) {
+      errorText.style.display = 'none';
+    }
+
+    //alert("pause");
+  }
+  
+
+  // Function to validate an input, select, or textarea field using Materialize classes
+  function validateInput(inputElement) {
+    if(!inputElement){
+      alert("ERROR: can't find element to validate!")
+      return false;
+    }
+
+    var value = inputElement.value.trim();
+    var inputWrapper = inputElement.parentNode;  // The parent div with class 'input-field'
+
+    if (!value) {
+      // Add invalid class to input wrapper
+      inputWrapper.classList.add('invalid');
+      inputElement.classList.add('invalid');
+
+      // Show error message
+      var errorText = inputWrapper.querySelector('.helper-text[data-error]');
+      
+      if (errorText) {
+        errorText.style.display = 'block';
+      }
+      return false;  // Return false if validation fails
+    } else {
+      // Add valid class and remove any existing error styling
+      inputWrapper.classList.remove('invalid');
+      inputElement.classList.remove('invalid');
+      inputWrapper.classList.add('valid');
+      var errorText = inputWrapper.querySelector('.helper-text[data-error]');
+      if (errorText) {
+        errorText.style.display = 'none';
+      }
+      return true;  // Return true if validation passes
+    }
+  }
+
+  // Submit event handler
+  document.getElementById('myForm').addEventListener('submit', function(event) {
+
+    // Validate all input, select, and textarea elements within the form
+    // var inputElements = document.querySelectorAll('#myForm input, #myForm select, #myForm textarea');
+    // inputElements.forEach(function(inputElement) {
+    //   if (!validateInput(inputElement)) {
+    //     isValid = false;  // If any input validation fails, form submission is prevented
+    //   }
+    // });
+
+    if(document.getElementById('colour').value=="")document.getElementById('colour').value="#000000";
+    //alert("resetting");
+    resetValidation(document.getElementById('agentcommand'));
+    //alert("reset");
+    let isValid = true;
+    isValid = validateInput(document.getElementById('jobName')) ? isValid : false;
+    isValid = validateInput(document.getElementById('description')) ? isValid : false; 
+    isValid = validateInput(document.getElementById('icon_select')) ? isValid : false;
+    isValid = validateInput(document.getElementById('scheduleType')) ? isValid : false;
+    isValid = validateInput(document.getElementById('agentselect')) ? isValid : false;
+    //isValid = validateInput(document.getElementById('scheduleTime')) ? isValid : false;
+
+
+   
+    if(document.getElementById('agentcommand').selectedIndex==0){
+      //alert("nothing selected");
+      isValid = validateInput(document.getElementById('agentcommand')) ? isValid : false;
+    }
+    else{
+      //alert("selected so resetting");
+      resetValidation(document.getElementById('agentcommand'));
+    }
+
+    if(document.getElementById('agentcommand').selectedIndex==1){
+      isValid = validateInput(document.getElementById('commandparams')) ? isValid : false;
+    }
+    else {
+      resetValidation(document.getElementById('commandparams'));
+    }
+
+
+    resetValidation(document.getElementById('scheduleTime'));
+    resetValidation(document.getElementById('dayOfWeek'));
+    resetValidation(document.getElementById('dayInMonth'));
+
+    if(document.getElementById("scheduleType").selectedIndex==1){
+       isValid = validateInput(document.getElementById('scheduleTime')) ? isValid : false;   
+    }
+    
+    if(document.getElementById("scheduleType").selectedIndex==2){
+      isValid = validateInput(document.getElementById('dayOfWeek')) ? isValid : false;   
+      //resetValidation(document.getElementById('dayInMonth'));
+    }
+
+    if(document.getElementById("scheduleType").selectedIndex==3){
+      isValid = validateInput(document.getElementById('dayInMonth')) ? isValid : false;   
+    }
+
+    if(document.getElementById("scheduleType").selectedIndex>3){
+    }
+
+    // if(document.getElementById("scheduleType").value=="monthly"){
+    //   resetValidation(document.getElementById('dayofWeek'));
+    //   isValid = validateInput(document.getElementById('dayInMonth')) ? isValid : false;  
+    // }
+
+    if (!isValid) {
+      event.preventDefault();  // Prevent form submission if any validation fails
+    }
+  });
+</script>
+
+
+  <%- include('./partials/_footer'); %>
+
+  </body>
+</html>
+

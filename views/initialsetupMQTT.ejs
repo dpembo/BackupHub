@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>BackupHub | Initial Setup</title>
+  <link rel="stylesheet" href="css/materialize/materialize.css">
+  <link id="maincss" rel="stylesheet" href="css/light.css">
+  <style>
+    body {
+        
+      /*background-color: #f5f5f5;*/
+      background: linear-gradient(to bottom right, #3498db, #e74c3c);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+    }
+    .card-panel {
+      width: 360px;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+    }
+    h1 {
+      font-size: 24px;
+      margin-bottom: 20px;
+      text-align: center;
+      color: #333;
+    }
+    label {
+      font-size: 14px;
+      color: #666;
+    }
+    input[type="text"],
+    input[type="password"] {
+      border: none;
+      border-bottom: 1px solid #ccc;
+      outline: none;
+      width: 100%;
+      padding: 5px 0;
+      font-size: 16px;
+      margin-bottom: 20px;
+      color: #333;
+    }
+    .btn {
+      background-color: #4caf50;
+      border: none;
+      border-radius: 5px;
+      padding: 10px 20px;
+      font-size: 16px;
+      color: #fff;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+    .btn:hover {
+      background-color: #45a049;
+    }
+    .forgot-password {
+      text-align: center;
+      margin-top: 20px;
+      font-size: 14px;
+      color: #666;
+    }
+
+    #vNo
+    {
+      position: relative;
+      top: 242px;
+      float: right;
+      color: gray;
+    }
+
+    .imgframe {
+      display: block;
+      text-align:center;
+    }
+
+    
+  </style>
+  <script>
+    function skip(){
+      document.location.href="/";
+    }
+  </script>
+</head>
+<body>
+  <div class="card-panel">
+    <span class="imgframe"><span class="loginimg"></span></span>
+    <h1 style="position:relative;top:-40px;">BackupHub Initial Setup</h1>
+    <p style="position:relative;top:-45px;">Please install and provide the details for an MQTT server below<br>(e.g. <a href="https://mosquitto.org">Mosquitto</a>, <a href="https://hub.docker.com/_/eclipse-mosquitto/">Mosquitto Container</a>)</p>
+    <form class="col s12" action="/initial-setupMQTT.html" method="POST">
+      <label for="mqttServer">Hostname *</label>
+      <input id="mqttServer" type="text" name="mqttServer" value="<%=hostName%>" required>
+      <label for="mqttPort">Port *</label>
+      <input id="mqttPort" type="text" name="mqttPort" value="1883" required>
+      <label for="mqttUsername">Username (optional)</label>
+      <input id="mqttUsername" type="text" name="mqttUsername">
+      <label for="mqttPassword">Password (optional)</label>
+      <input id="mqttPassword" type="password" name="mqttPassword">
+      <button class="btn waves-effect waves-light" style="line-height:0px" type="submit">Save Settings</button>
+      <button class="btn waves-effect waves-light red" style="line-height:0px" onclick="skip()">Skip</button>
+    </form>
+  </div>
+  <script src="js/materialize/materialize.js"></script>
+  <script>
+    // Check if the 'message' URL parameter is present
+    const urlParams = new URLSearchParams(window.location.search);
+    const message = urlParams.get('message');
+    
+    if (message) {
+      // Show a Materialize toast notification with the provided message
+      M.toast({html: message, displayLength: 5000});
+    }
+  </script>
+</body>
+</html>

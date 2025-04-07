@@ -1,0 +1,549 @@
+<% 
+function isChecked(inValue,compareValue){
+  if(compareValue===undefined||compareValue==null)return"";
+  if(inValue==compareValue){
+    return " checked ";
+  }
+  else return "";
+}
+
+function isSelected(inValue,compareValue){
+  if(compareValue===undefined||compareValue==null)return"";
+  if(inValue==compareValue){
+    return " selected ";
+  }
+  else return "";
+}
+
+function noValue(inValue){
+  if(inValue===undefined||inValue===null)return " selected ";
+  else return "";
+}
+
+%>
+
+  <!DOCTYPE html>
+  <html lang="en">
+
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0" />
+    <title>BackupHub | Settings</title>
+
+    <%- include('./partials/_head'); %>
+      <script>
+
+      function testMqtt()
+      {
+        //M.toast({html: "Reconnecting MQTT Server", displayLength: 1000});
+        var xhttp = new XMLHttpRequest();
+        xhttp.open("GET", "/rest/mqtt/reconnect", false);
+        xhttp.send(null);
+        //alert(xhttp.status);
+        //alert(xhttp.responseText);
+        if (xhttp.status === 200) {
+          M.toast({html: "MQTT Connection initiated", displayLength: 5000});
+        }
+        else
+        {
+          M.toast({html: "FAILURE: Unable to connect to MQTT", displayLength: 5000});
+        }
+      }
+      function testEmail()
+      {
+        M.toast({html: "Starting Notification Test", displayLength: 1000});
+        var xhttp = new XMLHttpRequest();
+        xhttp.open("GET", "/rest/notifty/test", false);
+        xhttp.send(null);
+
+        if (xhttp.status === 200) {
+          M.toast({html: "SUCCESS: Notification Action Successful", displayLength: 5000});
+        }
+        else
+        {
+          M.toast({html: "FAILURE: Notification Action Failed", displayLength: 5000});
+        }
+      }
+
+      function getItems(){
+
+        itemlist = document.getElementById("item-list");
+        spanElements = itemlist.querySelectorAll('span');
+        const spanTexts = [];
+        spanElements.forEach(span => {
+          spanTexts.push(span.textContent);
+        });
+        return spanTexts;
+      }
+      </script>
+
+      <style>
+        .tab{min-width: 130px;}
+
+        
+      </style>
+  </head>
+
+  <body>
+    <%- include('./partials/_header'); %>
+
+      <div class="container">
+        <h5 class="header orange-text">Settings</h5>
+
+        <div class="row">
+          <form class="col s12" action="settings.html" method="POST">
+
+            <div class="row">
+              <div class="col s12">
+                <ul class="tabs" style="min-width: 120px;;">
+                  <li class="tab col s1"><a class="active" href="#server">Server</a></li>
+                  <li class="tab orange-text col s1"><a href="#websocket">WebSocket</a></li>
+                  <li class="tab orange-text col s1"><a href="#mqtt">MQTT</a></li>
+                  <li class="tab col s2"><a href="#notifications">Notifications</a></li>
+                  <li class="tab col s2"><a href="#threshold">Threshold Jobs</a></li>
+                  <li class="tab col s2"><a href="#icons">Job Icons</a></li>
+                  <li class="tab col s2"><a href="#templates">Templates</a></li>
+                  <!--<li class="tab col s3 disabled"><a href="#test3">Disabled Tab</a></li>-->
+                </ul>
+              </div>
+              <div id="server" class="col s12">
+                <br>
+                <div class="row">
+                  <div class="input-field col s2">
+                    <select id="protocol" name="protocol">
+                      <option value="" disabled <%=noValue(serverConfig.server.protocol)%>>Choose your option</option>
+                      <option <%=isSelected(serverConfig.server.protocol,"http")%> value="http">http</option>
+                      <option <%=isSelected(serverConfig.server.protocol,"https")%> value="https">https</option>                    
+                    </select>
+                    <label>Protocol</label>
+                  </div>
+                  <div class="input-field col s6">
+                    <input id="serverHostname" type="text" name="serverHostname" value="<%=serverConfig.server.hostname%>" required>
+                    <label for="serverHostname">Hostname</label>
+                  </div>
+                  <div class="input-field col s4">
+                    <input id="serverPort" type="text" name="serverPort" value="<%=serverConfig.server.port%>" required>
+                    <label for="serverPort">Port</label>
+                  </div>
+                </div>
+
+                <div class="row">
+                    <div class="input-field col s12">
+                      <% var timeZones = Intl.supportedValuesOf('timeZone');%>
+                      <select id="timezone" name="timezone">
+                        <option value="" <%=noValue(serverConfig.server.timezone)%>>Choose your option</option>
+                        <% timeZones.forEach((zone) => { %>
+                          <option <%=isSelected(serverConfig.server.timezone,zone)%> value="<%= zone %>"><%= zone %></option>
+                        <% }); %>
+                      </select>
+                      <label for="timezone">Timezone</label>
+                    </div>
+                </div>
+
+                <div class="row">
+                  <div class="input-field col s12">
+                    <select id="loglevel" name="loglevel">
+                      <option value="" disabled <%=noValue(serverConfig.server.loglevel)%>>Choose your option</option>
+                      <option value="0" <%=isSelected(serverConfig.server.loglevel,"0")%>>Off</option>
+                      <option value="1" <%=isSelected(serverConfig.server.loglevel,"1")%>>Error</option>
+                      <option value="2" <%=isSelected(serverConfig.server.loglevel,"2")%>>Warn</option>
+                      <option value="3" <%=isSelected(serverConfig.server.loglevel,"3")%>>Info</option>
+                      <option value="4" <%=isSelected(serverConfig.server.loglevel,"4")%>>Debug</option>
+                    </select>
+                    <label for="loglevel">LogLevel</label>
+                  </div>
+                </div>
+
+              </div>
+
+              <div id="websocket" class="col s12">
+                <br>
+                <div class="row">
+                  <div class="input-field col s12">Enabled
+                    <div class="switch">
+                      <label>
+                        Off
+                        <input type="checkbox" id="websocketEnabled" name="websocketEnabled" <%=isChecked(serverConfig.websocket_server.enabled,'true')%>>
+                        <span class="lever"></span>
+                        On
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="row"> 
+                  <div class="input-field col s4">
+                    <input id="websocketServer" type="text" name="websocketServer" value="<%=serverConfig.websocket_server.server%>" required>
+                    <label for="websocketServer">WebSocket Server Hostname</label>
+                  </div>
+                </div>
+
+                <div class="row"> 
+                  <div class="input-field col s4">
+                    <input id="websocketPort" type="text" name="websocketPort" value="<%=serverConfig.websocket_server.port%>" required>
+                    <label for="websocketPort">WebSocket Server Port</label>
+                  </div>
+                </div>
+              </div>
+
+              <div id="mqtt" class="col s12">
+                <br>
+                <div class="row">
+                  <div class="input-field col s12">Enabled:
+                    <div class="switch">
+                      <label>
+                        Off
+                        <input type="checkbox" id="mqttEnabled" name="mqttEnabled" <%=isChecked(serverConfig.mqtt.enabled,'true')%>>
+                        <span class="lever"></span>
+                        On
+                      </label>
+                    </div>
+                  </div>
+                </div>
+                <div class="row">
+                  
+                  <div class="input-field col s8">
+                    <input id="mqttServer" type="text" name="mqttServer" value="<%=serverConfig.mqtt.server%>" required>
+                    <label for="mqttServer">MQTT Server name</label>
+                  </div>
+                  <div class="input-field col s4">
+                    <input id="mqttPort" type="text" name="mqttPort" value="<%=serverConfig.mqtt.port%>" required>
+                    <label for="mqttPort">MQTT Server Port</label>
+                  </div>
+                </div>
+                <div class="row">
+                  <div class="input-field col s6">
+                    <input id="mqttUsername" type="text" name="mqttUsername" value="<%=serverConfig.mqtt.username%>">
+                    <label for="mqttUsername">MQTT Username</label>
+                  </div>
+                  <div class="input-field col s6">
+                    <input id="mqttPassword" type="password" name="mqttPassword" value="<%=serverConfig.mqtt.password%>">
+                    <label for="mqttPassword">MQTT Password</label>
+                  </div>
+                  </div>
+
+              </div>
+              <div id="notifications" class="col s12">
+                <h6 class="header blue-text">Alerting</h6>
+                
+                <div class="row">
+                  <div class="input-field col s12">
+                    <select id="notificationType" name="notificationType">
+                      <option value="" disabled <%=noValue(serverConfig.server.notificationType)%>>Choose your option</option>
+                      <option value="console" <%=isSelected(serverConfig.server.notificationType,"console")%>>Console</option>
+                      <option value="email" <%=isSelected(serverConfig.server.notificationType,"email")%>>Email</option>
+                      <option value="webhook" <%=isSelected(serverConfig.server.notificationType,"webhook")%>>WebHook</option>
+                    </select>
+                    <label for="notificationType">Notification Type</label>
+                  </div>
+                </div>
+                <div class="row">
+                  <div class="input-field col s2">Agent Disconnect/Reconnect:
+                    <div class="switch">
+                      <label>
+                        Off
+                        <input type="checkbox" id="connectionEnabled" name="connectionEnabled" <%=isChecked(serverConfig.server.connectionEnabled,'true')%>>
+                        <span class="lever"></span>
+                        On
+                      </label>
+                    </div>
+                  </div>
+                  <div class="input-field col s2">Login Success:
+                    <div class="switch">
+                      <label>
+                        Off
+                        <input type="checkbox" id="loginSuccessEnabled" name="loginSuccessEnabled" <%=isChecked(serverConfig.server.loginSuccessEnabled,'true')%>>
+                        <span class="lever"></span>
+                        On
+                      </label>
+                    </div>
+                  </div>
+                  <div class="input-field col s2">Login Fail:
+                    <div class="switch">
+                      <label>
+                        Off
+                        <input type="checkbox" id="loginFailEnabled" name="loginFailEnabled" <%=isChecked(serverConfig.server.loginFailEnabled,'true')%>>
+                        <span class="lever"></span>
+                        On
+                      </label>
+                    </div>
+                  </div>
+                  <div class="input-field col s2">Job Failed:
+                    <div class="switch">
+                      <label>
+                        Off
+                        <input type="checkbox" id="jobFailEnabled" name="jobFailEnabled" <%=isChecked(serverConfig.server.jobFailEnabled,'true')%>>
+                        <span class="lever"></span>
+                        On
+                      </label>
+                    </div>
+                  </div>
+                </div>
+                <div class="row">
+                  
+                </div>
+
+
+
+                <h6 class="header blue-text">Configuration</h6>
+                
+                <div class="row">
+                  <div class="input-field col s3">
+                    <input id="minDisconnectDurationForNotification" type="text" name="minDisconnectDurationForNotification" value="<%=serverConfig.server.minDisconnectDurationForNotification%>">
+                    <label for="minDisconnectDurationForNotification"> Disconnect Duration before Notification</label>
+                  </div>
+                  <div class="input-field col s2" style="padding-top: 15px;">secs</div>
+                </div>
+
+                
+                <h6 class="header blue-text">SMTP</h6>
+                <div class="input-field col s12">
+                  <div class="switch">
+                    <label>
+                      Off
+                      <input type="checkbox" id="smtpEnabled" name="smtpEnabled" <%=isChecked(serverConfig.smtp.enabled,'true')%>>
+                      <span class="lever"></span>
+                      On
+                    </label>
+                  </div>
+                </div>
+                <div class="input-field col s7">
+                  <input id="smtpServer" type="text" name="smtpServer" value="<%=serverConfig.smtp.host%>">
+                  <label for="smtpServer">SMTP Host</label>
+                </div>
+                <div class="input-field col s3">
+                  <input id="smtpPort" type="text" name="smtpPort" value="<%=serverConfig.smtp.port%>">
+                  <label for="smtpPort">SMTP Port</label>
+                </div>
+                <div class="input-field col s2">
+                <p>
+                  <label>
+                    <input type="checkbox" id="smtpSecure" name="smtpSecure" class="filled-in" <%=isChecked(serverConfig.smtp.secure,'true')%> />
+                    <span>Secure</span>
+                  </label>
+                </p>
+                </div>
+                <div class="row">
+                <div class="input-field col s6">
+                  <input id="smtpUsername" type="text" name="smtpUsername" value="<%=serverConfig.smtp.username%>">
+                  <label for="smtpUsername">SMTP Username</label>
+                </div>
+                <div class="input-field col s6">
+                  <input id="smtpPassword" type="password" name="smtpPassword" value="<%=serverConfig.smtp.password%>">
+                  <label for="smtpPassword">SMTP Password</label>
+                </div>
+                </div>
+                <div class="row">
+                <div class="input-field col s6">
+                  <input id="smtpEmailFrom" type="text" name="smtpEmailFrom" value="<%=serverConfig.smtp.emailFrom%>">
+                  <label for="smtpEmailFrom">Email From</label>
+                </div>
+                <div class="input-field col s6">
+                  <input id="smtpEmailTo" type="text" name="smtpEmailTo" value="<%=serverConfig.smtp.emailTo%>">
+                  <label for="smtpEmailTo">Email To</label>
+                </div>
+                </div>
+                <div class="row">
+                <h6 class="header blue-text">WebHook</h6>
+                <div class="input-field col s12">
+                  <input id="webHookUrl" type="text" name="webHookUrl" value="<%=serverConfig.webhook.url%>">
+                  <label for="webHookUrl">WebHook URL:</label>
+                </div>
+                <!--<div class="input-field col s2">
+                  <a class="btn waves-effect waves-light" href="#" onclick="testEmail()">Notification Test</a>
+                </div>-->
+                </div>
+              </div>
+
+              <div id="threshold" class="col s12">
+                <br>
+                <div class="row">
+                  <div class="input-field col s2">
+                    <input id="cpuThreshold" type="text" name="cpuThreshold" value="<%=serverConfig.threshold.cpu_percent%>" required>
+                    <label for="cpuThreshold">CPU Threshold (%)</label>
+                  </div>
+                  <div class="input-field col s2" style="padding-top: 15px;">%</div>
+                </div>
+                <div class="row">
+                  <div class="input-field col s2">
+                    <input id="storageThreshold" type="text" name="storageThreshold" value="<%=serverConfig.threshold.filesystem_percent%>" required>
+                    <label for="storageThreshold">Storage Threshold (%)</label>
+                  </div>
+                  <div class="input-field col s2" style="padding-top: 15px;">%</div>
+                </div>
+                <div class="row">
+                  <div class="input-field col s2">
+                    <input id="cooldown" type="text" name="cooldown" value="<%=serverConfig.threshold.cooldown_mins%>" required>
+                    <label for="cooldown">Threshold Job Cooldown (mins)</label>
+                  </div>
+                  <div class="input-field col s2" style="padding-top: 15px;">mins</div>
+                </div>
+ 
+              </div>
+
+              <div id="icons" class="col s12">
+                <div class="container">
+                  <h6 class="header blue-text">Job Icons</h6>
+                  <div class="row">
+                    <div class="col s12">
+                      <p>Please provide additional an icon id (see <a href="https://marella.me/material-icons/demo/">here</a> for list), then press '+' to add to the list, and drag/drop to reorder as you need</p>
+                    </div>
+                  </div>
+                  <div class="row">
+                      <div class="input-field col s3">
+                          <input id="item-input" type="text" class="validate">
+                          <label for="item-input">Provide a material-icons name </label>
+                      </div>
+                      <div class="col s1" style="padding-top:15px;height:10px;">
+                          <button id="add-button" class="btn waves-effect waves-light">
+                              <i class="material-icons">add</i>
+                          </button>
+                      </div>
+                      <div class="col s8">
+                        <ul id="item-list" class="collection"></ul>
+                      </div>
+                  </div>
+                  
+                  
+                  <input type="hidden" name="iconslist" id="iconslist">
+              </div>  
+
+              </div>
+
+              <div id="templates" class="col s12">
+                <div class="container">
+                  <h6 class="header blue-text">Templates</h6>
+                  <div class="row">
+                    <div class="input-field col s12">Enabled:
+                      <div class="switch">
+                        <label>
+                          Off
+                          <input type="checkbox" id="templateEnabled" name="templateEnabled" <%=isChecked(serverConfig.templates.enabled,'true')%>>
+                          <span class="lever"></span>
+                          On
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="row">
+                    <div class="input-field col s8">
+                      <input id="templateServer" type="text" name="templateServer" value="<%=serverConfig.templates.repositoryUrl%>" required>
+                      <label for="mqttServer">Templates Repository URL</label>
+                    </div>
+                  </div>
+
+
+              </div>
+              <!--<div id="test4" class="col s12">Test 4</div>-->
+            </div>
+
+
+
+
+            <div class="row">
+              <div class="col s12">
+                <a href="#" id="saveChanges" class="btn waves-effect waves-light">Save Changes</a>
+                <span style="float:right">
+                  <a class="btn waves-effect waves-light orange" href="#" onclick="testEmail()">Notification Test</a>
+                  <a class="btn waves-effect waves-light orange" href="#" onclick="testMqtt()">Restart MQTT Connection</a>
+                </span>
+              </div>
+            </div>
+          </form>
+        </div>
+      <br><br>
+      </div>
+
+      <%- include('./partials/_footer'); %>
+
+      <%- include('./partials/_scripts'); %>
+      <script>
+
+        $(document).ready(function(){
+
+            $('#saveChanges').on('click', function(e) {
+              e.preventDefault();
+              var items = getItems();
+              document.getElementById("iconslist").value=items;
+              //alert("saving changes");
+              document.forms[0].submit();
+            });
+          
+            $('#add-button').on('click', function(e) {
+                e.preventDefault();
+                const itemValue = $('#item-input').val().trim();
+                if (itemValue) {
+                    addItemToList(itemValue);
+                }
+            });
+
+            $('#item-list').on('click', '.delete-btn', function() {
+                $(this).closest('li').remove();
+            });
+
+            <%
+            if(serverConfig.job_icons){
+              for(var ic=0;ic<serverConfig.job_icons.length;ic++) {%>
+                addItemToList("<%=serverConfig.job_icons[ic]%>");
+            <% }
+            } %>
+
+            function makeSortable() {
+                $('#item-list').sortable({
+                    placeholder: "ui-sortable-placeholder",
+                    helper: function(event, ui) {
+                        var $helper = ui.clone().addClass('ui-sortable-helper');
+                        $helper.css({
+                            height: '30px', /* Adjust the height of the dragged item */
+                            lineHeight: '30px' /* Adjust the line height to center text vertically */
+                            
+                        });
+                        return $helper;
+                    },
+                    opacity: 0.7
+                });
+                $('#item-list').disableSelection();
+            }
+
+            function addItemToList(itemValue){
+              //alert("adding: " + itemValue);
+              const listItem = `<li class="collection-item list-item">
+                        <i class="delete-btn material-icons vertMid" style="font-size:20pt">${itemValue}</i>
+                        <span>${itemValue}</span>
+                        <a href="#" title="delete" class="delete-btn material-icons vertMid" style="display:inline-block;float:right;font-size:20pt;">delete</a>
+                    </li>`;
+                    $('#item-list').append(listItem);
+                    $('#item-input').val('');
+                    makeSortable();
+            }
+
+            makeSortable();
+        });
+
+
+            
+            $(document).ready(function(){
+              $('.tabs').tabs();
+            });
+
+            $(document).ready(function(){
+              $('select').formSelect();
+            });
+
+            $(document).ready(function(){
+              $('.collapsible').collapsible();
+            });
+
+            // Check if the 'message' URL parameter is present
+            const urlParams = new URLSearchParams(window.location.search);
+            const message = urlParams.get('message');
+            
+            if (message) {
+              // Show a Materialize toast notification with the provided message
+              M.toast({html: message, displayLength: 5000});
+            }
+      </script>
+
+    </body>
+
+  </html>

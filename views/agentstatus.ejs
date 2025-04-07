@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0"/>
+  
+  <title>BackupHub | Agent Status</title>
+
+  <%- include('./partials/_head'); %>
+  <%- include('./partials/_scripts'); %>
+  
+  <script>
+
+  function deleteAgent(agentName)
+  {
+    var choice = confirm("Are you sure you want to delete the agent [" + agentName + "]");
+    if(choice)
+    {
+      messageServer("delete",agentName);
+    }
+    document.location.reload();
+  }
+
+  function updateAgent(inAgentName){
+    const apiUrl = '/rest/agent/' + inAgentName;
+    var elem = document.getElementById(inAgentName + "_ball");
+    var online='<span title="online" class="material-icons vertMid successIcons" style="font-size:24pt;">play_circle</span>';
+    var offline='<span title="offline" class="material-icons vertMid errorIcons"  style="font-size:24pt;">stop_circle</span>';
+    var running='<span title="online" class="material-icons vertMid blinking" style="color:orange;font-size:24pt;">change_circle</span>';
+    var unknown='<span title="Unknown" class="material-icons vertMid errorIcons grey"  style="font-size:24pt;">error</span>';
+    fetch(apiUrl)
+      .then(response => {
+          if (!response.ok) {
+              throw new Error(`Network response was not ok: ${response.status}`);
+          }
+          return response.json();
+      })
+      .then(data => {
+          // Handle the JSON response data here
+          //console.log('Received data:', data);
+          switch (data.status){
+            case "offline":
+              elem.innerHTML=offline;
+              break;
+            case "online":
+              elem.innerHTML=online;
+              break;
+            case "running":
+              elem.innerHTML=running;
+              break;
+            default:
+              elem.innerHTML=unknown;
+              break;
+          }
+      })
+      .catch(error => {
+          // Handle errors that may occur during the fetch request
+          console.error('Error fetching data:', error);
+          doNotify("Error: Unable to determine agent status:" + JSON.stringify(error));
+      });
+  }
+
+  function pingTest(agentName){
+    document.getElementById(agentName + "_ball").innerHTML='<div id="hiddenspinner" class="loader"></div>';
+    doNotify("success","ping requested for agent: " + agentName);
+    messageServer("ping",agentName);
+    
+    setTimeout(function() {
+      updateAgent(agentName);
+    }, 3000);
+  }
+
+  function refresh(){
+    document.location.reload();
+  }
+
+  function doNotify(status,msg){
+
+      M.toast({html: msg, displayLength: 1500});
+  }
+
+  function addAgent()
+  {
+
+    const serverProtocol = window.location.protocol;
+    const serverDomain = window.location.hostname;
+    const serverPort = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
+    const mqttEnabled = "<%=MQTT_ENABLED%>";
+    const wsEnabled = "<%=WS_ENABLED%>";
+
+    var wsParams = "";
+    var mqttParams = "";
+    if(wsEnabled.toUpperCase()=="TRUE")wsParams+=" --wsServer=<%=WS_SERVER%> --wsPort=<%=WS_PORT%>";
+    if(mqttEnabled.toUpperCase()=="TRUE")mqttParams+=" --mqttServer=<%=MQTT_SERVER%> --mqttPort=<%=MQTT_SERVER_PORT%>";
+
+    document.getElementById('installcommand').innerText="wget -qO- " + serverProtocol + "//" + serverDomain + ":" + serverPort + "/agent/install.sh | bash -s -- --backupHubUrl=" + serverProtocol + "//" + serverDomain + ":" + serverPort + " --installDir=/opt/BackupHubAgent" + mqttParams + wsParams ;
+    $('#confirmationModal').modal('open');
+  }
+
+  var global_command;
+  var global_agentId;
+
+  function initiateUpdate(agentName,startupType){
+    
+    document.getElementById("updateProgress").style.display="none";
+    document.getElementById("updateInfo").style.display="none";
+    document.getElementById("updateManual").style.display="none";
+    global_agentId = agentName;
+
+    if(startupType=="pm2"||startupType=="Crontab"||startupType=="Service"){
+      document.getElementById("updateManual").style.display="none";
+      document.getElementById("updateInfo").style.display="block";
+      document.getElementById("startButton").disabled = undefined;
+      //Set the command
+      command = document.getElementById(agentName+"_command").value;
+      //alert(command);
+      document.getElementById("updateCommand").innerText=command.split("--quiet")[0];
+      
+    }
+    else{
+      document.getElementById("updateManual").style.display="block";
+      document.getElementById("updateInfo").style.display="none";
+      document.getElementById("startButton").disabled = "disabled";
+      command = document.getElementById(agentName+"_command").value.split("/update.sh")[0];
+      command = command.substr(5);
+      command ="cd " + command + "\n" + "bash update.sh\n";
+
+      if(startupType=="Docker")command+="bash startup_container.sh";
+      else command +="nohup node agent&";
+      document.getElementById("updateCommandManual").innerHTML=command;
+    }
+    global_command = command;
+    //Open Modal  
+    $('#updateModal').modal('open');
+
+    var newHtml = document.getElementById("updateModal").innerHTML.replace("%AGENTNAME%",agentName);
+    var newHtml = newHtml.replace("%STARTUPTYPE%",startupType);
+    document.getElementById("updateModal").innerHTML = newHtml;
+
+  }
+
+  function copyToClipboard() {
+      const inputElement = document.getElementById('installcommand');
+      // Select the text within the input element
+      inputElement.select();
+      // Copy the selected text to the clipboard
+      document.execCommand('copy');
+      // Deselect the input element
+      inputElement.setSelectionRange(0, 0);
+      // Notify the user (optional)
+      //alert('Text copied to clipboard: ' + inputElement.value);
+      M.toast({html: "Copid command to clipboard", displayLength: 5000});
+    }
+
+    function callStatusApiSync(agentId) {
+      const url = '/rest/updateAgent/' + agentId + '/status'; // Replace with your API endpoint
+      let result;
+
+      const xhr = new XMLHttpRequest();
+      xhr.open('GET', url, false); // `false` makes the request synchronous
+      xhr.setRequestHeader('Content-Type', 'application/json');
+      xhr.send();
+
+      if (xhr.status === 200) {
+          result = JSON.parse(xhr.responseText);
+          if (result.status != "COMPLETED") {
+              console.log('In progress:', result);
+              //return result
+          } else {
+              //Update has beencompl
+              console.log('Success:', result);
+              updateSuccess();
+              //return result;
+              
+          }
+      } else {
+          const errorData = JSON.parse(xhr.responseText);
+          console.error('Error:', errorData);
+          updateFail(`Update Error ${xhr.status}: ${errorData.message || 'Unknown error'}`);
+          //throw new Error(`Update Error ${xhr.status}: ${errorData.message || 'Unknown error'}`);
+
+      }
+      return result;
+    }
+
+    function callApiSync(agentId, commandValue) {
+      const url = '/rest/updateAgent/' + agentId; // Replace with your API endpoint
+      const body = JSON.stringify({ command: commandValue });
+      let result;
+
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', url, false); // `false` makes the request synchronous
+      xhr.setRequestHeader('Content-Type', 'application/json');
+
+      xhr.send(body);
+
+      if (xhr.status === 200) {
+          result = JSON.parse(xhr.responseText);
+          if (result.status === "ok") {
+              console.log('Success:', result);
+          } else {
+              throw new Error('Unexpected response status: ' + result.status);
+          }
+      } else {
+          const errorData = JSON.parse(xhr.responseText);
+          console.error('Error:', errorData);
+          throw new Error(`Update Error ${xhr.status}: ${errorData.message || 'Unknown error'}`);
+      }
+      return true;
+    }
+
+
+    
+    var updateStarted = false;
+    function startUpdate(){
+      elem = document.querySelector("div.progress");
+      elem.style.backgroundColor="#acece6";
+      startProgress();
+      try{
+        callApiSync(global_agentId,global_command);
+        updateStarted = true;
+      } catch (err) {
+        updateStarted = false;
+        updateFail(err.mes);
+        return;
+      }
+
+    }
+    
+    let progress = 0;
+    let secondsElapsed = 0;
+    var progressInterval = null;
+
+    function startProgress() {
+      // Set interval to update progress every 1 second
+      document.getElementById('updateProgress').style.display = "block";
+      document.getElementById('updateInfo').style.display = "none";
+      document.getElementById("startButton").disabled = "true";
+      document.getElementById("progress-desc").innerText = "Update in Progress, Please Wait - ";
+      progressInterval = setInterval(() => {
+        //alert("in set interval");
+        if (secondsElapsed < 120) { // Stop after 120 seconds
+          secondsElapsed++;
+          progress = (secondsElapsed / 120) * 100; // Calculate progress percentage
+          if(updateStarted){
+            callStatusApiSync(global_agentId)};
+            updateProgressBar();
+        } else {
+            clearInterval(progressInterval); // Stop when progress reaches 100%
+            if(updateStarted==true)updateFail(); // Trigger failure when the timer hits 120 seconds
+        }
+      }, 1000); // 1 second interval
+    }
+
+    function convertSeconds(seconds) {
+      const minutes = Math.floor(seconds / 60);
+      const remainingSeconds = seconds % 60;
+      return `${minutes}:${remainingSeconds < 10 ? '0' : ''}${remainingSeconds}`; // Ensure two digits for seconds
+    }
+
+    function updateProgressBar() {
+      // Update progress bar width and the number of seconds elapsed
+      document.getElementById('cancelButtonProgress').disabled = "disabled";
+      const progressBar = document.getElementById('progress-bar');
+      const progressText = document.getElementById('progress-text');
+
+      let displayText = '';
+      if (secondsElapsed < 120) {
+        const time = convertSeconds(120 - secondsElapsed);
+        displayText = `${time} remaining`;
+      }
+
+      progressBar.style.width = `${progress}%`;
+      progressText.textContent = displayText; // Show time remaining
+    }
+
+    function updateFail(message) {
+      updateStarted = false;
+      document.getElementById("progress-desc").innerHTML = "<span style='color: #CF6679;'>Update Failed, Please check the agent installation for any errors</span>";
+      elem = document.querySelector("div.progress");
+      elem.style.backgroundColor='red';
+      clearInterval(progressInterval); // Stop automatic progression
+      progress = 0; // Reset progress to 0
+      secondsElapsed = 120; // Set to max time (failure)
+      updateProgressBar(); // Reflect failure in the progress bar
+      resetProgress();
+    }
+
+    function updateSuccess() {
+      updateStarted = false;
+      progress = 0; // Reset progress to 0
+      secondsElapsed = 120; // Set to max time
+      document.getElementById("progress-desc").innerText = "Success!";
+      clearInterval(progressInterval); // Stop automatic progression
+      progress = 100; // Set progress to 100%
+      secondsElapsed = 120; // Set time to 120 seconds
+      updateProgressBar();
+      resetProgress();
+    }
+
+    function resetProgress() {
+      progress = 0;
+      secondsElapsed = 0;
+      clearInterval(progressInterval)
+      progressInterval = null;
+      updateStarted = false;
+      document.getElementById('cancelButtonProgress').disabled = false; // Re-enable cancel button
+    }
+  </script>
+</head>
+<body>
+  <%- include('./partials/_header'); %>
+  <div id="updateModal" class="modal" style="width:930px;height: auto !important;">
+    <div class="modal-content">
+        <h4 id="updateTitle">Update Agent: %AGENTNAME%</h4>
+        <div id="updateProgress" style="display:none;">
+          <div class="container" style="margin-top: 50px;">
+            <h5><span id="progress-desc"></span><span id="progress-text"></span></h5>
+            <div class="progress">
+              <div class="determinate" id="progress-bar" style="width: 0%"></div>
+            </div>
+            <!--
+            <button class="btn red" onclick="startUpdate('%AGENTNAME%')">Start</button>
+            <button class="btn red" onclick="updateSuccess()">Set to 100% & Stop</button>
+            <button class="btn red" onclick="updateFail()">Set to Fail Stop</button>
+            -->
+          </div><br>
+          
+          <div id="update-buttons-progress">
+            <button id="cancelButtonProgress" class="modal-close waves-effect waves-light btn-large">Exit</button>
+          </div>
+          <br>
+        </div>
+        <div id="updateManual" style="display:none">
+        <p>This agent cannot be automatically updated due to selected startup type during installation (%STARTUPTYPE%).<br><br>
+          To update this agent, please: 
+          <ul><li>- Connect to your server</li>
+            <li>- Change to your installation directory</li>
+            <li>- Issue the following commands to update and restart</li>
+          </ul>
+          <a href="#" onclick="copyToClipboard()">
+          <span title="copy" class="material-icons vertMid sortableHeader" style="font-size:24pt;float:right;position:relative;top:30px;left:-40px;">content_copy</span>
+          </a>
+          <br>
+          <textarea id="updateCommandManual" style="font-family: 'Courier New', Courier, monospace;font-size:10pt;width: 800px;height:50px;"></textarea>
+          <br><br>
+        </p>
+        <div id="updateButtonManuals">
+          <button id="cancelButtonManual" class="modal-close waves-effect waves-light btn-large">Cancel</button>
+        </div>
+        </div>
+        <div id="updateInfo">
+        <p>Please note:<br>
+          <ul><li>- This will restart the agent</li>
+          <li>- Any jobs running will continue, but the log recording will be interrupted</li>
+          <li>- It is posisble the agent may not come back online and if this happens, you'll need to log-in to the server and restart manually</li>
+          </ul>
+          You can upadate the agent manually by issuing the command:
+          
+          <a href="#" onclick="copyToClipboard()">
+          <span title="copy" class="material-icons vertMid sortableHeader" style="font-size:24pt;float:right;position:relative;top:30px;left:-40px;">content_copy</span>
+          </a>
+          <br>
+          
+        <!--<input type="text" id="installcommand" value="/opt/BackupHubAgent" style="font-family: 'Courier New', Courier, monospace;font-size:10pt;">-->
+        
+        <textarea id="updateCommand" style="font-family: 'Courier New', Courier, monospace;font-size:10pt;width: 800px"></textarea>
+        <br><br>
+        Or press "Update now" to automatically issue the update from here. This will initiate the update, wait for this to complete and wait for the agent to reconnect.
+        If the agent does not reconnect within the allocated time, you'll be alerted to check the status manually.
+        </p>
+      
+        <div id="update buttons">
+          <button id="startButton" class="waves-effect waves-light btn-large" onclick="startUpdate('%AGENTNAME%')">Start Update</button>
+          <button id="cancelButton" class="modal-close waves-effect waves-light btn-large">Cancel</button>
+        </div>
+        <br>
+        </div>
+        
+    </div>
+  </div>
+  <div id="confirmationModal" class="modal" style="width:930px">
+    <div class="modal-content">
+        <h4>Deploy New Agent</h4>
+        <p>Please copy and execute the provided command into a terminal sessions to start an agent deployment:<br>
+          <a href="#" onclick="copyToClipboard()">
+          <span title="copy" class="material-icons vertMid sortableHeader" style="font-size:24pt;float:right;position:relative;top:20px;left:-40px;">content_copy</span>
+          </a>
+          <br>
+        
+        <!--<input type="text" id="installcommand" value="/opt/BackupHubAgent" style="font-family: 'Courier New', Courier, monospace;font-size:10pt;">-->
+        <textarea id="installcommand" style="font-family: 'Courier New', Courier, monospace;font-size:10pt;width: 800px"></textarea>
+        <br>
+        <i>Note: To update an agent, please login to your server, change to the install directory run update.sh, and then restart</i></p>
+        
+    </div>
+    <div class="modal-footer">
+        <a href="#!" class="modal-close waves-effect waves-green btn-flat">Exit</a>
+    </div>
+  </div>
+  <div class="section no-pad-bot" id="index-banner">
+    <div class="container">
+
+      <h5 class="header orange-text">Agent Status<span style="float:right"><a href="#" onclick="javascript:addAgent()"><span title="Deploy New Agent" class="material-icons vertMid tableIconButton" style="font-size:24pt;">add_circle</span></a></span></h5>
+      
+      <div class="agentTable">
+        <table>
+          <tr>
+            <th><b class="sortableHeader">Status</b></th>
+            <th><b class="sortableHeader">Name</b></th>
+            <th><b class="sortableHeader">Description</b></th>
+            <th><b class="sortableHeader">Server</b></th>
+            <th><b class="sortableHeader">Connection</b></th>
+            <th><b class="sortableHeader">Last Updated</b></th>
+            <th><b class="sortableHeader">Actions</b></th>
+          </tr>            
+
+      <% for (const [key, value] of Object.entries(agents)) { %>
+
+        <%//console.log("KEY: " + key);%>
+        <%//console.log("History",history[key]);%>
+        <%//console.log("-------------------");%>
+
+
+        <% 
+          //var statusList = agentHistory.getStatus(value.name);
+          //console.log(statusList);  
+        %>
+
+        <%
+          var agentVersion = "unknown";
+          var startupType = "none";
+          var installDir = "/opt/BackupHubAgent";
+          if(value.message!==undefined && value.message!==null && value.message.length>0){
+            var jsonStr = value.message;
+            var messageObj = JSON.parse(jsonStr);
+            //console.log(">>>>>>>>>>>>>>>>" + jsonStr);
+            if(messageObj.data!==undefined && messageObj.data!==null && messageObj.data.length>0)
+            {
+              var dataObj = JSON.parse(messageObj.data)
+              if(dataObj.version!==undefined & dataObj.version!==null){
+                agentVersion=dataObj.version;
+                startupType=dataObj.startupType;
+              }
+              if(dataObj.installDir!==undefined & dataObj.installDir!==null){
+                installDir=dataObj.installDir;
+              }
+            }
+              
+            
+          } 
+        %>
+
+        <tr>
+          <td id="<%=value.name%>_ball">
+            <% switch (value.status){
+              case "online":%>
+                <span title="online" class="material-icons vertMid successIcons" style="font-size:24pt;">play_circle</span>
+                <%
+                break;
+
+              case "offline":%>
+                <span title="offline" class="material-icons vertMid errorIcons"  style="font-size:24pt;">stop_circle</span>
+                <%
+                break;
+
+              case "running":%>
+                <span title="online" class="material-icons vertMid blinking" style="color:orange;font-size:24pt;">change_circle</span>
+               
+                <%
+                break;
+              
+              default:%>
+                <span title="Unknown" class="material-icons vertMid errorIcons grey"  style="font-size:24pt;">error</span>
+            <%
+            }
+            %>
+
+            <%
+              var agentVersInt;
+              var serverVersInt;
+              if(agentVersion=="unknown" || serverVers=="%%UNKOWN%%"){
+                agentVersInt=0;
+                serverVersInt=0;
+              }
+              else{
+                var tmpA = agentVersion.replace(/\./g, "");
+                agentVersInt = parseInt(tmpA);
+                var tmpB = serverVers.replace(/\./g,"");
+                serverVersInt = parseInt(tmpB);
+              }
+            %>
+
+            <% if(agentVersInt < serverVersInt){%>
+              <a title="Agent Version Outdated.&#10;&#10;Agent Version is: <%=agentVersion%>&#10;Minimum Version Supported is: <%=serverVers%>" href="/agentHistory.html?name=<%=value.name%>"><span style="color:#CF6679ed;font-size:14pt;position: relative;left: -15px;top: -6px;z-index: 50;" class="material-icons tableIconButton blinking">warning</span></a>
+            <% } %>
+
+            <%/* status[agentId].status */ %>
+          </td>
+          <td><%=value.name%></td>
+          <td><%=value.display %></td>
+          <td><%= value.server %></td>
+          <td><%= value.commsType %></td>
+          <td><%= value.lastStatusReport %></td>
+          <td>
+            <a title="info" href="/agentHistory.html?name=<%=value.name%>"><span class="material-icons tableIconButton">info</span></a>
+            <a title="edit" href="/agentEdit.html?agentId=<%=value.name%>"><span class="material-icons tableIconButton">edit</i></a>
+            <a href="#" onclick="deleteAgent('<%=value.name%>');" title="Delete Agent" id="deleteAgent"><i class="tableIconButton material-icons">delete</i></a>
+            <% if (value.status=="register"){%>
+            <a href="#" onclick="goToRegister(`<%=JSON.stringify(value)%>`);" title="Register" id="registerAgent"><i class="tableIconButton material-icons">app_registration</i></a>
+            <%} else {%>
+              <a href="#" onclick='pingTest("<%=value.name%>")' title="Ping" id="pingAgent"><i class="tableIconButton material-icons">restart_alt</i></a>
+            <%}%>
+            <% if(agentVersInt < serverVersInt){%>
+              <input type="hidden" id="<%=value.name%>_command" value="bash <%=installDir%>/update.sh --restart --quiet">
+              <a href="#" onclick='initiateUpdate("<%=value.name%>","<%=startupType%>")' title="Initiate Agent Update" id="udateAgent"><i class="tableIconButton material-icons blinking" style="color:#CF6679ed">update</i></a>
+            <%}%>
+          </td>
+          
+          
+        </tr>
+        
+      <% } %>
+        </table>
+    </div>
+  </div>
+  </div>
+  
+  <%- include('./partials/_footer'); %>
+
+  <script>
+    M.FormSelect.init(document.querySelectorAll('select'));
+    $('.modal').modal();
+  </script>
+
+
+  </body>
+</html>
+

@@ -1,0 +1,266 @@
+<%  
+agentOnline=0;
+agentOffline=0;
+agentRunning=0;
+agentUnknown=0;
+for (const [key, value] of Object.entries(agents.getDict())) {
+    if(value.status=="online")agentOnline++;
+    if(value.status=="offline")agentOffline++;
+    if(value.status=="running")agentRunning++;
+    if(value.status=="unknown")agentUnknown++;
+}
+
+function outputArray(inArray)
+{
+  var str="";
+  for(var i=0;i<inArray.length;i++){
+    str+= '"';
+    str+= inArray[i] ;
+    str+= '"';
+    if(i!=inArray.length-1)str+=",";
+  }
+  return str;
+}
+%>
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0" />
+  <title>BackupHub</title>
+
+  <%- include('./partials/_head'); %>
+
+  <style>
+    /* Card container to manage flex wrapping and spacing */
+    .card-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px; /* Space between cards */
+      justify-content: flex-start; /* Center the cards in the container */
+      padding: 16px;
+    }
+
+    /* Make each card responsive with a min and max width */
+    .card {
+      flex: 1 1 400px; /* Allow cards to grow and shrink with a base width of 300px */
+      min-width: 425px;
+      max-width: 400px; /* Maximum width to prevent cards from stretching too wide */
+      margin: 2px; /* Additional spacing between cards */
+    }
+  </style>
+  
+</head>
+
+<body class="surface">
+  <%- include('./partials/_header'); %>
+  <div class="section no-pad-bot" id="index-banner">
+    <div class="container">
+      <div class="section">
+
+        <!--   Icon Section   -->
+
+        <div class="row">
+          <div class="col s12 m12 l12">
+            <h5>Welcome <%=username%></h5>
+          </div>
+        </div>
+
+
+        <!-- Card container to enable responsive card wrapping -->
+        <div class="card-container">
+          <div class="card">
+            <a href="history.html">
+              <div class="card-content">
+                <span class="card-title">Job Status</span>
+                <canvas height="250" id="donutChart"></canvas>
+              </div>
+            </a>
+          </div>
+
+          <div class="card">
+            <a href="history.html">
+              <div class="card-content">
+                <span class="card-title">Executions</span>
+                <canvas height="250" id="lineGraph"></canvas>
+              </div>
+            </a>
+          </div>
+
+          <div class="card">
+            <a href="history.html">
+              <div class="card-content">
+                <span class="card-title">Runtime (secs)</span>
+                <canvas height="250" id="areaChart"></canvas>
+              </div>
+            </a>
+          </div>
+
+          <!-- Additional cards for other items -->
+          <div class="card">
+            <a href="/agentstatus.html">
+              <div class="card-content">
+                <span class="card-title">Agents</span>
+                <% var offlineClass="offlinecnt"; 
+                  var runningClass="runningcnt";
+                  var onlineClass="onlinecnt";
+                  if(agentOffline==0)offlineClass="unknowncnt";
+                  if(agentOnline==0)onlineClass="offlinecnt";
+                  if(agentRunning==0)runningClass="unknowncnt";
+                %>
+                <div>
+                  <span class="dashtitle">Online</span><span style="padding-left: 5px" class="<%=onlineClass%>"><%=agentOnline%></span>
+                  <span class="dashtitle">Offline</span><span class="<%=offlineClass%>"><%=agentOffline%></span>
+                  <span class="dashtitle">Running</span><span class="<%=runningClass%>"><%=agentRunning%></span>
+                  <span class="dashtitle">Unknown</span><span class="unknowncnt"><%=agentUnknown%></span>
+                </div>
+              </div>
+            </a>
+          </div>
+
+          <div class="card">
+            <a href="/scheduleListCalendar.html?viewType=daily">
+              <div class="card-content">
+                <span class="card-title">Day Schedule</span>
+                <% var color = "unknowncnt";
+                  var jrunSuccess = parseInt(todayJobsRun.scheduledCount);
+                  var jrunFail = parseInt(todayJobsRun.scheduledFail);
+                  var jobs = parseInt(todayJobs);
+                  if((jrunSuccess + jrunFail) < jobs) color="offlinecnt";
+                  if((jrunSuccess + jrunFail) == jobs) color="onlinecnt";
+                  if((jrunSuccess + jrunFail) > jobs) color="unknowncnt";
+                %>
+                <span class="onlinecnt dashtitle" style="font-size:8pt;">Success</span>
+                <span class="onlinecnt" style="font-size:36;"><%=jrunSuccess%></span>
+                <span class="unknowncnt" style="font-size:36pt;margin-left:20px;"> / </span>
+                <span class="offlinecnt dashtitle" style="font-size:8pt;margin-left:-25px;">Fail</span>
+                <span class="offlinecnt" style="font-size:36pt;margin-left:10px;"><%=jrunFail%></span>
+                <span class="unknowncnt" style="font-size:36pt;">&nbsp;of&nbsp;</span>
+                <span class="<%= color %>" style="font-size:36pt;"><%= todayJobs %></span>
+              </div>
+            </a>
+          </div>
+        </div>
+
+        
+
+        </div>
+        </div>
+        </div>
+        <!-- Add Chart.js script -->
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.5.0/chart.min.js"></script>
+        <script>
+          document.addEventListener('DOMContentLoaded', function () {
+            // Get the canvas element
+            var ctx = document.getElementById('donutChart').getContext('2d');
+
+            // Create the donut chart
+            var donutChart = new Chart(ctx, {
+              type: 'doughnut',
+              data: {
+                labels: ['Success', 'Failure', 'Running'],
+                datasets: [{
+                  data: [<%=successCount %>, <%=failCount %>, <%=runningCount %>],
+                  backgroundColor: ['#63ade9', '#CF6679', '#ff9800'],
+                  borderColor: 'transparent',
+                  borderWidth: 1
+                }]
+              },
+              options: {
+                backgroundColor: 'transparent',
+                responsive: true,
+                maintainAspectRatio: true,
+                cutout: '75%', // Adjust the cutout to control the donut shape
+                plugins: {
+                  legend: {
+                    display: true,
+                    position: 'right'
+                  }
+                },
+              }
+            });
+            ctx = document.getElementById('lineGraph').getContext('2d');
+
+            // Create the line graph
+            var lineGraph = new Chart(ctx, {
+              type: 'line',
+              data: {
+                //[<%-outputArray(chartData.labels)%>]
+                labels: [<%-outputArray(chartData.labels)%>],
+                datasets: [
+                  {
+                    label: 'Success',
+                    data: [<%=chartData.success%>],
+                    borderColor: '#63ade9',
+                    fill: false,
+                  },
+                  {
+                    label: 'Fail',
+                    data: [<%=chartData.fail%>],
+                    borderColor: '#CF6679',
+                    fill: false,
+                  },
+                  {
+                    label: "Scheduled",
+                    data: [<%=scheduleHistory%>],
+                    borderColor: '#444444',
+                    fill: true,
+                    stepped: 'middle',
+                  }
+
+                ]
+              },
+              options: {
+                responsive: true,
+                height: 275,
+                width: 275,
+                maintainAspectRatio: true,
+                plugins: {
+                  legend: {
+                    display: true,
+                    position: 'bottom'
+                  }
+                }
+              }
+            });
+
+            ctx = document.getElementById('areaChart').getContext('2d');
+      var areaChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: [<%-outputArray(chartData.labels)%>],
+          datasets: [
+            {
+              label: 'Runtime',
+              data: [<%=chartData.runtime%>],
+              borderColor: '#36a2eb',
+              backgroundColor: 'rgba(54, 162, 235, 0.2)',
+              fill: true
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: {
+              display: true,
+              position: 'bottom'
+            }
+          }
+        }
+      });
+          });
+        </script>
+
+
+    </div>
+    </div>
+    </div>
+
+    <%- include('./partials/_footer'); %>
+
+    <%- include('./partials/_scripts'); %>
+</body>
+
+</html>

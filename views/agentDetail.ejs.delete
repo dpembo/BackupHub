@@ -1,0 +1,284 @@
+<% 
+const hours = 18; 
+
+function filterDataAndRetainLastOverHours(data, hours,startDate) {
+  const filteredData = [];
+  let lastOverHoursEntry = null;
+  
+  var currDate;
+  if(startDate!==undefined && startDate!==null)
+  {
+    currDate = new Date(startDate);
+  }
+  else
+  {
+    currDate = new Date(Date.UTC());
+  }
+  for (const entry of data) {
+    const entryDate = new Date(entry.date);
+    //const hoursDifference = (Date.now()  - entryDate) / (1000 * 60 * 60);
+    const hoursDifference = (Date.now()  - entryDate) / (1000 * 60 * 60);
+    
+    //convert duration from seconds to minutes
+    entry.duration = entry.duration / 60;
+    //if(entry.duration>(hours*60))entry.duration=hours*60;
+    entry.duration = Math.ceil(entry.duration);
+
+    if (hoursDifference <= hours) {
+      filteredData.push(entry);
+    } else {
+      lastOverHoursEntry = entry;
+    }
+  }
+  
+  if (lastOverHoursEntry !== null) {
+    filteredData.push(lastOverHoursEntry);
+  }
+
+  //Sort in ascending date order  
+  filteredData.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  //Convert timezones 
+  for(var i=filteredData.length-1;i>=0;i--){
+    filteredData[i].date = dateTimeUtils.convertToTimezone(filteredData[i].date,timezone);
+  }
+
+  //Process the durations
+  //console.log("Length:" + filteredData.length);
+  var totalDuration = 0;
+  var remain = hours*60;
+  for(var i=filteredData.length-1;i>=0;i--){
+
+    //console.log("On: " + i + " - Duration:" +filteredData[i].duration);
+    
+    if(i==0 && filteredData.length>1){
+      startDateTime = getPrevious24HourDate(hours);
+      endDateTime = new Date(filteredData[i+1].date);
+      filteredData[0].duration = ((endDateTime.getTime()-startDateTime.getTime()) /1000/60);
+    }
+
+    if(filteredData.length==1){
+      startDateTime = getPrevious24HourDate(hours);
+      endDateTime = new Date();
+      filteredData[0].duration = ((endDateTime.getTime()-startDateTime.getTime()) /1000/60);
+    }
+
+    totalDuration+=filteredData[i].duration;
+    remain = remain - filteredData[i].duration;
+    //console.log("running total duration: " + totalDuration);
+    //console.log("remain: " + remain);
+    // if(totalDuration>(hours*60)){
+    //   console.log("Duration too long, adjusting");
+    //   var delta = (hours*60) - filteredData[i].duration;
+    //   console.log("Delta is:" + delta);
+    //   filteredData[i].duration=delta;
+    // }
+
+  }
+  
+
+  return filteredData;
+  
+}
+
+
+
+var filteredResult=[];
+filteredResult = filterDataAndRetainLastOverHours(history, hours,startDate);
+//console.log(filteredResult);
+
+
+
+
+
+//console.log("filteredData");
+//console.log(filteredData);
+
+function getPrevious24HourDate() {
+  const now = new Date();
+  const nextHour = new Date(now);
+  nextHour.setHours(nextHour.getHours() + 1);
+  nextHour.setMinutes(0);
+  nextHour.setSeconds(0);
+  nextHour.setMilliseconds(0);
+
+  const previous24Hour = new Date(nextHour);
+  previous24Hour.setHours(previous24Hour.getHours() - 18);
+
+  return previous24Hour;
+}
+
+function getDateFormated(timestamp){
+  var hours = timestamp.getHours();
+  var mins = timestamp.getMinutes();
+  if(hours.toString().length==1)hours="0" + hours;
+  if(mins.toString().length==1)mins="0" + mins;
+  return hours+":"+mins;
+}
+
+function displaySecs(secs) {
+  var ret;
+  //Secs
+  if (secs < 300) ret = secs + " secs";
+
+  if (secs >= 300 && secs < 7200) {
+    //Mins
+    var mins = Math.floor(secs / 60);
+    secs = secs % 60;
+
+    ret = mins + " mins ";
+
+  }
+  if (secs >= 7200 && secs < 86400) {
+    //hours
+    var mins = Math.floor(secs / 60);
+    var secs = secs % 60;
+    var hours = Math.floor(mins / 60);
+    mins = mins % 60;
+    ret = hours + "h " + mins + " mins";
+  }
+
+  if (secs >= 86400) {
+    var mins = Math.floor(secs / 60);
+    var secs = secs % 60;
+    var hours = Math.floor(mins / 60);
+    var days = Math.floor(hours / 24);
+    hours = hours - (days * 24);
+    //hours = days %24;
+    mins = mins % 60;
+    ret = days + " days " + hours + "h ";
+
+  }
+
+  return ret;
+}
+
+%>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0"/>
+
+  <title>BackupHub | Agent Edit</title>
+
+  <%- include('./partials/_head'); %>
+  <%- include('./partials/_scripts'); %>
+
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/spectrum/1.8.0/spectrum.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/spectrum/1.8.0/spectrum.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/moment"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-moment"></script>
+
+  <script>
+  $(document).ready(function(){
+    $('select').formSelect();
+  });
+
+
+  function doNotify(status,msg)
+  {
+      $.pnotify({
+      title: 'Backup Job',
+      text: msg,
+      type: status,
+      history: false,
+      styling: 'jqueryui'
+      });
+  }
+ 
+  function updateChart() 
+  {
+    const startDateTime = document.getElementById('startDateTime').value;
+    document.location.href="?name=<%=agentname%>&startDate=" + startDateTime;
+    
+  }
+</script>
+
+
+</head>
+<body class="agentInfo">
+  <%- include('./partials/_header'); %>
+  
+  <div class="section no-pad-bot" id="index-banner">
+    <div class="container">
+
+      <h5 class="header orange-text">Agent: <%=agent.name%></h5>
+      <!--<div class="col s12">
+        <label for="startDateTime">Start Date and Time:</label>
+        <input type="datetime-local" id="startDateTime" name="startDateTime">
+        <button onclick="updateChart()">Update Chart</button>
+        <div>&nbsp;</div>
+      </div>-->      
+      <div class="col s12">
+        <div class="chart-container">
+          <div class="bar-container">
+            <!-- Dynamically generate bars from data -->
+            <% for (var i=0;i<filteredResult.length;i++){
+              var color="#cccccc";
+              if(filteredResult[i].message=="online")color="#00917C";
+              if(filteredResult[i].message=="offline")color="#CF6679";
+              var job = "";
+              if(filteredResult[i].message=="running")color="#ff9800";
+              var toolTipMessage="Status: " + filteredResult[i].message;
+              if(filteredResult[i].message=="running"){
+                toolTipMessage += " (Job Name: " + filteredResult[i].job + ")";
+              }
+              toolTipMessage+="<br/>";
+              toolTipMessage+="Date: " + filteredResult[i].date + "<br/>";
+              toolTipMessage+="Duration: " + displaySecs(filteredResult[i].duration*60);
+              %><span class="tooltipped" data-position="bottom" data-delay="0" data-tooltip="<%=toolTipMessage%>" style="font-size: 10px; min-height: 23px;overflow:hidden;display:inline-block;width: <%=filteredResult[i].duration%>px;max-width: <%=filteredResult[i].duration%>px;min-width: <%=filteredResult[i].duration%>px; color:white; background-color: <%=color%>;"><%=filteredResult[i].message%></span><%
+            }%></div>
+          <div class="timestamp-container">
+            <!-- Generate timestamps for each hour -->
+            <div class="markers"><% 
+            var minX = getPrevious24HourDate().getTime();
+            var maxX = new Date();
+            var timestampInterval = 60 * 60 * 1000; // 1 hour in milliseconds
+            
+            for(var i=0;i<=18;i++){
+              var timestamp = new Date(minX + i * timestampInterval);
+            %><span class="timestampMarker"><!-- --></span><%
+            }
+            %></div>
+            <div class="timestamps"><% 
+            var minX = getPrevious24HourDate().getTime();
+            var maxX = new Date();
+            var timestampInterval = 60 * 60 * 1000; // 1 hour in milliseconds
+            
+            for(var i=0;i<=18;i++){
+              var timestamp = new Date(minX + i * timestampInterval);
+            %><span class="timestamp"><%=getDateFormated(timestamp)%></span><%
+            }
+            %></div>
+          </div>
+        </div>
+      </div>
+      <div class="col s6">
+        <b style="text-transform: capitalize;">Last Status [<%=filteredResult[filteredResult.length-1].message%>]:</b> <%= displaySecs(filteredResult[filteredResult.length-1].duration*60)%>
+      </div>
+    </div>      
+  </div>
+  
+  <%- include('./partials/_footer'); %>
+
+  <script>
+    // Initialize tooltips
+    document.addEventListener('DOMContentLoaded', function() {
+        var elems = document.querySelectorAll('.tooltipped');
+        var instances = M.Tooltip.init(elems, {
+            outDuration: 0, // Set tooltip fade out duration to 0ms
+            inDuration: 0,
+            exitDelay:0,
+            enterDelay: 0,
+            position:top,
+            margin:-115,
+        });
+    });     
+  </script>
+
+
+  </body>
+</html>
+

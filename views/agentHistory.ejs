@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0"/>
+
+  <title>BackupHub | Agent History</title>
+
+  <%- include('./partials/_head'); %>
+  <%- include('./partials/_scripts'); %>
+
+  <script src="https://cdn.jsdelivr.net/npm/moment"></script>
+
+  <script>
+  $(document).ready(function(){
+    $('select').formSelect();
+  });
+
+
+  function doNotify(status,msg)
+  {
+
+  }
+
+  function initTooltips(){
+    // Initialize tooltips
+    //console.log("initializing tooltips");
+    var elems = document.querySelectorAll('.tooltipped');
+    //console.log(elems.length);
+    //console.log(JSON.stringify(elems));
+    var instances = M.Tooltip.init(elems, {
+        outDuration: 0, // Set tooltip fade out duration to 0ms
+        inDuration: 0,
+        exitDelay:0,
+        enterDelay: 0,
+        position:top,
+        margin:-115,
+    });
+  }
+
+  function updateTimeline(){
+    var startDate = document.getElementById("startDate");
+    var endDate = document.getElementById("endDate");
+    var startTime = document.getElementById("startTime");
+    var endTime = document.getElementById("endTime");
+
+    var start=new Date(startDate.value + "T" + startTime.value);
+    var end = new Date(endDate.value + "T" + endTime.value);
+
+    renderTimeline(start.toISOString(),end.toISOString());
+  }
+
+</script>
+
+<style>
+  .modal{height:auto !important;}
+</style>
+
+
+</head>
+<body class="agentInfo">
+  <%- include('./partials/_header'); %>
+  
+  <div class="section no-pad-bot" id="index-banner">
+    <div class="container">
+      <h5 class="header orange-text">Agent History: <%=agent.name%></h5>
+      <div class="row">
+        <div class="col s1" style="margin-top:10px">From:</div>
+        
+        <div class="col s1">
+          <input type="text" id="startDate" class="datepicker">
+          <label for="startDate">Start Date</label>
+        </div>
+        
+        <div class="col s1">
+          <input type="text" class="timepicker" id="startTime">
+          <label for="startTime">Start Time</label>
+        </div>
+        <div class="col s1" style="margin-top:10px">To:</div>
+        <div class="col s1">
+          <input type="text" id="endDate" class="datepicker">
+          <label for="endDate">End Date</label>
+        </div>
+        <div class="col s1">
+          <input type="text" class="timepicker" id="endTime">
+          <label for="endTime">End Time</label>
+        </div>
+        <div class="col s1"><button class="btn waves-effect waves-light" style="margin-top:10px" id="update" onclick="updateTimeline()">Update</button></div>
+        <div class="col s4" style="text-align: right;margin-top:15px;">
+        </div>
+      </div>
+      <div class="row">
+      <div class="col s12">
+        <div class="timeline"></div>
+        <div class="timescale-marker"></div>
+        <div class="timescale"></div>
+
+        <div class="chart-container">
+          <div class="bar-container">
+          </div>
+          <div class="timestamp-container">
+          </div>
+        </div>
+      </div>
+    </div>   
+    <div class="row">
+      <% if(agentData && agentData!==undefined && agentData!==null && agentData.identifier!==undefined){%>
+        <div class="col s2 card elevation1" style="height:157px">
+          <div class="card-content">
+            <span class="card-title">Status</span>
+        <% var ok='<span title="OK" class="material-icons vertMid successIcons" style="font-size:40pt;">play_circle</span>';%>
+        <% var notok='<span title="Issue: ' + agentData.status +'" class="material-icons vertMid errorIcons"  style="font-size:40pt;">stop_circle</span>';%>
+        <% var html="";%>
+        <% if(agent.status=="online"){
+          html=ok;
+        } else {
+          html=notok
+        }
+        %>
+        <%-html%>
+      </div>
+      </div>&nbsp;
+
+      
+
+      <div class="col s4 card elevation1" style="height:157px;margin-left:20px;">
+        <div class="card-content">
+          <span class="card-title">Job History</span>
+          <div class="onlinediv"><span class="dashtitle">Success</span><span class="onlinecnt"><%=agentData.successJobCount%></span></div>
+          <div class="offlinediv"><span class="dashtitle">Failed</span><span class="offlinecnt"><%=agentData.failJobCount%></span></div>
+        </div>
+      </div>
+
+      <div class="col s5 card elevation1" style="height:157px;margin-left:20px;">
+        <div class="card-content">
+          <span class="card-title">Agent Info</span><br>
+          <div style="position:relative;margin-top:-30px;margin-bottom:-20px;">
+            <span class="agentdata"><b>ID:</b> <%=agentData.identifier%></span><br>
+            <span class="agentdata"><b>Uptime:</b> <%=agentData.uptime%></span><br>
+            <span class="agentdata"><b>Version:</b> <%=agentData.version%></span><br>
+            <span class="agentdata"><b>Message Counts = </b><b>To Agent:</b> <%=agentData.subCount%> <b>From Agent:</b> <%=agentData.pubCount%> </span>
+          </div>
+         </div>
+        </div>
+        <% } %>
+       </div>
+  <!--</div>-->
+
+</div>
+</div>
+  
+  <%- include('./partials/_footer'); %>
+
+
+  <script>
+    function createToolTip(data){
+      var toolTipMessage="Status: " + data.message;
+      if(data.message=="running"){
+        toolTipMessage += " (Job Name: " + data.job + ")";
+      }
+      toolTipMessage+="<br/>";
+      toolTipMessage+="Date: " + data.date + "<br/>";
+      toolTipMessage+="Duration: " + displaySecs(data.duration);
+      return toolTipMessage;
+    }
+
+    // Function to fetch data from the REST API
+    async function fetchDataOrig(startDate,endDate) {
+      const response = await fetch('http://localhost:8082/rest/agentdetail?agentname=newTestAgent&startDate=' + startDate + '&endDate=' + endDate); // Example dates spanning multiple days
+      const data = await response.json();
+      return data;
+    }
+
+    function fetchData(agentName,startDate,endDate,body,callback){
+      var url = '/rest/agentdetail?agentname=' + agentName + '&startDate=' + startDate + '&endDate=' + endDate;
+      var xhttp = new XMLHttpRequest();
+      xhttp.onreadystatechange = function () {
+        if (this.readyState == 4 && this.status == 200) {
+          var resp = xhttp.responseText;
+          (callback(startDate,endDate,JSON.parse(resp)));
+        }
+      };
+      xhttp.open("GET", url, true);
+      if(body!==undefined && body!==null){
+        xhttp.send(body);
+      }
+      else{
+        xhttp.send();
+      }
+    }
+
+
+
+    function firstLoad(){
+      var date = new Date();
+      let endhours = date.getHours();
+      let endmins = date.getMinutes();
+      if(endmins<10)endmins='0' + endmins;
+      if(endhours<10)endhours='0' + endhours;
+      var defaultHours = 18;
+      var startDate = new Date(date.getTime() - (defaultHours * 60 * 60 * 1000)); 
+      var startHours = startDate.getHours();
+      var startMins = startDate.getMinutes();
+      if(startMins<10)startMins='0' + startMins;
+      if(startHours<10)startHours='0' + startHours;
+       
+      document.getElementById("startDate").value = (startDate.toISOString()).split('T')[0];
+      document.getElementById("endDate").value = (date.toISOString()).split('T')[0];
+      document.getElementById("startTime").value = startHours + ":" + "00";
+      document.getElementById("endTime").value = endhours + ":" + endmins;
+      renderTimeline();
+    }
+    
+    function renderTimeline() {
+      const nameValue = "<%=agent.name%>";
+      var startDate = document.getElementById("startDate").value + "T" + document.getElementById("startTime").value;
+      var endDate = document.getElementById("endDate").value + "T" + document.getElementById("endTime").value;
+      fetchData(nameValue,startDate,endDate,null,processTimeline);
+    }
+
+    function processTimeline(startDate,endDate,data) {
+      //const data = await fetchData(startDate,endDate);
+      const timeline = document.querySelector('.timeline');
+      const timescale = document.querySelector('.timescale');
+      const timescalemarker = document.querySelector('.timescale-marker');
+      timeline.innerHTML="";
+      timescale.innerHTML="";
+      timescalemarker.innerHTML="";
+      //console.log("StartDate: " + startDate);
+      //console.log("End date: " + endDate);
+      const totalDuration = endDate - startDate;
+      //console.log(totalDuration);
+      for (const status of data.history) {
+        var tooltip=createToolTip(status);
+        const statusStart = new Date(status.date);
+        const statusEnd = new Date(statusStart.getTime() + status.duration * 1000);
+        const statusDuration = statusEnd - statusStart;
+
+        const statusBar = document.createElement('div');
+        //class="tooltipped" data-position="bottom" data-delay="0" data-tooltip=
+        statusBar.classList.add('status-bar');
+        statusBar.style.width = `${status.percent}%`;
+        if(status.percent<0.2)statusBar.style.width="1px";
+        //statusBar.style.left = `${left}%`;
+        left = status.percent;
+        statusBar.style.backgroundColor = getStatusColor(status.message);
+
+        const statusLabel = document.createElement('div');
+        statusLabel.classList.add('status');
+        statusLabel.innerHTML = status.message + "<br>" + status.date.split(".")[0].replace("T"," ") + "<br>" + displaySecs(status.duration) ;
+        statusBar.appendChild(statusLabel);
+        statusBar.setAttribute("data-position","bottom");
+        statusBar.setAttribute("data-delay","0");
+        statusBar.setAttribute("data-tooltip",tooltip);
+        statusBar.classList.add("tooltipped");
+
+        timeline.appendChild(statusBar);
+      }    
+      
+      //renderTimeMarkers(data);
+      initTooltips();
+    }
+
+    // Function to get status color based on status message
+    function getStatusColor(message) {
+      switch (message) {
+        case 'offline':
+          return '#CF6679'; // Red for offline status
+        case 'online':
+          return '#00917C'; // Green for online status
+        case 'running':
+          return '#ff9800'; // Blue for running status
+        default:
+          return '#cccccc'; // Black for other statuses
+      }
+    }
+
+    // Function to render the time markers below the status bar
+    function renderTimeMarkers(data) {
+      //console.log("Rendering time markers");
+      // Get the start date and end date from the data
+      const startDate = new Date(data.filter.startDate);
+      const endDate = new Date(data.filter.endDate);
+
+      // Calculate the total duration in milliseconds
+      const totalDuration = endDate - startDate;
+
+      // Define the gap in milliseconds for different duration ranges
+      const oneMinsGap = 1 * 60 * 1000; // 0.25 hour
+      const thirtyMinsGap = 30 * 60 * 1000; // 1 hour
+      const hourGap = 60 * 60 * 1000; // 1 hour
+      const sixHourGap = 6 * hourGap; // 6 hours
+      const twelveHourGap = 12 * hourGap; // 12 hours
+      const dayGap = 24 * hourGap; // 1 day
+      const twoDayGap = 2 * dayGap; // 2 day
+
+      //console.log("Setting gap");
+      // Initialize the gap variable
+      let gap;
+      let dateFormat;
+      // Set the gap based on the total duration
+      if (totalDuration < hourGap){
+        gap = oneMinsGap;
+      } else if (totalDuration < twelveHourGap){
+        gap = thirtyMinsGap;
+      } else if (totalDuration < 2* dayGap) {
+        // If the duration is less than 24 hours, use the hour gap
+        gap = hourGap;
+      } else if (totalDuration < 3 * dayGap) {
+        // If the duration is between 24 and 48 hours, use the six hour gap
+        gap = sixHourGap;
+      } else if (totalDuration < 10 * dayGap) {
+        // If the duration is between 48 hours and 10 days, use the twelve hour gap
+        gap = twelveHourGap;
+      } else {
+        // If the duration is more than 10 days, use the day gap
+        gap = dayGap;
+      }
+      //console.log("Set gap");
+      //console.log("quarterHourGap: " + gap==quarterHourGap);
+      //console.log("HourGap: " + gap==hourGap);
+      //console.log("SixHourGap: " + gap==sixHourGap);
+      //console.log("twelveHourGap: " + gap==twelveHourGap);
+      //console.log("dayGap: " + gap==dayGap);
+
+      // Get the timeline element
+      const timeline = document.querySelector('.timescale');
+      const timescalemarker = document.querySelector('.timescale-marker');
+
+      // Get the width of the timeline in pixels
+      const timelineWidth = timeline.offsetWidth;
+
+      // Calculate the ratio of pixels per millisecond
+      const pixelRatio = timelineWidth / totalDuration;
+
+      // create a marker line
+      const startMarkerLine = document.createElement('div');
+      startMarkerLine.classList.add('marker-line');
+      startMarkerLine.style.left = '0px'; // Set the left position to zero
+      startMarkerLine.textContent = "|"; // Set the text content to the formatted start date
+
+      // Create a marker element for the start date
+      const startMarker = document.createElement('div');
+      startMarker.classList.add('marker');
+      startMarker.style.left = '0px'; // Set the left position to zero
+      
+      if(gap>=dayGap){
+        startMarker.textContent = formatDate(startDate,"DATE");
+      } else {
+        startMarker.textContent = formatDate(startDate,"TIME");
+      }
+
+      // Append the start marker to the timeline
+      timeline.appendChild(startMarker);
+      timescalemarker.appendChild(startMarkerLine);
+
+      // Initialize the current date variable
+      let currentDate = startDate;
+
+      // Loop until the current date is equal to or after the end date
+      while (currentDate < endDate) {
+        // Increment the current date by the gap
+        currentDate = new Date(currentDate.getTime() + gap);
+
+        // Round the current date to the nearest hour
+        //currentDate.setMinutes(0);
+        currentDate.setSeconds(0);
+        currentDate.setMilliseconds(0);
+
+        // If the current date is after the end date, set it to the end date
+        if (currentDate > endDate) {
+          currentDate = endDate;
+        }
+
+        // Calculate the left position of the marker in pixels
+        const left = (currentDate - startDate) * pixelRatio;
+
+        const markerLine = document.createElement('div');
+        markerLine.classList.add('marker-line');
+        markerLine.style.left = `${left}px`; // Set the left position to zero
+        markerLine.textContent = "|";
+
+        // Create a marker element for the current date
+        const marker = document.createElement('div');
+        marker.classList.add('marker');
+        marker.style.left = `${left}px`; // Set the left position to the calculated value
+        if(gap>=dayGap){
+          marker.textContent = formatDate(currentDate,"DATE"); // Set the text content to the formatted current date
+        }
+        else{
+          marker.textContent = formatDate(currentDate,"TIME"); // Set the text content to the formatted current date
+        }
+
+        // Append the marker to the timeline
+        timescalemarker.appendChild(markerLine);
+        timeline.appendChild(marker);
+      }
+    }
+
+// Function to format marker date/time appropriately
+function formatDate(date,format) {
+
+  const yyyy = date.getFullYear();
+  let mm = date.getMonth()+1;
+  let dd = date.getDate();
+  if(dd<10)dd='0' + dd;
+  if(mm<10)mm='0' + mm;
+  let hours = date.getHours();
+  let mins = date.getMinutes();
+  if(mins<10)mins='0' + mins;
+  if(hours<10)hours='0' + hours;
+
+  if(format=="DATE")return dd + "/" + mm;
+  if(format=="TIME")return hours + ":" + mins;
+  return date.toLocaleString(); // Adjust the format as needed
+}
+
+    // initialize date picker
+    document.addEventListener('DOMContentLoaded', function() {
+      var elems = document.querySelectorAll('.datepicker');
+      var options={
+        autoClose: true,
+        format:'yyyy-mm-dd',
+        firstDay: 1, 
+      };
+      var instances = M.Datepicker.init(elems, options);
+    });
+
+    // Initialize timepicker
+    document.addEventListener('DOMContentLoaded', function() {
+      var elems = document.querySelectorAll('.timepicker');
+      var options={
+        twelveHour: false,
+        autoClose: true,
+        defaultTime: '00:00',
+      };
+      var instances = M.Timepicker.init(elems, options);
+    });
+
+    //initTooltips();
+    window.onload = firstLoad();
+      //firstLoad();
+      //renderTimeline("2024-01-03T08:00:00.000Z","2024-01-03T16:59:00.000Z");
+    
+  </script>
+
+
+  </body>
+</html>
+

@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<%
+
+function titleCase(str) {
+  return str.toLowerCase().split(' ').map(word => {
+    return word.charAt(0).toUpperCase() + word.slice(1);
+  }).join(' ');
+}
+
+function displaySecs(secs) {
+  var ret;
+  //Secs
+  if (secs < 300) ret = secs + " secs";
+
+  if (secs >= 300 && secs < 7200) {
+    //Mins
+    var mins = Math.floor(secs / 60);
+    secs = secs % 60;
+
+    ret = mins + " mins ";
+
+  }
+  if (secs >= 7200 && secs < 86400) {
+    //hours
+    var mins = Math.floor(secs / 60);
+    var secs = secs % 60;
+    var hours = Math.floor(mins / 60);
+    mins = mins % 60;
+    ret = hours + "h " + mins + " mins";
+  }
+
+  if (secs >= 86400) {
+    var mins = Math.floor(secs / 60);
+    var secs = secs % 60;
+    var hours = Math.floor(mins / 60);
+    var days = Math.floor(hours / 24);
+    hours = hours - (days * 24);
+    //hours = days %24;
+    mins = mins % 60;
+    ret = days + " days " + hours + "h ";
+
+  }
+
+  return ret;
+}
+
+function getDayName(dayIndex) { 
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  return days[dayIndex];
+}
+
+function addDateSuffix(date) {
+  var suffix = "";
+
+  // Extract the last digit of the date
+  var lastDigit = date % 10;
+
+  // Extract the second-to-last digit of the date (if it exists)
+  var secondToLastDigit = Math.floor(date / 10) % 10;
+
+  // Determine the suffix based on the last two digits
+  if (secondToLastDigit === 1) {
+    // For numbers ending in 11-19, use "th" as the suffix
+    suffix = "th";
+  } else {
+    // For other numbers, determine the suffix based on the last digit
+    switch (lastDigit) {
+      case 1:
+        suffix = "st";
+        break;
+      case 2:
+        suffix = "nd";
+        break;
+      case 3:
+        suffix = "rd";
+        break;
+      default:
+        suffix = "th";
+        break;
+    }
+  }
+
+  // Combine the date and suffix and return the result
+  return date + suffix;
+}
+
+
+%>
+<html lang="en">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0"/>
+  
+  <title>BackupHub | Job Schedules</title>
+
+  <%- include('./partials/_head'); %>
+  <%- include('./partials/_scripts'); %>
+  
+  <script>
+
+  function deleteAgent(agentName)
+  {
+    var choice = confirm("Are you sure you want to delete the agent [" + agentName + "]");
+    if(choice)
+    {
+      messageServer("delete",agentName);
+    }
+  }
+
+  function pingTest(agentName){
+    //document.getElementById("hiddenspinner").style.display="";
+    alert(document.getElementById(agentName + "_ball").innerHTML);
+    document.getElementById(agentName + "_ball").innerHTML='<div id="hiddenspinner"><div class="preloader-wrapper small active"><div class="spinner-layer spinner-orange-only"><div class="circle-clipper left"><div class="circle"></div></div><div class="gap-patch"><div class="circle"></div></div><div class="circle-clipper right"><div class="circle"></div></div></div></div></div>';
+    doNotify("success","ping requested");
+
+    messageServer("ping",agentName);
+  }
+  
+  function doDelete()
+  {
+    var jobName = document.getElementById('inJobName').innerHTML;
+    //alert(jobName)
+    document.location.replace("/delete-schedule.html?jobName=" + jobName);
+  }
+
+  function doNotify(status,msg)
+  {
+      $.pnotify({
+      title: 'Agent Status',
+      text: msg,
+      type: status,
+      history: false,
+      styling: 'jqueryui'
+      });
+  }
+
+
+    function invokeJobCall(joblog,jobName) {
+        var len = joblog.length;
+        len = len -4;
+        newjoblog = joblog.substr(0,len);
+
+        var xhttp = new XMLHttpRequest();
+        xhttp.open("GET", "http://192.168.1.24:1880/backup-init?dest=" + newjoblog, false);
+        xhttp.send(null);
+ 
+        if (xhttp.status === 200) {
+          var obj = JSON.parse(xhttp.responseText);
+          if(obj.status=="Job Started")
+          {
+            doNotify("success","Job [" + jobName + "] Successfully Queued - Please wait for this to start" );
+          }
+          else
+          {
+            doNotify("error","Job [" + jobName + "] Not Queued - another job [" + obj.job + "] is already queued" );
+          }
+        }
+    };
+    
+    
+  
+  </script>
+</head>
+<body>
+  <%- include('./partials/_header'); %>
+  <div id="confirmationModal" class="modal">
+    <div class="modal-content">
+        <h4>Delete Schedule Job?</h4>
+        <p>Are you sure you want to Delete the Scheduled Job<br><br><b>Job Name: </b><span id='inJobName'></span></p>
+    </div>
+    <div class="modal-footer">
+
+        <a href="#!" class="modal-close waves-effect waves-green btn-flat">Cancel</a>
+        <a href="#" onclick="doDelete()" id="confirmButton" class="modal-close waves-effect waves-green btn-flat">OK</a>
+    </div>
+  </div>
+  <div class="section no-pad-bot" id="index-banner">
+    <div class="container wide-table">
+      <div class="row">
+        <div class="col s6">
+          <h5 class="header orange-text">Schedule</h5>
+        </div>
+        <div class="col s6" style="text-align: right;padding-top:20px;">
+          <a class="tableIconButton" style="position:relative;left:-10px;" title="add" href="scheduler.html"><span class="material-icons vertTop">add</span></a>
+          <a class="tableIconButton" title="list" href="scheduleList.html"><span class="material-icons vertTop">view_list</span></a>
+          <a class="tableIconButton" title="day" href="scheduleListCalendar.html?viewType=daily"><span class="material-icons vertTop">today</span></a>
+          <a class="tableIconButton" title="week" href="scheduleListCalendar.html?viewType=weekly"><span class="material-icons vertTop">date_range</span></a>
+          <a class="tableIconButton" title="month" href="scheduleListCalendar.html?viewType=monthly"><span class="material-icons vertTop">calendar_month</span></a>
+        </div>
+      </div>
+      
+      <div class="scheduleTable">
+        <table>
+          <tr>
+            <th><b class="sortableHeader">Type</b></th>
+            <th><b class="sortableHeader">Name</b></th>
+            <th><b class="sortableHeader">Period</b></th>
+            <th><b class="sortableHeader">Schedule</b></th>
+            <th><b class="sortableHeader">Next Run</b></th>
+            <th><b class="sortableHeader">Last Updated</b></th>
+            <th><b class="sortableHeader">Success(%)</b></th>
+            <!--<th><b class="black-text">Command</b></th>-->
+            <th><b class="sortableHeader">Agent</b></th>
+            <th><b class="sortableHeader">Actions</b></th>
+            
+          </tr> 
+          
+          <tbody>
+            <% for (let i = 0; i < schedules.length; i++) { %>
+
+              <tr <% if(hist.getLastRun(schedules[i].jobName)!=null && parseInt(hist.getLastRun(schedules[i].jobName).returnCode)!=0){%>class="errorHighlight"<%}%>>
+                <td><span class="material-icons vertMid" style="color:<%=schedules[i].color%>;font-size:24pt;"><%=schedules[i].icon%></span></td>
+                <td><%= schedules[i].jobName %></td>
+                <td>
+                  <!-- SCHEDULE TYPE -->
+                  <% var schedTypedisplay = schedules[i].scheduleType;
+                     if(schedTypedisplay=="storagethreshold" || schedTypedisplay=="cputhreshold")schedTypedisplay="data_thresholding";
+                     if(schedTypedisplay=="daily")schedTypedisplay="calendar_month";
+                     if(schedTypedisplay=="weekly")schedTypedisplay="date_range";
+                     if(schedTypedisplay=="monthly")schedTypedisplay="today";
+                  %>
+                  <span class="material-icons-two-tone" title="<%=schedules[i].scheduleType%>"><%=schedTypedisplay%></span>
+                </td>
+                <td>
+                  <%if (schedules[i].scheduleType == "daily") {%>
+                    Every day at <%= schedules[i].scheduleTime %>
+                  <%}%>
+
+                  <%if (schedules[i].scheduleType == "weekly") {%>
+                    Every <%=getDayName(schedules[i].dayOfWeek);%> at <%= schedules[i].scheduleTime %> 
+                  <%}%>
+
+                  <% if (schedules[i].scheduleType == "monthly") {%>
+                    Every <%=addDateSuffix(schedules[i].dayInMonth);%> of the Month at <%= schedules[i].scheduleTime %> 
+                  <%}%>
+
+                  <% if(schedules[i].scheduleType=="storagethreshold" || schedules[i].scheduleType=="cputhreshold"){%>
+                    N/A
+                  <%}%>
+
+                </td>
+                <td><% if(schedules[i].scheduleType=="storagethreshold" || schedules[i].scheduleType=="cputhreshold"){%>
+                  N/A
+                <%} else {%>
+                  <%= schedules[i].nextRunDate %></td>
+                <%}%>
+                <td><%= schedules[i].lastUpdated %></td>
+                <% var pct = hist.getSuccessPercentage(schedules[i].jobName);
+                if(!isNaN(pct))pct=pct+"%";
+                else pct="n/a";
+                %> 
+                <td><%=pct%></td>
+                <!--<td><%= schedules[i].command %> <%= schedules[i].commandParams %></td>-->
+                <td><%= schedules[i].agent %></td>
+                <td>
+                  <% var btnClass="tableIconButton"; 
+                    if(hist.getLastRun(schedules[i].jobName)!=null && parseInt(hist.getLastRun(schedules[i].jobName).returnCode)!=0){btnClass="errorIcons"}
+                  %>
+                  <a title="info" href="/ScheduleInfo.html?index=<%= i %>"><i class="material-icons <%=btnClass%> vertMid">info</i></a>
+                  <a title="edit" href="/scheduler.html?index=<%= i %>"><i class="material-icons <%=btnClass%> vertMid">edit</i></a>
+                  <a id="openModalButton<%=i%>" onclick="openModal('<%=schedules[i].jobName%>',<%=i%>);" title="delete" href="#<%=schedules[i].jobName%>"><i class="<%=btnClass%> material-icons vertMid">delete</i></a>
+                  <a title="Run now" href="/runSchedule.html?index=<%= i %>"><i class="material-icons <%=btnClass%> vertMid">play_circle</i></a>
+                
+                </td>
+
+              </tr>
+            <% } %>
+          </tbody>
+        </table>
+      </div>
+  </div>
+  </div>
+  <script>
+    //Toast Script
+    const urlParams = new URLSearchParams(window.location.search);
+    const message = urlParams.get('message');
+    
+    if (message) {
+      // Show a Materialize toast notification with the provided message
+      M.toast({html: message, displayLength: 5000});
+    }
+  </script>
+  <script>
+    //Modal Script
+    $(document).ready(function(){
+        // Initialize the modal
+        $('.modal').modal();
+    });
+
+    function openModal(inJobName, inId)
+    {
+      document.getElementById('inJobName').innerHTML=inJobName;  
+      $('#confirmationModal').modal('open');
+        
+    }    
+
+        // Attach a click event to the "OK" button in the confirmation dialog
+        //$('#confirmButton').click(function(){
+            // You can add your logic here for the "OK" action
+            // For example, redirect to another page or perform some action
+            //alert('OK button clicked.');
+        //    doDelete();
+        //});
+    //});
+  </script>
+<%- include('./partials/_footer'); %>
+  
+
+
+  </body>
+</html>
+

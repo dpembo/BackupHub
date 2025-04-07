@@ -1,0 +1,38 @@
+{
+    "dependencies": {
+        "@mdi/js": "^7.4.47",
+        "axios": "^1.7.7",
+        "bcrypt": "^5.1.1",
+        "chart.js": "^4.4.3",
+        "cookie-parser": "^1.4.6",
+        "ejs": "^3.1.10",
+        "express": "^5.1.0",
+        "express-session": "^1.18.0",
+        "form-data": "^2.5.1",
+        "got": "^12.6.1",
+        "jsonwebtoken": "^9.0.2",
+        "level": "^8.0.1",
+        "log4js": "^6.9.1",
+        "material-design-icons-iconfont": "^6.7.0",
+        "material-icons": "^1.13.12",
+        "materialize-css": "^1.0.0",
+        "moment-timezone": "^0.5.48",
+        "monaco-editor": "^0.44.0",
+        "mongoose": "^8.13.2",
+        "mqtt": "^5.10.4",
+        "nanoid": "^5.0.9",
+        "node-schedule": "^2.1.1",
+        "nodemailer": "^6.9.13",
+        "passport": "^0.6.0",
+        "passport-local": "^1.0.0",
+        "passport-local-mongoose": "^8.0.0",
+        "sanitize-html": "^2.15.0",
+        "socket.io": "^4.7.5",
+        "text-encoding-utf-8": "^1.0.2",
+        "ws": "^8.17.1"
+    },
+    "devDependencies": {
+        "ejs-lint": "^2.0.0",
+        "nodemon": "^3.1.9"
+    }
+}

@@ -1,0 +1,80 @@
+<script src="js/utils.js"></script>
+
+<nav class="headerColor" role="navigation">
+  <div class="nav-wrapper container">
+    <a id="logo-container" href="/" class="brand-logo">
+      <!--<img class="logoimg" src="/images/BackupHubColor.png">-->
+      <span class="logoimg" title="BackupHub Home"></span>
+    </a>
+    <ul id="dropdown1" class="dropdown-content">
+      <li><a href="about.html">About</a></li>
+      <li class="divider"></li>
+      <li><a href="profile.html">User Info</a></li>
+      <li><a href="settings.html">Settings</a></li>
+      <li class="divider"></li>
+      <li><a href="/logout.html">Logout</a></li>
+    </ul>
+        
+    <ul class="right hide-on-med-and-down">
+      <li>  
+        <div class="switch">
+          <label>
+            <span title="lightmode" style="font-size:12pt" class="themeModeLight material-icons vertMid">light_mode</span>
+            <input type="checkbox" id="darkModeSwitch" onchange="themeChanged(this)">
+            <span class="lever vertMid"></span>
+            <span title="dark mode" style="font-size:12pt" class="themeModeDark material-icons vertMid">dark_mode</span>
+          </label>
+        </div>
+      </li>
+      <li>&nbsp;&nbsp;&nbsp;</li>
+      <li><a href="history.html" title="Monitor"><span title="Monitor" style="font-size:24pt" class="material-icons vertMid">format_list_bulleted</span></a></li>
+      <li><a href="scheduleList.html" title="Job Schedule"><span title="Job Schedule" style="font-size:24pt" class="material-icons vertMid">calendar_month</span></a></li>
+      <li><a href="agentstatus.html" title="Agents"><span title="Agents" style="font-size:24pt" class="material-icons vertMid">hub</span></a></li>
+      <li><a href="scriptEditor.html" title="Script Editor"><span title="Script Editor" style="font-size:24pt" class="material-icons vertMid">edit_note</span></a></li>
+      <li id="topMenuSpacer"></li>
+      <!--<li><a style="padding:6px" href="profile.html" title="User Profile"><span title="User Profile" class="mdi mdi-account" style="font-size:24pt"></span></a></li>-->
+      <li id="notificationsOpenButton">
+        <a href="#!" id="notificationMenu" class="btn-open-panel">
+          <span title="Notifications" style="font-size:24pt" class="material-icons vertMid">notifications</span>
+          <span class="notification-badge-hidden" id="notificationBadge"></span>
+        </a>
+      </li>
+      <li><a class="dropdown-trigger" href="#!" data-target="dropdown1"><span title="user profile" style="font-size:24pt" class="material-icons vertMid">account_circle</span></a></li>
+    </ul>
+
+    <ul id="nav-mobile" class="sidenav headerColor">
+      <li><a href="history.html" title="Monitor" style="color:#ffffff"><span title="Monitor" style="font-size:24pt" class="material-icons vertMid">format_list_bulleted</span>&nbsp;Monitor</a></li>
+      <li><a href="scheduleList.html" title="Job Schedule" style="color:#ffffff"><span title="Job Schedule" style="font-size:24pt" class="material-icons vertMid">calendar_month</span>&nbsp;Job Schedule</a></li>
+      <li><a href="agentstatus.html" title="Agents" style="color:#ffffff"><span title="Agents" style="font-size:24pt" class="material-icons vertMid">hub</span>&nbsp;Agents</a></li>
+      <li><a href="scriptEditor.html" title="Script Editor" style="color:#ffffff"><span title="Script Editor" style="font-size:24pt" class="material-icons vertMid">edit_note</span>&nbsp;Script Editor</a></li>
+      <li class="divider"></li>
+      <!--<li><a class="btn-open-panel" href="#" title="Notifications"><span title="Notifications" style="font-size:24pt" class="material-icons vertMid">notifications</span>Notifications</a></li>-->
+ 
+      <li><a href="profile.html" title="User Info" style="color:#ffffff"><span title="User Info" style="font-size:24pt" class="material-icons vertMid">account_circle</span>&nbsp;User Profile</a></li>
+      <li><a href="settings.html" title="Settings" style="color:#ffffff"><span title="Settings" style="font-size:24pt" class="material-icons vertMid">settings</span>&nbsp;Settings</a></li>
+      <li class="divider"></li>
+      <li><a href="about.html" title="About" style="color:#ffffff"><span title="About" style="font-size:24pt" class="material-icons vertMid">info</span>&nbsp;About</a></li>
+      <li><a href="/logout.html" title="Logout" style="color:#ffffff"><span title="Logout" style="font-size:24pt" class="material-icons vertMid">logout</span>&nbsp;Logout</a></li>
+
+      
+    </ul>
+    <a href="#" data-target="nav-mobile" class="sidenav-trigger"><i class="material-icons">menu</i></a>
+  </div>
+  <%- include('_theme'); %>
+</nav>
+
+
+<div id="notificationPanelWrapper" class="panel-wrapper">
+  <div class="content-panel">
+      <!-- Content for the panel -->
+      <div class="close-panel"><span title="Close Notification Panel" class="btn-close-panel material-icons vertMid">close</span></div>
+      <div id="notificationsContainer"></div>
+        <div id="notificationsList" class="panel-animate">
+        </div>
+      </div>
+  </div>
+</div>
+
+
+
+

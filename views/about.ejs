@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0"/>
+
+  <title>BackupHub | About</title>
+
+  <%- include('./partials/_head'); %>
+  <%- include('./partials/_scripts'); %>
+
+  <script>
+  $(document).ready(function(){
+    $('select').formSelect();
+  });
+
+
+  function doNotify(status,msg)
+  {
+      $.pnotify({
+      title: 'Backup Job',
+      text: msg,
+      type: status,
+      history: false,
+      styling: 'jqueryui'
+      });
+  }
+ 
+  </script>
+  </head>
+<body onload="checkScroll()">
+  <%- include('./partials/_header'); %>
+  
+  <div class="section no-pad-bot" id="index-banner">
+    <div class="container fillWidth">
+
+      <h5 class="header orange-text">About</h5>
+      
+      <div class="col s5">
+        
+
+        <!--<div class="card horizontal">
+          
+          <div class="card-stacked" style="max-width: 100%;">
+            <div class="card-content">
+              <span class="card-title">-->
+
+                <span class="imgframe"><img src="/images/BackupHubColor.png" style="width:210px;"><br>
+                <h6><%=version%></h6><br>
+
+                <p>Created by:<br/>
+                  <a href="https://pembo.co.uk"><img style="width:120px" src="/images/pembo-small.png"/></a><br/>
+                  <a href="https://github.com/dpembo/BackupHub/blob/main/LICENSE">License</a> / 
+                  <a href="https://github.com/dpembo/BackupHub">Source</a>
+                </p>
+                </span>  
+              <!--</span>
+            </div>
+          </div>
+        </div>-->
+      </div>
+    </div>      
+  </div>
+  
+  <%- include('./partials/_footer'); %>
+
+
+  </body>
+</html>
+

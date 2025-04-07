@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0"/>
+  <title>BackupHub | Schedule Info</title>
+
+  <%- include('./partials/_head'); %>
+  <%- include('./partials/_scripts'); %>
+  
+  <script>
+    $(document).ready(function(){
+      $('select').formSelect();
+    });
+
+    function checkScroll(){
+      const div = document.getElementById("logView");
+      if (div) {
+      div.scrollTop = div.scrollHeight;
+      }
+    }
+
+    function expandLog(){
+      const div = document.getElementById("logView");
+      div.className="card-content logView logmax";
+      document.getElementById("refreshtoggle").checked=null;
+      document.getElementById("refreshval").value="0";
+      var event = new Event('change');
+      document.getElementById('refreshtoggle').dispatchEvent(event);
+      clearInterval(intervalId);
+    }
+
+    function fetchScheduleData(inId) {
+      document.getElementById("refreshindicator").style.display="inline-block";
+      const apiUrl = '/scheduleInfo/data/'+inId;
+
+      fetch(apiUrl)
+        .then(response => {
+          if (!response.ok) {
+            throw new Error(`Network response was not ok: ${response.status}`);
+          }
+          return response.json();
+        })
+        .then(data => {
+          // Handle the JSON data retrieved from the API
+          //console.log('Data from the API:', data);
+          // Perform operations with the retrieved data here
+          updateScreen(data);
+          return data;
+        })
+        .catch(error => {
+          // Handle any errors that occurred during the fetch
+          console.error('There was a problem fetching the data:', error);
+        });
+    }
+
+    const currentURL = window.location.href;
+    // Function to extract the value of a parameter from the URL
+    function getParameterValue(parameterName, url) {
+      const urlObject = new URL(url);
+      // Retrieve the value of the parameter by its name
+      const parameterValue = urlObject.searchParams.get(parameterName);
+      return parameterValue;
+    }
+
+    function updateScreen(inData){
+      //alert(JSON.stringify(inData));
+      document.getElementById('schedule-jobname').innerHTML=inData.schedule.jobName;
+      document.getElementById('schedule-jobicon').innerHTML=inData.schedule.icon;
+      document.getElementById('schedule-jobicon').style.color=inData.schedule.color;
+      document.getElementById('schedule-agent').innerHTML=inData.agent.name;
+      document.getElementById('schedule-desc').innerHTML=inData.schedule.description;
+      document.getElementById('schedule-agentstatus').innerHTML=inData.agent.status;
+      if(inData.hist.histLastRun!=null){
+        document.getElementById('schedule-lastrun').innerHTML=inData.hist.histLastRun.runDate.replace("T", " ").split('.')[0];
+        document.getElementById('schedule-lastrunduration').innerHTML=displaySecs(inData.hist.histLastRun.runTime);
+      }
+      document.getElementById('schedule-averageduration').innerHTML=inData.hist.histAvgRuntimeSecs;
+      document.getElementById('schedule-jobstarted').innerHTML=inData.agent.jobStarted.replace('T',' ').split('.')[0];
+      
+      var status = "";
+      var statusElem = document.getElementById('cardStatusIndicatorScheduleInfo');
+      if(inData.agent.status=="running"){
+        statusElem.innerHTML="pending";
+        statusElem.className="blinking orange-text material-icons";
+        statusElem.title="Running";
+        document.getElementById('schedule-log').innerHTML=inData.log;
+      }
+      else{
+        if(inData.hist.histLastRun!=null){
+          document.getElementById('schedule-log').innerHTML=inData.hist.histLastRun.log;
+        }
+        else{
+          document.getElementById('schedule-log').innerHTML="NO HISTORY DATA FOUND";
+        }
+        statusElem.innerHTML="flag_circle";
+        statusElem.className="grey-text material-icons";
+        statusElem.title="Unknown";
+      }
+      if(inData.stats!==undefined && inData.stats!==null && inData.agent.status!="running"){
+      
+        if(inData.stats.current.returnCode==0){
+          statusElem.innerHTML="check_circle";
+          statusElem.className="successIcons material-icons";
+          statusElem.title="Success";
+        }
+        else{
+          statusElem.innerHTML="flag_circle";
+          statusElem.className="red-text material-icons";
+          statusElem.title="Error (" + inData.stats.current.returnCode + ")";
+        }
+      }
+      
+
+      var agentJobRunning = false;
+      if(inData.agent.status=="running" && inData.agent.jobName==inData.schedule.jobName)agentJobRunning=true;
+      console.log("AgentJobRunning: " + agentJobRunning);
+      if(agentJobRunning==true){
+        //alert("agent job running is true");
+        document.getElementById('jobInProgressDiv').style.visibility="visible";
+        document.getElementById('refreshtoggle').checked=true;
+        var event = new Event('change');
+        document.getElementById('refreshtoggle').dispatchEvent(event);
+      }
+      else{
+        //alert("agent job running is false");
+        document.getElementById('jobInProgressDiv').style.visibility="hidden";
+        document.getElementById('refreshtoggle').checked=false;
+        var event = new Event('change');
+        document.getElementById('refreshtoggle').dispatchEvent(event);
+        clearInterval(intervalId);
+
+      }
+      //alert(document.getElementById('jobInProgressDiv').style.display);
+      if(agentJobRunning==true){
+        checkScroll();
+        calculatePercent(inData);
+      }
+      
+      document.getElementById("refreshindicator").style.display="none";
+      document.getElementById('loader-container').style.display="none";
+      document.getElementById('pagedata').style.display="";
+      
+    }
+
+    function calculatePercent(inData){
+      var barWidth="400";
+      if(inData==null)return;
+      //Calc percent
+      var start = new Date(inData.agent.jobStarted);
+      //alert(start);
+      var startedMs = start.getTime();
+      var curr = new Date().getTime();
+      var delta = curr - startedMs;
+
+      //alert(delta)
+      var targetEta = 0
+      var pctComplete = 0;
+      var pctbarWidth = 0;
+      var runtime = 0;
+      
+      targetEta = parseFloat(inData.hist.histAvgRuntimeSecs);
+      //alert(targetEta);
+      var deltaSecs = delta / 1000;
+      if(targetEta==0){
+         pctComplete = "No History";
+      }
+      else {
+        pctComplete = (deltaSecs/targetEta); //*100; 
+        pctComplete = Math.round(pctComplete * 100);
+      }
+      runtime = displaySecs(Math.round(deltaSecs));
+      //alert("PCTComplete:" +pctComplete);
+      if(pctComplete>100)
+      {
+        pctComplete="Overunning"
+        pctbarWidth = barWidth + "px";
+      }
+      else{
+        //alert(barWidth);
+        //alert("(" + pctComplete +"/100 ) * " + "350");
+        pctbarWidth = Math.round((pctComplete/100)*barWidth) + "px";
+        
+        if(!isNaN(pctComplete))pctComplete=pctComplete + "%";
+        else{pctComplete="NO KNOWN ETA";}
+      }
+
+      //alert("setting progress bar width to: " + pctbarWidth);
+      document.getElementById("progressbar").style.width=pctbarWidth;
+      if(inData.hist.histLastRun!=null){
+        document.getElementById("progressbarText").innerHTML =" " + pctComplete + " (" + runtime + ")";
+      }
+      else{
+        document.getElementById("progressbarText").innerHTML =" Runtime (" + runtime + ")";
+        document.getElementById("progressbar").style.width="400px";
+      }
+    }
+
+    function runOnLoad(){
+      //If refresh is provided, enable the refresh
+      var refresh = getParameterValue("refresh",currentURL);
+      //alert(refresh)
+      if(refresh!=null&&refresh.length>0){
+        //alert("in toggle");
+        document.getElementById('refreshtoggle').checked=true;
+        var event = new Event('change');
+        document.getElementById('refreshtoggle').dispatchEvent(event); // Trigger the 'change' event
+        dorefresh();
+      }
+      else{
+        getData();
+      }
+
+    }
+    function getData(){
+      var index = getParameterValue("index",currentURL);
+      fetchScheduleData(index);
+    }
+
+    var intervalId;
+    function dorefresh()
+    {
+      //alert("in do refresh");
+      var refreshEnabled = document.getElementById("refreshtoggle").checked;
+      var refresh = document.getElementById("refreshval").value;
+      //alert(refreshEnabled);
+      if(refreshEnabled){
+        if(parseInt(refresh)==0)refresh=3;
+        refreshMs = refresh*1000;
+
+        //refreshExecute = setInterval(refresh,refreshMs);
+
+        intervalId = setInterval(() => {
+          //alert("Timeout executed!");
+          getData();
+          }, refreshMs);
+      }
+      else{
+        clearInterval(intervalId);
+      }
+    }
+  </script>
+  <script src="js/utils.js"></script>
+</head>
+
+<body onload="runOnLoad()">
+  <div class="loader-container" id="loader-container">
+    <div class="loader-large"></div>
+  </div>
+  <div class="pagedata" id="pagedata" style="display:none">
+    <%- include('./partials/_header'); %>
+    
+
+    
+    <div class="section no-pad-bot" id="index-banner">
+      <div class="container fillWidth">
+
+        <h5 class="header orange-text">Schedule Information<span style="display:none" id="refreshindicator" class="refreshindicator refreshloader"></span></h5>
+        
+        <div id="buttons">
+          <!-- Switch -->
+        <div id="refreshLabel">Refresh</div>
+          <div class="input-field refreshTime">
+            <input type="text" id="refreshval" class="refreshTimeInput" value="3" style="width: 40px"/>
+            <span id="secslabel">seconds</span>
+          </div>
+          <div class="switch" id="refreshSwitch">
+            <label>
+              <input type="checkbox" id="refreshtoggle" onclick="dorefresh()">
+              <span class="lever"></span>
+            </label>  
+          </div>
+        </div>
+
+        
+          
+
+            <div class="container" style="width:100%">
+            
+            <div class="row">
+              <div class="scheduleInfoDisplay">
+                <span class="card-title">
+                  <span id="schedule-jobicon" class="material-icons vertMid" style="font-size:24pt">-</span>
+                  <span id="schedule-jobname">-</span>
+                </span>
+                <span id="cardStatusIndicatorScheduleInfo">-</span>
+                
+                <div class="row">
+                <div class="col s4">
+                  <p id="schedule-desc">-</p>
+                  <p>&nbsp;</p>
+                  <p><span class="headerInRow">Assigned Agent:</span><span id="schedule-agent"class="itemInRow">-</span></p>
+                  <p><span class="headerInRow">Agent Status:</span><span id="schedule-agentstatus" class="itemInRow">-</span></p>
+                  <p><span class="headerInRow">Last Run: </span><span id="schedule-lastrun" class="itemInRow">-</span></p>
+                  <p><span class="headerInRow">Last Run Duration: </span><span id="schedule-lastrunduration"class="itemInRow">-</span></p>
+                  <p><span class="headerInRow">Average Duration: </span><span id="schedule-averageduration" class="itemInRow">-</span></p>
+                  <div id="jobInProgressDiv">
+                    <p id="jobInProgressP"><span class="headerInRow">Job in Progress: </span><span id="schedule-jobstarted" class="itemInRow">-</span></p>
+                    <p>
+                      <span class="headerInRow">Duration: </span>
+                      <span class="itemInRow">
+                        <div id="progBottom" style="background-color: #cccccc;width:400px">
+                          <div id="progressbar" style="color:#000000;background-color:orange;height:24px; width:0px;max-width:400px;">
+                            <span id="progressbarText" style="padding-left:10px;display:block;width:400px;float:left" class="blinking">-</span>
+                          </div>
+                        </div> 
+                      </span>
+                    </p> 
+                    <p>&nbsp;</p>             
+                  </div>
+                </div>
+                <div class="col s8 executionLog" >
+                  <span class="headerInRow">Execution Log</span>
+                  <div id="logView" class="card-content logView logmin" onclick="expandLog()">
+                    <pre id="schedule-log"></pre>
+                  </div>
+                </div>
+              </div>  
+                
+              </div>
+              
+              <div class="card-action" >
+                  
+                <a class="btn waves-effect waves-light orange" style="float:right;margin-right:15px;margin-bottom:15px;" href="javascript:history.back();">Back</a> 
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>      
+
+    
+    <%- include('./partials/_footer'); %>
+  </div>
+
+  </body>
+</html>
+

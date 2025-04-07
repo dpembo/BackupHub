@@ -1,0 +1,16 @@
+services:
+  web:
+    image: backup-agent
+    container_name: backup-agent
+    ports:
+      - "49991:49991"
+    privileged: true  # Equivalent to --privileged
+    pid: "host"       # Equivalent to --pid=hos
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:49991/"]
+      interval: 90s
+      retries: 3
+      start_period: 10s
+      timeout: 10s
+    restart: unless-stopped
+    

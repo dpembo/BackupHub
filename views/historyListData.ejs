@@ -1,0 +1,227 @@
+<%
+function isInternal(inItem){
+  if(inItem.jobName.indexOf("||INTERNAL||")==0)return true;
+  else return false;
+}
+function processInternalJob(inItem){
+  if(inItem.jobName.indexOf("||INTERNAL||")==0){
+    inItem.icon="restart_alt";
+  }
+  return inItem;
+}
+
+function getSchedule(jobName){
+  for(var i=0;i<schedules.length;i++)
+  {
+    if(schedules[i].jobName==jobName) return i;
+  }
+  return -1;
+} 
+
+function displaySecs(secs) {
+  
+  var ret;
+
+  //Secs
+  if (secs < 300) ret = secs + " secs";
+
+  if (secs >= 300 && secs < 7200) {
+    //Mins
+    var mins = Math.floor(secs / 60);
+    secs = secs % 60;
+
+    ret = mins + " mins ";
+
+  }
+  if (secs >= 7200 && secs < 86400) {
+    //hours
+    var mins = Math.floor(secs / 60);
+    var secs = secs % 60;
+    var hours = Math.floor(mins / 60);
+    mins = mins % 60;
+    ret = hours + "h " + mins + " mins";
+  }
+
+  if (secs >= 86400) {
+    var mins = Math.floor(secs / 60);
+    var secs = secs % 60;
+    var hours = Math.floor(mins / 60);
+    var days = Math.floor(hours / 24);
+    hours = hours - (days * 24);
+    //hours = days %24;
+    mins = mins % 60;
+    ret = days + " days " + hours + "h ";
+
+  }
+
+  return ret;
+}
+
+%>
+
+               
+        <% let currentGroup = null; %>
+        <% var firstGroupId = "" %>
+        <% var groupCount = 0; %>
+          <!-- HISTORY ITEMS -->
+        <% for(var i = 0; i<historyList.length;i++) {%>
+
+<!-- Group logic -->
+
+        
+          <% var itemInternal = isInternal(historyList[i]);%>
+          <% historyList[i] = processInternalJob(historyList[i]);%>
+
+          <% 
+          //console.log(JSON.stringify(historyList[i]));
+          %>
+          
+          <% var groupValue;
+             var groupId;
+          if (sort === 'jobName') {
+            if(itemInternal)groupValue = historyList[i].jobName.substr(historyList[i].jobName.lastIndexOf("||")+2)
+            else groupValue = historyList[i].jobName;
+            groupId = groupValue.replace(/[^a-zA-Z0-9]/g, '');
+          } else if (sort === 'runDate') {
+            groupValue = (historyList[i].runDate.split("T")[0]); // Group by date, excluding time
+            groupId = groupValue.replace(/[^a-zA-Z0-9]/g, '');
+
+          } else if (sort === 'runTime') {
+            //console.log(historyList[i].runTime);
+            const time =parseInt(displaySecs(historyList[i].runTime).split(" ")[0]);
+            const secs = parseInt(historyList[i].runTime);
+            const mins = secs / 60;
+
+            if ( mins >= 60) {
+              groupValue = 'More than 1 hour';
+              groupId = "60minsPlus";
+            } else if ( mins >= 30) {
+              groupValue = 'More than 30 mins';
+              groupId = "30minsPlus";
+            } else if (mins >= 20) {
+              groupValue = '20-30mins';
+              groupId = "20to30mins";
+            } else if (mins >= 10) {
+              groupValue = '10-20 mins';
+              groupId= "10to20mins";
+            } else if (mins >= 5) {
+              groupValue = '5-10 mins';
+              groupId = "5to10mins";
+            } else {
+              groupValue = '5 mins or less';
+              groupId="0to5mins";
+            }
+          } else if (sort === 'status') {
+            if(historyList[i].returnCode==0){
+              groupValue = 'Success';
+              groupId="success";
+            }
+            else {
+              groupValue = 'Fail';
+              groupId="fail";
+            }
+          }
+        
+          // Check if group changed (new date starts a new group)
+          const isNewGroup = currentGroup !== groupValue;
+          if(isNewGroup)groupCount++;
+          if(groupCount==1)firstGroupId=groupId;
+          currentGroup = groupValue;
+          %>
+          <% if (isNewGroup) { %>
+            <tr class="group-header">
+              <td colspan="7" onclick="toggleGroup('group-<%=groupId%>')">
+                <span class="material-icons expand-icon" id="icon-<%= groupId %>">expand_more</span>
+                <strong><%= groupValue %></strong>
+              </td>
+            </tr>
+          <% } %>
+
+          <!--<%=groupId%>-<%=groupValue%>-->
+          
+          <tr class="toggle-row group-<%=groupId%>" style="display:none;" <% if(parseInt(historyList[i].returnCode)!=0){%>class="errorHighlight"<%}%>>
+            <td><span class="material-icons vertMid" style="color:<%=historyList[i].color%>;font-size:24pt"><%=historyList[i].icon%></span></td>
+            <td>
+              <% if(itemInternal==true){%>
+                <%=historyList[i].jobName.substr(historyList[i].jobName.lastIndexOf("||")+2)%>
+              <% } else {%> 
+                <%=historyList[i].jobName%>
+              <% }%>
+              
+            </td>
+            <td>
+              <% var runType="schedule"; var runDesc="Scheduled Execution";%>
+              <% 
+              if(historyList[i].manual!==undefined && historyList[i].manual==true){
+                runType="play_arrow";runDesc="Manual Execution";
+              }
+              if(historyList[i].manual!==undefined && historyList[i].manual=="manual"){
+                runType="play_arrow";runDesc="Manual Execution";
+              }
+              if(historyList[i].manual!==undefined && historyList[i].manual=="update"){
+                runType="system_update_alt";runDesc="Agent Update";
+              }
+              if(historyList[i].manual!==undefined && historyList[i].manual=="threshold-cpu"){
+                runType="data_thresholding";runDesc="CPU Threshold Exceeded";
+              }
+              if(historyList[i].manual!==undefined && historyList[i].manual=="threshold-disk"){
+                runType="disc_full";runDesc="Mount Threshold Exceeded";
+              }
+              %>
+              <span title="<%=runDesc%>" class="successIcons material-icons"><%=runType%></span>
+
+            </td>
+            <% 
+                var dateNow = new Date().getTime();
+                var dateStart = new Date(historyList[i].runDate).getTime();
+                var diff = dateNow - dateStart;
+                diff = diff / 1000;
+                var diffDisp =displaySecs(diff);
+
+                var dispDate = historyList[i].runDate;
+                try{
+                  dispDate = historyList[i].runDate.replace('T',' ');
+                  dispDate = dispDate.substring(0,dispDate.lastIndexOf("."));
+                } catch (err){
+                  //ignore
+                }
+            %>
+            <td><%=dispDate%> (<%=(diffDisp)%>)</td>
+            <td><%=displaySecs(historyList[i].runTime)%></td>
+            <% successPct = hist.getSuccessPercentage(historyList[i].jobName)
+            %>
+            <td><span><%=successPct%>%</span></td>
+            <td>
+              <% if(parseInt(historyList[i].returnCode)==0){%>
+                <span title="Success - Return code <%=historyList[i].returnCode%>" class="successIcons material-icons">check_circle</span>
+                <%
+              }
+              else{%>
+                <span title="Error - Return code: <%=historyList[i].returnCode%>" class="errorIcons material-icons">flag_circle</span>
+              <%
+              }
+              %>
+            </td>
+            <td>
+              <pre style="display:none" id="logdetail<%=i%>"><%=historyList[i].log%></pre>
+              <%
+               var logclass="";
+               if(parseInt(historyList[i].returnCode)!=0){logclass="tableIconButtonError";}else {logclass="tableIconButton"};
+              %>
+              <a href="#modal<%=i%>" id="modal-link<%=i%>" onclick="openModal('<%=historyList[i].icon%>','<%=historyList[i].color%>','<%=historyList[i].jobName%>','logdetail<%=i%>')" title="View Execution Log"><span class="material-icons <%=logclass%> vertTop">description</span></a>
+
+              <% if(itemInternal == false) {%>
+              <a title="Edit Job" href="/scheduler.html?jobname=<%=historyList[i].jobName%>&redir=<%=encodeURIComponent('/history.html')%>"><i class="material-icons <%=logclass%> vertTop">edit</i></a>
+              <% if(parseInt(historyList[i].returnCode)!=0) {%>
+                <a title="Re-run" href="/runSchedule.html?jobname=<%=historyList[i].jobName%>&redir=<%=encodeURIComponent('/history.html')%>"><i class="material-icons <%=logclass%> vertTop">play_circle</i></a>
+              <%}%>
+              <% } else { %> 
+                <i title="Internal Job"><i class="material-icons <%=logclass%> vertTop">blocked</i>
+              <% } %>
+            </td>
+          </tr>
+        <% }%>
+        
+
+
+

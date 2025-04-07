@@ -1,0 +1,219 @@
+<%  
+
+function displaySecs(secs) {
+  var ret;
+  //Secs
+  if (secs < 300) ret = secs + " secs";
+
+  if (secs >= 300 && secs < 7200) {
+    //Mins
+    var mins = Math.floor(secs / 60);
+    secs = secs % 60;
+
+    ret = mins + " mins ";
+
+  }
+  if (secs >= 7200 && secs < 86400) {
+    //hours
+    var mins = Math.floor(secs / 60);
+    var secs = secs % 60;
+    var hours = Math.floor(mins / 60);
+    mins = mins % 60;
+    ret = hours + "h " + mins + " mins";
+  }
+
+  if (secs >= 86400) {
+    var mins = Math.floor(secs / 60);
+    var secs = secs % 60;
+    var hours = Math.floor(mins / 60);
+    var days = Math.floor(hours / 24);
+    hours = hours - (days * 24);
+    //hours = days %24;
+    mins = mins % 60;
+    ret = days + " days " + hours + "h ";
+
+  }
+
+  return ret;
+}
+
+%>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0"/>
+  <% if(refresh > 0){%><meta http-equiv="refresh" content="<%=refresh%>"><%}%>
+
+  <title>BackupHub | Backup Job Templates</title>
+
+  <%- include('./partials/_head'); %>
+  <%- include('./partials/_scripts'); %>
+
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/spectrum/1.8.0/spectrum.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/spectrum/1.8.0/spectrum.min.js"></script>
+  
+  <script>
+  $(document).ready(function(){
+    $('select').formSelect();
+  });
+
+
+  function doNotify(status,msg)
+  {
+      $.pnotify({
+      title: 'Backup Job',
+      text: msg,
+      type: status,
+      history: false,
+      styling: 'jqueryui'
+      });
+  }
+ 
+  </script>
+
+  <style type="text/css">
+
+    /* Set the size, colour, font properties for the blinking text */
+        .blinking {
+            animation: blinkingText 1s infinite;
+            color: white;
+        }
+        
+        /* Specifies the animation and transparency for the blinking text */
+        @keyframes blinkingText {
+   
+            0% {
+                opacity: 0;
+            }
+            50% {
+                opacity: .5;
+            }
+            100% {
+                opacity: 1;
+            }
+        }
+
+        .logoimg{
+          padding-top:15px;
+          height:50px;
+        }
+
+        .tableIconButton
+        {
+          color: #63ade9;
+        }
+
+        .tableIconButton:hover
+        {
+          color: #2049b9;
+        }
+
+        .tableIconButtonDisabled
+        {
+          color: #cccccc;
+        }
+
+        .sp-replacer
+        {
+            position: relative;
+            top: 10px;
+            left: 0px;
+        }
+
+        #cardStatusIndicator
+        {
+          position:relative;
+          top:-30px;
+          float:right;
+        }
+
+        #buttons {
+          border: 0px solid;
+          width: 200px;
+          padding-top: 5px;
+          padding-left: 5px;
+          background-color: #eeeeee;
+          height: 80px;
+          position: relative;
+          top: 6px;
+          left: -10px;
+          display: block;
+          float: right;
+          border-bottom: 1px solid #bbbbbb;
+        }
+
+        div#refreshLabel {
+          color: #63ade9;
+        }
+
+        #loading {
+          display: inline-block;
+          position: relative;
+          left: 0px;
+          top: -75px;
+          width: 25px;
+          height: 25px;
+          border: 3px solid rgba(255,255,255,0.3);
+          border-radius: 50%;
+          border-top-color: #63ade9;
+          animation: spin 1s ease-in-out infinite;
+          -webkit-animation: spin 1s ease-in-out infinite;
+        }
+
+        .refreshTime
+        {
+          display: block;
+          float: left;
+          position: relative;
+          top: -20px;
+          left: 5px;
+        }
+
+        
+        #refreshSwitch {
+            position: relative;
+            left: 20px;
+            top: 5px;
+        }
+
+        .logmin {
+          height: 200px;
+          overflow: auto;
+        }
+      
+    </style>
+</head>
+<body onload="checkScroll()">
+  <%- include('./partials/_header'); %>
+  
+  <div class="section no-pad-bot" id="index-banner">
+    <div class="container fillWidth">
+
+      <h5 class="header orange-text">Template</h5>
+      
+      <div class="col s5">
+        
+
+        <div class="card horizontal">
+          
+          <div class="card-stacked" style="max-width: 100%;">
+            <div class="card-content">
+              <span class="card-title"><span class="mdi vertMid"></span>
+            </div>
+            
+            <div class="card-action" >
+              <a href="javascript:history.back();">Back</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>      
+  </div>
+  
+  <%- include('./partials/_footer'); %>
+
+
+  </body>
+</html>
+

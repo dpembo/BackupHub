@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0"/>
+  
+  <title>pembo.co.uk</title>
+
+  <%- include('./partials/_head'); %>
+  <%- include('./partials/_scripts'); %>
+
+
+  <script>
+  $(document).ready(function(){
+    $('select').formSelect();
+  });
+
+  function commandChange(selectItem)
+  {
+    //alert(selectItem.value);
+    if(selectItem.value=="custom")
+    {
+      //alert("showing the row");
+      document.getElementById("customRow").style.display="";
+      document.getElementById("custom").value="echo CUSTOM COMMAND";
+    }
+    else
+    {
+      document.getElementById("customRow").style.display="none";
+      document.getElementById("custom").value="";
+      document.getElementById("agentcommand").value=selectItem.value;
+    }
+  }
+
+  function customCommandChange(custom)
+  {
+    document.getElementById("agentcommand").value=custom.value;
+  }
+
+  function doNotify(status,msg)
+  {
+      $.pnotify({
+      title: 'Backup Job',
+      text: msg,
+      type: status,
+      history: false,
+      styling: 'jqueryui'
+      });
+  }
+
+
+    function invokeJobCall(joblog,jobName) {
+        var len = joblog.length;
+        len = len -4;
+        newjoblog = joblog.substr(0,len);
+
+        var xhttp = new XMLHttpRequest();
+        xhttp.open("GET", "http://192.168.1.24:1880/backup-init?dest=" + newjoblog, false);
+        xhttp.send(null);
+ 
+        if (xhttp.status === 200) {
+          var obj = JSON.parse(xhttp.responseText);
+          if(obj.status=="Job Started")
+          {
+            doNotify("success","Job [" + jobName + "] Successfully Queued - Please wait for this to start" );
+          }
+          else
+          {
+            doNotify("error","Job [" + jobName + "] Not Queued - another job [" + obj.job + "] is already queued" );
+          }
+        }
+    };
+    
+    
+  
+  </script>
+
+  <style type="text/css">
+
+    /* Set the size, colour, font properties for the blinking text */
+        .blinking {
+            animation: blinkingText 1s infinite;
+            color: white;
+        }
+        
+        /* Specifies the animation and transparency for the blinking text */
+        @keyframes blinkingText {
+   
+            0% {
+                opacity: 0;
+            }
+            50% {
+                opacity: .5;
+            }
+            100% {
+                opacity: 1;
+            }
+        }
+
+        .tableIconButton
+        {
+          color: #63ade9;
+        }
+
+        .tableIconButton:hover
+        {
+          color: #2049b9;
+        }
+
+        .tableIconButtonDisabled
+        {
+          color: #cccccc;
+        }
+
+      
+    </style>
+</head>
+<body>
+  <%- include('./partials/_header'); %>
+  <div class="section no-pad-bot" id="index-banner">
+    <div class="container">
+
+      <h5 class="header orange-text">Backup Agent - Registration</h5>
+
+
+      <div class="row">
+        <form class="col s12" method="post" action="/agent-submit.html">
+          <div class="row">
+            <div class="input-field col s12">
+              <input name="agentnamedisp" disabled value="<%=agent.name%>" id="agentNamedisp" type="text" class="validate">
+              <input name="agentname" value="<%=agent.name%>" id="agentName" type="hidden" class="validate">
+              <label for="agentname">Agent Name</label>
+            </div>
+          </div>
+          <div class="row">
+            <div class="input-field col s12">
+              <input name="server" disabled value="<%=agent.server%>" id="agentserver" type="text" class="validate">
+              <label for="agentserver">Agent Server</label>
+            </div>
+          </div>
+          <div class="row">
+            <div class="input-field col s12">
+              <input name="agentdescription" value="" id="description" type="text" class="validate">
+              <label for="description">Description</label>
+            </div>
+            <!--
+            <div class="input-field col s6">
+              <input name="imageurl" value="" id="imageurl" type="text">
+              <label for="imageurl">Image URL</label>
+            </div>-->
+          </div>
+          
+          <!--
+          <div class="row">
+            <div class="input-field col s12">
+              <select name="agentcommandselect" onchange="commandChange(this)">
+                <option value="" disabled selected>Default Command File</option>
+                <option value="custom">Custom - Input custom Command</option>
+                <% for (i=0;i<scripts.length;i++) { %>
+                <option value="<%=scripts[i]%>"><%=scripts[i]%></option>
+                <% } %>
+              </select>
+              <label>Backup Command Script</label>
+            </div>
+          </div>
+
+          <div class="row" id="customRow" style="display:none">
+            <div class="input-field col s12">
+              <textarea onblur="customCommandChange(this)" id="custom" class="materialize-textarea"></textarea>
+              <label for="custom">Custom Command</label>
+            </div>
+          </div>
+
+          <input type="hidden" name="agentcommand" id="agentcommand">
+          -->
+          <!--<div class="row"-->
+
+            <button class="btn waves-effect waves-light" type="submit" name="action">Submit
+              <i class="material-icons right">send</i>
+            </button>
+          
+          <!--</div>-->
+
+
+        </form>
+      </div>
+    </div>      
+  </div>
+  
+  <%- include('./partials/_footer'); %>
+
+
+
+  </body>
+</html>
+

@@ -1,0 +1,214 @@
+/* Dark Css */
+@import url("light.css");
+
+
+/* __________________________________________________________________________ */
+
+.refreshloader {
+  border: 3px solid #37474f; /* Light grey */
+  border-top: 3px solid #ff9800 ; /* orange */
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  animation: spin 1s linear infinite;
+  display:inline-block;
+}
+
+/* Dark Mode CSS */
+.loader {
+  border: 5px solid #37474f; /* dark grey */
+  border-top: 5px solid #ff9800 ; /* orange */
+  border-radius: 50%;
+  width: 27px;
+  height: 27px;
+  animation: spin 1s linear infinite;
+  display:inline-block;
+}
+
+.loader-large {
+  border: 15px solid #37474f; /* Light grey */
+  border-top: 15px solid #ff9800 ; /* orange */
+  border-radius: 50%;
+  width: 200px;
+  height: 200px;
+  animation: spin 1s linear infinite;
+  display:inline-block;
+}
+
+.preloader-wrapper {
+  /* Adjust the background color for light mode */
+  background-color: #000000; /* Replace with your desired background color */
+}
+
+.circle{
+  background-color: #ffffff; /* Set the color of the circle */
+}
+
+.notification{
+  box-shadow: 0 0 10px rgba(50, 50, 50, 0.4);
+  background-color: rgba(0,0,0,0.9);
+}
+
+/* Scrollbar */
+/* Scrollbar Track */
+
+
+/* Handle */
+.panel-wrapper::-webkit-scrollbar-thumb {
+  background-color: #888; /* Color of the scrollbar handle */
+}
+
+/* Track */
+.panel-wrapper::-webkit-scrollbar-track {
+  background-color: #333; /* Color of the scrollbar track */
+}
+
+/* Corner */
+.panel-wrapper::-webkit-scrollbar-corner {
+  background-color: #333; /* Color of the scrollbar corner */
+}
+
+/* Background and Text Colors */
+.headerColor {
+  background-color: #263238; /* Dark blue-grey */
+}
+
+header {
+  background-color: #263238; /* Dark blue-grey */
+  color: #ffffff; /* White text */
+}
+
+body {
+  background-color: #37474f; /* Darker blue-grey background */
+  color: #ffffff; /* White text */
+}
+
+input {
+  color:#ffffff;
+}
+
+textarea{
+  color:#ffffff;
+}
+
+/* Other Elements Adjustments */
+/* You may need to adjust specific elements for better contrast and visibility */
+
+/* For elements with background colors */
+.container,
+.logView,
+.scriptInfo,
+.calendar-container,
+.headcol,
+.calendar-table th,
+.calendar-table td,
+.schedule-card,
+.tab a.active,
+.dropdown-content {
+  background-color: #455a64; /* Darker background for elements */
+  color: #ffffff; /* White text for better contrast */
+}
+
+/* For elements with borders */
+.logView,
+.scriptInfo,
+.calendar-table th,
+.calendar-table td,
+.schedule-card,
+.tabs .indicator,
+.dropdown-content {
+  border-color: #546e7a; /* Darker border color */
+}
+
+/* For highlighted elements */
+.highlight {
+  background-color: #ffb300; /* Highlight color for dark mode */
+  color: #000000; /* Black text for highlighted areas */
+}
+
+.header {
+  background-color: #455a64 !important;
+}
+body.header{
+  background-color: #37474f !important;
+}
+nav.headerColor div.container 
+{
+  background-color: #263238;
+}
+
+footer.orange {
+  background-color: #263238 !important;
+}
+
+footer div.container {
+  background-color: #263238 !important;
+}
+
+.card-content{
+  background-color: #37474f
+  ;
+}
+
+div.card.elevation1{
+  background-color: #37474f;
+}
+
+.sortableHeader{
+  color:#ffffff;
+}
+
+.refreshTimeInput{
+  color:white;
+}
+
+.modal{
+  background-color: #263238;
+}
+
+.modal-footer{
+  background-color: #263238 !important;
+}
+
+div.modal-footer span.header{
+  background-color: #263238 !important;
+}
+
+div.modal-footer a{
+  color:#ffffff;
+}
+
+#scriptInfoDetail{
+  background-color: rgba(0,0,0,0.2);
+}
+
+.scriptEditorHeader{
+  background-color: #37474f !important;
+}
+
+/* Login */
+div#loginPanel {
+  background-color: #263238;
+  color:#ffffff;
+}
+
+div#loginPanel input{
+  color:#ffffff;
+}
+
+div#loginPanel h1{
+  color:#ffffff;
+}
+
+
+.card{
+  background-color: #37474f !important;
+}
+
+.logoimg{
+  background-image: url('/images/BackupHubColorWhite.png');
+}
+
+.loginimg{
+  background-image: url('/images/BackupHubColorWhite.png');
+}

@@ -148,3 +148,4 @@ stop.sh
 update-dev-files.sh
 update-public-repo.sh
 vs-code-workspace.code-workspace
+ca.pem

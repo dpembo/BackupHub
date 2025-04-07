@@ -1,0 +1,31 @@
+<script>
+    //Style switcher
+    const toggleButton = document.getElementById('darkModeSwitch');
+    const stylesheet = document.getElementById('maincss');
+
+    function setModePreference(mode) {
+        if (mode === 'dark') {
+            stylesheet.setAttribute('href', 'css/dark.css');
+            if(toggleButton)toggleButton.checked=true;
+        } else {
+            stylesheet.setAttribute('href', 'css/light.css');
+        }
+        localStorage.setItem('mode', mode); // Save mode preference to Local Storage
+    }
+
+    const savedMode = localStorage.getItem('mode');
+    if (savedMode) {
+        setModePreference(savedMode); // Set mode based on stored preference
+    }
+
+    function themeChanged(obj){
+      if(obj.checked==true){
+        //Is dark mode
+        setModePreference('dark');
+      }
+      else{
+        //Is light mode
+        setModePreference('light');
+      }
+    }
+  </script>

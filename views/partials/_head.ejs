@@ -1,0 +1,30 @@
+<!-- CSS  -->
+<link href="/material-icons/iconfont/material-icons.css" rel="stylesheet">
+<link href="css/jquery/jquery-ui.css" rel="stylesheet">
+<link href="css/jquery/jquery.toast.min.css" rel="stylesheet">
+<link rel="stylesheet" href="css/jquery/jquery.pnotify.default.css">
+<link rel="stylesheet" href="css/jquery/jquery.pnotify.default.icons.css">
+<link href="css/materialize/materialize.css" type="text/css" rel="stylesheet" media="screen,projection" />
+<link id="maincss" href="css/light.css" type="text/css" rel="stylesheet" media="screen,projection" />
+<link rel="icon" href="/favicon.ico">
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    var dropdownOptions = {
+      hover: false, // Enable hover for dropdown trigger
+    };
+    
+    var dropdownElem = document.querySelectorAll('.dropdown-trigger');
+    var instances = M.Dropdown.init(dropdownElem, dropdownOptions);
+
+    // Add an event listener to each dropdown trigger
+    if(dropdownElem!==undefined)
+    {
+      dropdownElem.forEach(function(elem) {
+        elem.addEventListener('mouseleave', function() {
+          // Remove the focus when the mouse leaves the dropdown trigger
+          this.blur();
+        });
+      });
+    }
+  });
+</script>
