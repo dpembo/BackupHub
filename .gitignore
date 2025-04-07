@@ -39,9 +39,6 @@ bower_components
 # Compiled binary addons (https://nodejs.org/api/addons.html)
 build/Release
 
-# scan reports
-reports/
-
 # Dependency directories
 node_modules/
 jspm_packages/
@@ -134,14 +131,8 @@ dist
 .pnp.*
 
 #DB Directories
-data/
-.vscode/
-commands/
-scripts/
-add-dev-assets-to-repo.sh
-build.sh
-backupApp2.code-workspace
-start.sh
-update-dev-files.sh
-update-public-repo.sh
-INTERNAL.md
+./data/agentHistory.db
+./data/data.db
+./data/user.db
+./data/agent-config.json
+./data/server-config.json
