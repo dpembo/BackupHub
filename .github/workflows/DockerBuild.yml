@@ -10,7 +10,9 @@ on:
 
 # Add this permissions block
 permissions:
-  id-token: write  # Grants permission to request an ID token
+  id-token: write
+  contents: read
+  attestations: write
   packages: write
   
 jobs:
