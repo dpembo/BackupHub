@@ -25,8 +25,8 @@ permissions:
   attestations: write
   packages: write
 
-jobs:
-  build-and-attest:
+
+build-and-attest:
     runs-on: ubuntu-latest
 
     steps:
@@ -47,9 +47,9 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/dpembo/backuphub
+          images: ghcr.io/dpembo/backuphub/hub  # Updated to include /hub in the image path
           tags: |
-            type=raw,value=hub,enable=${{ !cancelled() }}
+            type=raw,value=latest  # Explicitly set the tag to "latest"
 
       - name: Build and push Docker image to GHCR
         id: build-and-push
@@ -57,31 +57,32 @@ jobs:
         with:
           context: .
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
+          tags: ${{ steps.meta.outputs.tags }}  # This will now be ghcr.io/dpembo/backuphub/hub:latest
           labels: ${{ steps.meta.outputs.labels }}
-          outputs: type=image,name=backuphub,annotation-index.org.opencontainers.image.description=BackupHub is a lightweight yet powerful solution for managing and scheduling shell-based executions across a local area network
+          outputs: type=image,name=backuphub-hub,annotation-index.org.opencontainers.image.description=BackupHub is a lightweight yet powerful solution for managing and scheduling shell-based executions across a local area network
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v2
         with:
-          subject-name: ghcr.io/dpembo/backuphub
-          subject-digest: ${{ steps.build-and-push.outputs.digest }} # Use the digest from the build step
+          subject-name: ghcr.io/dpembo/backuphub/hub  # Updated to match the full image path
+          subject-digest: ${{ steps.build-and-push.outputs.digest }}
           push-to-registry: true
           show-summary: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
         env:
-          DOCKER_METADATA_OUTPUT_VERSION: main
-          DOCKER_METADATA_OUTPUT_TAGS: hub:main
+          DOCKER_METADATA_OUTPUT_VERSION: latest
+          DOCKER_METADATA_OUTPUT_TAGS: hub:latest
           DOCKER_METADATA_OUTPUT_LABELS: |
             org.opencontainers.image.title=BackupHub
             org.opencontainers.image.description=BackupHub is a lightweight yet powerful solution for managing and scheduling shell-based executions across a local area network
             org.opencontainers.image.url=https://github.com/dpembo/BackupHub
             org.opencontainers.image.source=https://github.com/dpembo/BackupHub
-            org.opencontainers.image.version=main
+            org.opencontainers.image.version=latest
             org.opencontainers.image.created=2025-04-08T20:14:49.192Z
             org.opencontainers.image.revision=0ff1e5afe0e79a246cf8bfce787926bf420ca9a7
             org.opencontainers.image.licenses=Apache-2.0
 
+     
       - name: Print attestation summary (optional)
         run: echo "Provenance attestation completed for ${{ steps.build-and-push.outputs.digest }}"
 
