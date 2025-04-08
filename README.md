@@ -1,4 +1,4 @@
-![image info](./public/images/BackupHubColorOrange.png)
+![image info](./public/images/BackupHubColorBlue.png)
 
 BackupHub is a lightweight yet powerful solution for managing and scheduling shell-based executions across a local area network. Designed for IT administrators, BackupHub ensures secure, encrypted communication between a central hub and remotely managed agents. It streamlines job execution, scheduling, monitoring, and notifications while maintaining a simple yet effective approach to backup and automation.
 
