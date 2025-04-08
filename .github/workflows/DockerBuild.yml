@@ -8,6 +8,10 @@ on:
         required: true
         type: string
 
+# Add this permissions block
+permissions:
+  id-token: write  # Grants permission to request an ID token
+  
 jobs:
   build-and-attest:
     runs-on: ubuntu-latest
