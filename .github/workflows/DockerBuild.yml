@@ -23,6 +23,40 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Set version and create agent tar
+        run: |
+          replace_text() {
+              local search_text="$1"
+              local replacement_text="$2"
+              local file_path="$3"
+
+              # Check if the file exists
+              if [ ! -f "$file_path" ]; then
+                  echo "File $file_path does not exist."
+                  exit 1
+              fi
+
+              # Perform the replacement
+              sed -i "s/$search_text/$replacement_text/g" "$file_path"
+          }
+
+          # Set version from workflow input
+          version="${{ inputs.version }}"
+          if [ -z "$version" ]; then
+              echo "Version is not provided."
+              exit 1
+          fi
+
+          findText="var version=\"%%UNDEFINED%%\";"
+          replText="var version=\"${version}\";"
+
+          echo "Setting version number in hub and agent build"
+          replace_text "$findText" "$replText" version.js
+          replace_text "$findText" "$replText" ./agent/version.js
+
+          echo "Create the agent tar for install from the web ux"
+          tar -cvf ./public/agent/agent.tar -C ./agent .
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
