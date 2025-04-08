@@ -11,7 +11,7 @@
         "form-data": "^2.5.1",
         "got": "^12.6.1",
         "jsonwebtoken": "^9.0.2",
-        "level": "^8.0.1",
+        "level": "^9.0.0",
         "log4js": "^6.9.1",
         "material-design-icons-iconfont": "^6.7.0",
         "material-icons": "^1.13.12",
