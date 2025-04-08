@@ -18,6 +18,12 @@ on:
         description: 'Release Verson'
         required: true
 
+permissions:
+  id-token: write
+  contents: read
+  attestations: write
+  packages: write
+  
 jobs:
   push_to_registry:
     name: Push Docker image to registry
