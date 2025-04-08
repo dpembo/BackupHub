@@ -11,6 +11,7 @@ on:
 # Add this permissions block
 permissions:
   id-token: write  # Grants permission to request an ID token
+  packages: write
   
 jobs:
   build-and-attest:
