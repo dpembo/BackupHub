@@ -34,16 +34,16 @@ jobs:
           file: ./Dockerfile
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}/hub:latest
-            ghcr.io/${{ github.repository }}/hub:${{ inputs.version }}
+            ghcr.io/${{ toLower(github.repository) }}/hub:latest
+            ghcr.io/${{ toLower(github.repository) }}/hub:${{ inputs.version }}
           labels: |
-            org.opencontainers.image.title=${{ github.repository }}/hub
+            org.opencontainers.image.title=${{ toLower(github.repository) }}/hub
             org.opencontainers.image.version=${{ inputs.version }}
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v2
         with:
-          subject-name: ghcr.io/${{ github.repository }}/hub
+          subject-name: ghcr.io/${{ toLower(github.repository) }}/hub
           subject-digest: ${{ steps.build-and-push.outputs.digest }}
           push-to-registry: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
