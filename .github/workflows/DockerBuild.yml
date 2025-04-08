@@ -67,7 +67,7 @@ jobs:
       - name: Build and publish a Docker image for ${{ github.repository }}
         uses: macbre/push-to-ghcr@master
         with:
-          image_name: ${{ github.repository }}  # it will be lowercased internally
+          image_name: ${{ github.repository }}/hub  # it will be lowercased internally
           github_token: ${{ secrets.GITHUB_TOKEN }}
           image_tag: latest
           # optionally push to the Docker Hub (docker.io)
@@ -95,7 +95,7 @@ jobs:
       - name: Generate artifact attestation
         uses: actions/attest-build-provenance@v2
         with:
-          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME}}
+          subject-name: ${{ github.repository }}/hub
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
 
