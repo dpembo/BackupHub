@@ -775,8 +775,9 @@ app.post('/initial-setup1.html',User.isAuthenticated, async (req, res) => {
   logger.debug(`websocket ${websocket}, MQTT ${mqtt}`)
   confighandler.saveServerConfig();
   
-  if(mqttEnabled=="true")return res.redirect('/initial-setup-mqtt.html');
-  else return res.redirect('/initial-setup-complete.html');
+  // if(mqttEnabled=="true")return res.redirect('/initial-setup-mqtt.html');
+  // else return res.redirect('/initial-setup-complete.html');
+  return res.redirect('/initial-setup-complete.html');
 });
 
 
