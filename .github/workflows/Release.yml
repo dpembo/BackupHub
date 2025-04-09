@@ -111,52 +111,15 @@ jobs:
           push-to-registry: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      # Checkout the repository code
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # Fetch all history for release notes generation
-
-      # Setup git config
-      - name: Configure Git
+      - name: Create Git Release
+        shell: bash
         run: |
-          git config user.name "GitHub Action"
-          git config user.email "action@github.com"
+          echo ${{ secrets.ACCESS_TOKEN }}
+          echo ${{ vars.ORG_NAME }}
+          echo ${{ vars.REPO_NAME }}
+          echo ${{ vars.BRANCH_NAME }}
+          #sudo apt-get update
+          #sudo apt-get install jq
+          ./gitRelease.sh ${{ vars.ORG_NAME }} ${{ vars.REPO_NAME }} ${{ vars.BRANCH_NAME }} ${{ secrets.PAT_TOKEN }} "v${{inputs.version}}" "v${{inputs.version}}" "ISCCR [v${{inputs.version}}]"
 
-      # Create tag
-      - name: Create and Push Tag
-        run: |
-          git tag ${{ github.event.inputs.version }}
-          git push https://${{ secrets.PAT_TOKEN }}@github.com/${{ github.repository }}.git ${{ github.event.inputs.version }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
-
-      # Generate release notes
-      - name: Generate release notes
-        id: release-notes
-        run: |
-          # Get the commits since last tag (or all if no previous tags)
-          NOTES=$(git log $(git describe --tags --abbrev=0 2>/dev/null || echo HEAD^)..HEAD --pretty=format:"* %s (%h)" --no-merges)
-          # Escape newlines and quotes for GitHub output
-          NOTES="${NOTES//'%'/'%25'}"
-          NOTES="${NOTES//$'\n'/'%0A'}"
-          NOTES="${NOTES//$'\r'/'%0D'}"
-          echo "notes=$NOTES" >> $GITHUB_OUTPUT
-
-      # Create release
-      - name: Create Release
-        uses: actions/github-script@v7
-        with:
-          script: |
-            await github.rest.repos.createRelease({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              tag_name: "${{ github.event.inputs.version }}",
-              name: "${{ github.event.inputs.version }}",
-              body: `${{ steps.release-notes.outputs.notes }}`,
-              draft: false,
-              prerelease: false
-            })
-        env:
-          GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
 
