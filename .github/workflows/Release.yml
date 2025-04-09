@@ -120,6 +120,6 @@ jobs:
           echo ${{ vars.BRANCH_NAME }}
           #sudo apt-get update
           #sudo apt-get install jq
-          ./gitRelease.sh ${{ vars.ORG_NAME }} ${{ vars.REPO_NAME }} ${{ vars.BRANCH_NAME }} ${{ secrets.PAT_TOKEN }} "v${{inputs.version}}" "v${{inputs.version}}" "ISCCR [v${{inputs.version}}]"
+          ./gitRelease.sh ${{ vars.ORG_NAME }} ${{ vars.REPO_NAME }} ${{ vars.BRANCH_NAME }} ${{ secrets.PAT_TOKEN }} "v${{inputs.version}}" "v${{inputs.version}}" "BackupHub [v${{inputs.version}}]"
 
 
