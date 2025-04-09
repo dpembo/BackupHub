@@ -126,6 +126,9 @@ function loadConfigJson(filename) {
     inConfigObj.server.hostname="localhost";
     inConfigObj.server.protocol="http";
     inConfigObj.websocket_server.port=49981;
+    
+    //Default timezone (from env or set to UTC if not present)
+    inConfigObj.server.timezone = process.env.TZ || "UTC";
 
     //nofiications toggle
     inConfigObj.server.connectionEnabled = "true";
