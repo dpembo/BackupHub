@@ -67,7 +67,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push Docker image
+      - name: Build and push BackupHub/hub image
         id: build-and-push
         uses: docker/build-push-action@v5
         with:
@@ -81,10 +81,33 @@ jobs:
             org.opencontainers.image.title=dpembo/backuphub/hub
             org.opencontainers.image.version=${{ inputs.version }}
 
-      - name: Attest build provenance
+      - name: Attest build provenance for BackupHub/hub
         uses: actions/attest-build-provenance@v2
         with:
           subject-name: ghcr.io/dpembo/backuphub/hub
           subject-digest: ${{ steps.build-and-push.outputs.digest }}
           push-to-registry: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push backuphub/agent image
+        id: build-and-push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./agent/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/dpembo/backuphub/agent:latest
+            ghcr.io/dpembo/backuphub/agent:${{ inputs.version }}
+          labels: |
+            org.opencontainers.image.title=dpembo/backuphub/agent
+            org.opencontainers.image.version=${{ inputs.version }}
+
+      - name: Attest build provenance for backuphub/agent
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ghcr.io/dpembo/backuphub/agent
+          subject-digest: ${{ steps.build-and-push.outputs.digest }}
+          push-to-registry: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
