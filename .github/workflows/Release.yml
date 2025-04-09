@@ -124,10 +124,10 @@ jobs:
           git config user.email "action@github.com"
 
       # Create tag
-      - name: Create Tag
+      - name: Create and Push Tag
         run: |
           git tag ${{ github.event.inputs.version }}
-          git push origin ${{ github.event.inputs.version }}
+          git push https://${{ secrets.PAT_TOKEN }}@github.com/${{ github.repository }}.git ${{ github.event.inputs.version }}
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
 
