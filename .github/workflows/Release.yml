@@ -68,7 +68,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push BackupHub/hub image
-        id: build-and-push
+        id: build-and-push-hub
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -90,7 +90,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push backuphub/agent image
-        id: build-and-push
+        id: build-and-push-agent
         uses: docker/build-push-action@v5
         with:
           context: .
