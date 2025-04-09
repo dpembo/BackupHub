@@ -1,4 +1,18 @@
 <!DOCTYPE html>
+<% 
+function isSelected(inValue,compareValue){
+  if(compareValue===undefined||compareValue==null)return"";
+  if(inValue==compareValue){
+    return " selected ";
+  }
+  else return "";
+}
+
+function noValue(inValue){
+  if(inValue===undefined||inValue===null)return " selected ";
+  else return "";
+}
+%>
 <html>
 <head>
   <title>BackupHub | Initial Setup</title>
@@ -88,14 +102,28 @@
     <span class="imgframe"><span class="loginimg"></span></span>
     <h1 style="position:relative;top:-40px;">BackupHub Initial Setup</h1>
     <p style="position:relative;top:-45px;">Please provide or change any details for the BackupHub Server Setup</p>
-    <b style="position:relative;top:-20px;">BackupHub Server Setup</b>
     <form class="col s12" action="/initial-setup-server.html" method="POST">
+      <label for="timezone">Timezone</label>
+      <% var timeZones = Intl.supportedValuesOf('timeZone');
+      envTZ = process.env.TZ;
+      if(envTZ===undefined||envTZ===null)envTZ="UTC";
+      %>
+      
+      <select id="timezone" name="timezone" style="display:block;">
+        <option value="" <%=noValue(envTZ)%>>Choose your option</option>
+        <% timeZones.forEach((zone) => { %>
+            <option <%=isSelected(envTZ,zone)%> value="<%= zone %>" ><%= zone %></option>
+        <% }); %>
+        <option value="UTC" <%=isSelected(envTZ,"UTC")%>>UTC</option>
+      </select>
       <label for="wsServer">Hostname *</label>
       <input id="wsServer" type="text" name="wsServer" value="<%=hostName%>" required>
       <label for="webserverPort">Web Server Port *</label>
       <input id="webserverPort" type="text" name="webserverPort" value="8082" required>
       <label for="wsPort">WebSocket Server Port *</label>
       <input id="wsPort" type="text" name="wsPort" value="49981" required>
+      
+      
       <button class="btn waves-effect waves-light" style="line-height:0px" type="submit">Next</button>
       <button class="btn waves-effect waves-light red" style="line-height:0px" onclick="skip()">Cancel</button>
     </form>

@@ -738,10 +738,13 @@ app.post('/initial-setup-server.html',User.isAuthenticated, async (req, res) => 
   serverConfig.server.hostname = wsServer;
   serverConfig.server.port = webserverPort;
   serverConfig.websocket_server.port = wsPort;
+
+  serverConfig.server.timezone = process.env.TZ || "UTC";
+
   confighandler.saveServerConfig();
   
   //if(mqttEnabled=="true")return res.redirect('/initial-setup-mqtt.html');
-  return res.redirect('/initial-setup.html');
+  return res.redirect('/initial-setup-complete.html');
   //if(mqttEnabled=="false")res.redirect('/initial-setup.html?message=One+of+WebSocket+or+MQTT+must+be+checked');
 });
 
