@@ -1,4 +1,4 @@
-name: Build and Attest Docker Image
+name: Build and Attest Release
 
 on:
   workflow_dispatch:
