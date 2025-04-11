@@ -20,7 +20,7 @@ BackupHub is a lightweight yet powerful solution for managing and scheduling she
 ## Technology Stack
 
 - **Hub:** Web-based application powered by **Node.js**.
-- **Agents:** CLI-based and run on **Linux**, using **Bash** for script execution.
+- **Agents:** Node.JS CLI-based, run on **Linux**, using **Bash** for script execution.
 - **Communication:** Encrypted using a shared secret key, with WebSocket/MQTT for real-time updates.
 - **Notifications:** Webhooks for external alerting.
 
@@ -29,7 +29,31 @@ BackupHub is a lightweight yet powerful solution for managing and scheduling she
 ### Install the Hub
 
 - Runs on any Linux environment supporting **Node.js** and **Bash**.
-- An installer is provided for seamless deployment.
+
+#### Start an instance of this image
+
+The latest version image can be found here:
+```ghcr.io/dpembo/backuphub/hub:latest```
+
+If you want specific versions, you can find these in the packages section of this repository
+
+Starting a Backup server instance through docker is simple:
+
+```
+docker run \
+  -d \
+  --name BackupHub \
+  -e TZ=Europe/London \
+  -p 8082:8082 \
+  -p 49981:49981 \  
+  --restart unless-stopped \ 
+  -v /custom/BackupHub/data:/usr/src/app/data \
+  -v /custom/BackupHub/scripts:/usr/src/app/scripts \ 
+  -v /custom/BackupHub/logs:/usr/src/app/logs \
+  ghcr.io/dpembo/backuphub/hub:latest
+```
+
+For more iformation on installation please see [Docs](docs/installation.md)
 
 ### Provision Agents
 
@@ -38,4 +62,7 @@ BackupHub is a lightweight yet powerful solution for managing and scheduling she
 
 ## Open Source
 
-BackupHub is an open-source project hosted on **GitHub**. Its simplicity and efficiency make it a compelling alternative to traditional backup solutions while maintaining powerful automation capabilities.
+BackupHub is an open-source project hosted on **GitHub**.
+
+## License
+See [License](LICENSE]) for further details
