@@ -65,4 +65,4 @@ For more iformation on installation please see [Docs](docs/installation.md)
 BackupHub is an open-source project hosted on **GitHub**.
 
 ## License
-See [License](LICENSE]) for further details
+See [License](LICENSE) for further details
