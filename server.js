@@ -1094,6 +1094,12 @@ app.get('/historyList/data',User.isAuthenticated, (req, res) => {
   var runningList = running.getItems();
   var schedules = scheduler.getSchedules();
 
+  /*logger.debug(historyList);
+  logger.debug("----");
+  logger.debug(runningList);
+  logger.debug("----");
+  logger.debug(schedules);
+  logger.debug("----");*/
   for(var x=0;x<historyList.length;x++)
   {
     var workJob = historyList[x].jobName;
@@ -1839,6 +1845,7 @@ app.get('/rest/debug/on', User.isAuthenticated, async (req, res) => {
   }
 });
 
+
 app.get('/rest/debug/off', User.isAuthenticated, async (req, res) => {
   const user = req.session.user;
   if (!user) {
@@ -1986,10 +1993,13 @@ app.get('/rest/debug', User.isAuthenticated, async (req, res) => {
   debug.connections.ws.wsClients=wsClients;
   debug.logger={};
   debug.logger.level = logger.level;
-  debug.user={}
-  debug.user.info={};
-  debug.user.userCount=await User.getUserCount();
-  debug.user.info.username = user
+
+  debug.history={};
+
+//  debug.user={}
+//  debug.user.info={};
+//  debug.user.userCount=await User.getUserCount();
+//  debug.user.info.username = user
 
   try{
     var debugStr = maskPasswords(JSON.stringify(debug));

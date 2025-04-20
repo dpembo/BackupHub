@@ -1,13 +1,16 @@
 const { Level } = require('level')
 var db;
+var inDbPath;
+
 // Initialize the LevelDB database
 function initializeDB(dbPath) {
     db = new Level(dbPath, { valueEncoding: 'json' })
+    inDbPath = dbPath;
 }
 
 // Function to store data in the database
 function putData(key, value, callback) {
-  logger.info(( `DB Storing in [${key}]`));
+  logger.info(( `DB Storing in [${key}] value [${value}]`));
   db.put(key, value, (err) => {
     if (err) {
       callback(err);
@@ -17,11 +20,10 @@ function putData(key, value, callback) {
   });
 }
 
-
 // Modify putData to return a Promise
 function putDataPromise(key, value) {
   return new Promise((resolve, reject) => {
-    logger.info(`DB Storing in [${key}]`);
+    logger.info(`DB Storing in [${key}] value [${value}]`);
     db.put(key, value, (err) => {
       if (err) {
         reject(err);
@@ -32,16 +34,36 @@ function putDataPromise(key, value) {
   });
 }
 
-// Function to retrieve data from the database
+// Promise-based getData
 function getData(key, callback) {
+  logger.debug("In getData");
+  logger.debug(`Attempting to get key [${key}]`);
   db.get(key, (err, value) => {
+    logger.debug(`db.get callback invoked for key [${key}]`);
     if (err) {
       callback(err);
     } else {
-      logger.debug(`Found item [${key}] value [${value}]`)
+      logger.debug(`Found item [${key}] value [${value}]`);
       callback(null, value);
     }
   });
+}
+
+
+async function getDataPromise(key) {
+  logger.debug("In getDataPromise");
+  try {
+    logger.debug(`Attempting to get key [${key}]`);
+    const value = await db.get(key);
+    logger.debug(`Found item [${key}] value [${value}]`);
+    if(value==undefined){
+      throw new Error('NotFoundError: Item with key [' + key + '] not found');
+    }
+    return value;
+  } catch (err) {
+    logger.error(`Error fetching key [${key}]: ${err.message}`);
+    throw err;
+  }
 }
 
 // Function to delete data from the database
@@ -55,8 +77,7 @@ function deleteData(key, callback) {
   });
 }
 
-function callback(a,b)
-{
+function callback(a,b) {
     recordHolder = b;
 }
 
@@ -155,9 +176,13 @@ function sublevel(sublevelName) {
 }
 
 async function simpleGetData(key){
-    logger.debug(`Fetching data from DB with key [${key}]`)
+    logger.debug(`Fetching data from DB [${inDbPath}] with key [${key}]`)
     const value = await db.get(key)
-    return value;
+    if(value===undefined||value===null){
+      logger.error('NotFoundError: Item with key [' + key + '] not found');
+      throw new Error('NotFoundError: Item with key [' + key + '] not found');
+    }
+    else return value;
 }
 
 async function simplePutData(key,value){
@@ -171,6 +196,7 @@ module.exports = {
   putData,
   putDataPromise,
   getData,
+  getDataPromise,
   deleteData,
   searchData,
   listKeys,

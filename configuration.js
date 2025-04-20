@@ -139,6 +139,17 @@ function loadConfigJson(filename) {
     //Setup default template settings
     inConfigObj.templates.enabled="true";
     inConfigObj.templates.repositoryUrl="https://www.pembo.co.uk/BackupHub/template-repository/";
+    
+    //Job Icons
+    inConfigObj.job_icons=[
+      "work","cloud","save","storage","dns","layers","schema","delete","hub","insert_drive_file",
+      "folder","folder_shared","folder_delete","folder_special","folder_zip","drive_folder_upload",
+      "topic","rule_folder","sd_card","archive","library_music","video_library","video_camera_back",
+      "photo_library","audio_file","password","account_box","build","restart_alt","start","stop_circle",
+      "settings","security","safety_check","sports_esports","dangerous","error","favorite","send",
+      "search","feed","shopping_cart","room_service","email","desktop_windows","camera_alt","laptop",
+      "power_settings_new","router","schedule","flag","grade","image","key","receipt","money"
+    ];
 
     return inConfigObj;
   }

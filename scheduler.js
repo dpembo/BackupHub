@@ -408,7 +408,7 @@ function runJob(jobName,isManual,inData) {
 
 // Manual execution of job
 function manualJobRun(index,jobName){
-    logger.debug('Initiating Manual Run of:' + jobName);
+    logger.debug('Initiating Manual Run of Job With name [' + jobName + "] and Index [" + index +"]");
     
     if (Array.isArray(jobName)) {   	      
       logger.error("Error: jobName was an array");
@@ -424,9 +424,9 @@ function manualJobRun(index,jobName){
 
     logger.debug("passed string check");
 
-    jobName = getSchedules(index).jobName;	    
+    //jobName = getSchedules(index).jobName;	    
     
-    logger.debug('Requesting Manul Run of:' + jobName);
+    logger.debug('Requesting Manual Run of:' + jobName);
     
     if(index!==undefined && index!==null && index.length>0 )
     {
