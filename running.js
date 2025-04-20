@@ -30,11 +30,11 @@ function createItem(jobName,startTime,mode){
 
 function getItems() {
     //logger.info("Getting running items " + historyItems.length);
-    return historyItems.slice();
+    return structuredClone(historyItems.slice());
 }
 
 function getItemsUsingTZ() {
-    var items = getItems();
+    var items = getItems().slice();
     for(var i=0;i<items.length;i++){
         items[i].startTime = dateTimeUtils.displayFormatDate(new Date(items[i].startTime),false,serverConfig.server.timezone,'YYYY-MM-DDTHH:mm:ss.SSS',false);
     }

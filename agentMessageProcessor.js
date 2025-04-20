@@ -92,7 +92,7 @@ function processMessage(topic, message,protocol) {
 
           if(serverConfig.server.jobFailEnabled=="true")notifier.sendNotification(obj.jobName + "- job failed", JSON.stringify(obj), "WARNING", "/history.html");
         }
-        logger.warn("GOING TO ADD HIST RECORD FOR: " + JSON.stringify(obj));
+        logger.debug("Adding History record for: " + JSON.stringify(obj));
         updateStatusRecords(obj, startTime);
         running.removeItem(obj.jobName);
         agents.updateAgentStatus(obj.name, "online", `Job [${obj.name}] completed`,null,null,null,message,protocol,null);
@@ -121,45 +121,60 @@ function processMessage(topic, message,protocol) {
       logger.debug("Agent   [" + obj.name + "] is NEW!");
     }
   }
-  
+
+
+
 
   //Update log record
-  function updateLogRecord(obj){
+  async function updateLogRecord(obj){
     var key = getDbKey(obj,"log");
     var value;
-    db.getData(key, (err, data) => {
-      if (err) {
-        //logger.warn(`Key [${key}] does not exist`);
-        //logger.warn(err);
-  
-        //Doesn't exist so adding to the db
-        db.putData(key, obj.data, (err, result) => {
-          if (err) {
-            logger.error(`unable to add [${key}] to DB`);
-            logger.error(err);
-          } else {
-            logger.debug(`Data created successfully for Key [${key}] Data \n${obj.data}`);
-          }
-        });
-  
-      } else {
-        logger.debug('Retrieved data:', data);
-        data+=obj.data;
-        db.putData(key, data, (err, result) => {
-          if (err) {
-            logger.error(`unable to add [${key}] to DB`);
-            logger.error('Error:', err);
-          } else {
-            logger.debug(`Data upadated successfully Key [${key}] Data \n${data}`);
-          }
-        });
-  
-  
+   
+    var data;
+    var resp;
+    try{
+      data = await db.simpleGetData(key);
+    }
+    catch (error){
+      //If item doesn't exist add to DB
+      if (error.message.includes('NotFoundError')){
+        try {
+            logger.debug(`No Log record found - creating with key [${key}]`);
+            resp = await db.simplePutData(key,obj.data);
+            logger.debug(`Data created successfully for Key [${key}], Response [${resp}], Data \n${obj.data}`);
+        }
+        catch (insertErr){
+          logger.error(`Unknown Issue creating new entry for key [${key}] to DB`);
+          logger.error(insertErr);
+          throw insertErr;
+        }
       }
-    });
+      else{
+        logger.error(`Unknown Issue searching DB for key [${key}]`);
+        logger.error(error);
+        throw insertErr;
+      }
+    }
+
+    if(data!==undefined){
+      logger.debug('Retrieved data:', data);
+      data+=obj.data;
+      try{
+        logger.debug(``)
+        resp = db.simplePutData(key,data);
+        logger.debug(`Data upadated successfully Key [${key}], Response [${resp}], Data \n${data}`);
+      }
+      catch (error){
+        logger.error(`unable to add [${key}] to DB`);
+        logger.error(error);
+        throw error;
+      }
+    }
+
   }
 
-  function updateStatusRecords(obj,startDate){
+  async function updateStatusRecords(obj,startDate){
+    logger.debug("Updating status records");
     var key = getDbKey(obj,"stats");
     var stats={};
     stats.current={};
@@ -173,53 +188,69 @@ function processMessage(topic, message,protocol) {
     stats.current.returnCode = obj.returnCode;
     stats.previous.returnCode = obj.returnCode;
   
-    db.getData(key, (err, data) => {
-      if (err) {
-        //logger.warn(`Stats Key [${key}] does not exist`);
-        //logger.debug(err);
-  
-        //Doesn't exist so adding to the db
-        db.putData(key, stats, (err, result) => {
-          if (err) {
-            logger.error(`unable to add stats [${key}] to DB`);
-            logger.error('Error:', err);
-          } else {
-            logger.debug(`Stats Data created successfully for Key [${key}] Data \n${obj.data}`);
+    
+    //------------------
+
+    var data;
+    var resp;
+    try{
+      data = await db.simpleGetData(key);
+    }
+    catch (error){
+      //If item doesn't exist add to DB
+      if (error.message.includes('NotFoundError')){
+        try {
+            logger.debug(`No stats record found - creating with key [${key}]`);
+            resp = await db.simplePutData(key,stats);
+            logger.debug(`stats data created successfully for Key [${key}], Response [${resp}], Data \n${obj.data}`);
             addHistoryRecord(obj,startDate);
-          }
-        });
-  
-      } else {
-        logger.debug('Retrieved data:', data);
-        logger.debug('Moving last stats data to previous');
-        stats.previous.eta = data.current.eta;
-        stats.previous.lastRun = data.current.lastRun;
-        stats.previous.returnCode = data.current.returnCode;
-        //Now calculate the moving average
-        logger.debug(`Previous ETA: ${stats.previous.eta}`);
-        logger.debug(`Current ETA: ${stats.current.eta}`);
-        var average = ((parseFloat(stats.previous.eta) + parseFloat(stats.current.eta))/2).toFixed(0);
-        logger.debug(`Average ETA: ${average}`);
-        stats.etaRollingAvg = average;
-  
-        db.putData(key, stats, (err, result) => {
-          if (err) {
-            logger.error(`unable to add stats [${key}] to DB`);
-            logger.error('Error:', err);
-          } else {
-            logger.debug(`Data upadated successfully Key [${key}] Data \n${data}`);
-            addHistoryRecord(obj,startDate);
-          }
-        });
-  
-  
+        }
+        catch (insertErr){
+          logger.error(`Unknown Issue creating new stats entry for key [${key}] to DB`);
+          logger.error(insertErr);
+          throw insertErr;
+        }
       }
-    });
+      else{
+        logger.error(`Unknown Issue searching DB for key [${key}]`);
+        logger.error(error);
+        throw insertErr;
+      }
+    }
+
+    //Reord already exsits
+    if(data!==undefined){
+      logger.debug('Retrieved data:', data);
+      logger.debug('Moving last stats data to previous');
+      stats.previous.eta = data.current.eta;
+      stats.previous.lastRun = data.current.lastRun;
+      stats.previous.returnCode = data.current.returnCode;
+      //Now calculate the moving average
+      logger.debug(`Previous ETA: ${stats.previous.eta}`);
+      logger.debug(`Current ETA: ${stats.current.eta}`);
+      var average = ((parseFloat(stats.previous.eta) + parseFloat(stats.current.eta))/2).toFixed(0);
+      logger.debug(`Average ETA: ${average}`);
+      stats.etaRollingAvg = average;
+
+      //Now updating
+      try {
+        logger.debug(`Updating stats record with key [${key}], data [${data}]`);
+        resp = await db.simplePutData(key,stats);
+        logger.debug(`stats data updated successfully for Key [${key}], Response [${resp}], Data \n${obj.data}`);
+        addHistoryRecord(obj,startDate);
+      }
+      catch (insertErr){
+        logger.error(`Unknown Issue creating new stats entry for key [${key}] to DB`);
+        logger.error(insertErr);
+        throw insertErr;
+      }
+    }
   }
   
   async function addHistoryRecord(obj,startDate)
   {
-    logger.info("adding history record");
+    logger.error("adding history record");
+    logger.debug(obj);
     var key1 = getDbKey(obj,"stats");
     var key2 = getDbKey(obj,"log");
     var stats = null;
@@ -232,9 +263,9 @@ function processMessage(topic, message,protocol) {
         hist.add(histObj);
     }
     catch(err){
-        logger.warn("Unable to find stats/log data");
-        logger.warn(JSON.stringify(err));
-        logger.log("Creating a blank history item");
+        logger.debug("Unable to find stats/log data");
+        logger.debug(JSON.stringify(err));
+        logger.debug("Creating a blank history item");
         var histObj = hist.createHistoryItem(obj.jobName,new Date(),9999,0,"");
         logger.debug("Adding blank History obj: " + JSON.stringify(histObj));
         hist.add(histObj);

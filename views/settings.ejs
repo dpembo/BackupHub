@@ -135,6 +135,7 @@ function noValue(inValue){
                         <% timeZones.forEach((zone) => { %>
                           <option <%=isSelected(serverConfig.server.timezone,zone)%> value="<%= zone %>"><%= zone %></option>
                         <% }); %>
+                        <option <%=isSelected(serverConfig.server.timezone,"UTC")%> value="UTC">UTC</option>
                       </select>
                       <label for="timezone">Timezone</label>
                     </div>
@@ -386,7 +387,7 @@ function noValue(inValue){
                   <h6 class="header blue-text">Job Icons</h6>
                   <div class="row">
                     <div class="col s12">
-                      <p>Please provide additional an icon id (see <a href="https://marella.me/material-icons/demo/">here</a> for list), then press '+' to add to the list, and drag/drop to reorder as you need</p>
+                      <p>Please provide additional an icon id (see <a href="https://marella.github.io/material-icons/demo/">here</a> for list), then press '+' to add to the list, and drag/drop to reorder as you need</p>
                     </div>
                   </div>
                   <div class="row">
