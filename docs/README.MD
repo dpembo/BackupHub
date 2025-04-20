@@ -5,7 +5,7 @@ BackupHub is a lightweight yet powerful solution for managing and scheduling she
 Copyright (C)2025 pembo.co.uk
 
 ## Sections
-* [Installation](installation.md)
+* [Getting Started / Installation](installation.md)
 * [User Management](user-management.md)
 * [Configuration / Settings](settings-config.md)
 * [Backup Agents](backup-agents.md)
