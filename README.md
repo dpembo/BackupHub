@@ -1,68 +1,110 @@
 ![image info](./public/images/BackupHubColorBlue.png)
 
-BackupHub is a lightweight yet powerful solution for managing and scheduling shell-based executions across a local area network. Designed for IT administrators, BackupHub ensures secure, encrypted communication between a central hub and remotely managed agents. It streamlines job execution, scheduling, monitoring, and notifications while maintaining a simple yet effective approach to backup and automation.
+#BackupHub
+BackupHub is a lightweight yet powerful solution for managing and scheduling shell-based executions across a local area network. Designed for IT administrators, it ensures secure, encrypted communication between a central hub and remotely managed agents. BackupHub streamlines job execution, scheduling, monitoring, and notifications, making it an effective tool for backup and automation tasks.
 
-## Key Features
+![BackupHub Screenshot](https://github.com/dpembo/BackupHub/blob/main/docs/screens/job-monitor.png?raw=true)
 
-- **Agent Provisioning** – Deploy agents via cron, system service, Docker, or PM2.
-- **Agent Management** – Track agent status (uptime, offline, job execution).
-- **Secure Execution** – Token-based authentication protects endpoints from unauthorized execution.
-- **Inline Script Editor** – Edit scripts directly in the hub with templated examples.
-- **User Management** – Multi-user access with role-based control.
-- **Comprehensive Job Monitoring** – View logs, resubmit failed jobs, and track execution status.
-- **Dashboard Insights** – Gain visibility into job execution and performance.
-- **Flexible Scheduling** – Support for daily, weekly, monthly, and threshold-based execution.
-- **Timezone Support** – Ensure job times are correctly displayed for users in different regions.
-- **Efficient Communication** – Uses WebSocket (recommended) or MQTT for secure agent-hub interaction.
-- **Alerts & Notifications** – Receive notifications via email, webhooks, in-app alerts, or console output.
-- **Customizable UI** – Assign icons and colors to categorize jobs visually.
+## Table of Contents
+- [Features](#features)
+- [Technology Stack](#technology-stack)
+- [Installation](#installation)
+- [Usage](#usage)
+- [Configuration](#configuration)
+- [Contributing](#contributing)
+- [License](#license)
+- [Support](#support)
+
+## Features
+- **Agent Provisioning**: Supports cron, system service, Docker, or PM2 for agent setup.
+- **Agent Management**: Centralized control of remote agents.
+- **Secure Execution**: Token-based authentication for safe script execution.
+- **Inline Script Editor**: Create and edit scripts with templated examples.
+- **User Management**: Multi-user support with role-based access control.
+- **Comprehensive Job Monitoring**: Track job status and history.
+- **Dashboard Insights**: Visualize job performance and system status.
+- **Flexible Scheduling**: Daily, weekly, monthly, or threshold-based schedules.
+- **Timezone Support**: Configure for global operations.
+- **Efficient Communication**: Uses WebSocket/MQTT for real-time updates.
+- **Alerts & Notifications**: Email, webhooks, in-app alerts, and console output.
+- **Customizable UI**: Tailor the interface to your needs.
 
 ## Technology Stack
+- **Hub**: Built with Node.js, accessible via a web-based interface.
+- **Agents**: Node.js CLI-based, running on Linux with Bash for script execution.
+- **Communication**: Encrypted with a shared secret key, using WebSocket/MQTT for real-time updates.
+- **Notifications**: Supports webhooks for external alerting systems.
 
-- **Hub:** Web-based application powered by **Node.js**.
-- **Agents:** Node.JS CLI-based, run on **Linux**, using **Bash** for script execution.
-- **Communication:** Encrypted using a shared secret key, with WebSocket/MQTT for real-time updates.
-- **Notifications:** Webhooks for external alerting.
+## Installation
+### Prerequisites
+- Node.js (v20 or v21)
+- Docker (recommended for BackupHub server deployment)
+- Linux environment for agents
 
-## Installation & Setup
+### Docker Setup (Recommended)
+1. Pull the latest BackupHub image:
+   ```bash
+   docker pull ghcr.io/dpembo/backuphub/hub:latest
+   ```
+2. Run the container with the following command:
+   ```bash
+   docker run -d --name BackupHub -e TZ=Europe/London -p 8082:8082 -p 49981:49981 --restart unless-stopped -v /custom/BackupHub/data:/usr/src/app/data -v /custom/BackupHub/scripts:/usr/src/app/scripts -v /custom/BackupHub/logs:/usr/src/app/logs ghcr.io/dpembo/backuphub/hub:latest
+   ```
+3. Access the web interface at `http://localhost:8082`.
 
-### Install the Hub
+### Manual Setup
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/dpembo/BackupHub.git
+   cd BackupHub
+   ```
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+3. Start the hub:
+   ```bash
+   node server.js
+   ```
+4. Access the web interface at `http://localhost:8082`.
 
-- Runs on any Linux environment supporting **Node.js** and **Bash**.
+## Usage
+1. **Initial Setup**:
+   - Open the web interface at `http://localhost:8082`.
+   - Register a new user with a username, email, and password.
+   - Log in to access the dashboard.
+2. **Agent Setup**:
+   - Navigate to the "Agents" screen in the web interface.
+   - Click the (+) button to generate agent installation commands.
+   - Copy and run the commands on the target machine, configuring the agent with a unique name, WebSocket settings, and start method (e.g., PM2, cron, or Docker).
+   - For more information see the quick start guide  [here](https://github.com/dpembo/BackupHub/blob/main/docs/installation.md)
+3. **Managing Jobs**:
+   - Use the inline script editor to create or edit scripts.
+   - Schedule jobs via the dashboard (daily, weekly, or custom).
+   - Monitor job status and logs in real-time.
 
-#### Start an instance of this image
+## Configuration
+| **Parameter Type**       | **Details**                                                                 |
+|--------------------------|-----------------------------------------------------------------------------|
+| **Environment Variables**| `TZ` (e.g., `Europe/London`), `BACKUPHUB_ENCRYPTION_KEY` (change default)   |
+| **Volumes**              | `/usr/src/app/data`, `/usr/src/app/scripts`, `/usr/src/app/logs`           |
+| **Ports**                | `8082` (web app), `49981` (WebSocket)                                      |
 
-The latest version image can be found here:
-```ghcr.io/dpembo/backuphub/hub:latest```
+- Configure settings via the web interface or environment variables.
+- Ensure the hub and agents use the same secret key for secure communication.
 
-If you want specific versions, you can find these in the packages section of this repository
+## Contributing
+Contributions are welcome! To contribute:
+1. Fork the repository.
+2. Create a feature branch: `git checkout -b feature/your_feature`.
+3. Commit your changes: `git commit -m 'Add your_feature'`.
+4. Push to the branch: `git push origin feature/your_feature`.
+5. Open a pull request.
 
-Starting a Backup server instance through docker is simple:
-
-```
-docker run \
-  -d \
-  --name BackupHub \
-  -e TZ=Europe/London \
-  -p 8082:8082 \
-  -p 49981:49981 \  
-  --restart unless-stopped \ 
-  -v /custom/BackupHub/data:/usr/src/app/data \
-  -v /custom/BackupHub/scripts:/usr/src/app/scripts \ 
-  -v /custom/BackupHub/logs:/usr/src/app/logs \
-  ghcr.io/dpembo/backuphub/hub:latest
-```
-
-For more iformation on installation please see [Docs](docs/installation.md)
-
-### Provision Agents
-
-- Agents can be installed and updated directly from the hub.
-- They must be configured with the same secret key as the hub for secure communication.
-
-## Open Source
-
-BackupHub is an open-source project hosted on **GitHub**.
+Please adhere to the project’s coding standards and include tests where applicable.
 
 ## License
-See [License](LICENSE) for further details
+This project is licensed under the MIT License. See the [LICENSE](https://github.com/dpembo/BackupHub/blob/main/LICENSE) file for details.
+
+## Support
+For issues or feature requests, open an issue on [GitHub Issues](https://github.com/dpembo/BackupHub/issues). For general inquiries, contact [support@example.com](mailto:support@example.com).
