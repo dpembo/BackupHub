@@ -80,6 +80,8 @@ BackupHub is a lightweight yet powerful solution for managing and scheduling she
    - For more information see the quick start guide  [here](https://github.com/dpembo/BackupHub/blob/main/docs/installation.md)
 3. **Managing Jobs**:
    - Use the inline script editor to create or edit scripts.
+   - Pressing the templates icon in the editor will give you a quick start.  There's a simple test job named ```Test-5-Seconds.sh``` which should be great to test the setup.
+   - Other templates are available for jobs regarding proxmox, rsync, mysql/mariadb, and more
    - Schedule jobs via the dashboard (daily, weekly, or custom).
    - Monitor job status and logs in real-time.
 
