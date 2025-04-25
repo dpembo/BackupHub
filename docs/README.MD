@@ -6,12 +6,12 @@ Copyright (C)2025 pembo.co.uk
 
 ## Sections
 * [Getting Started / Installation](installation.md)
+* [Getting Started / Backup Schedules](backup-schedules.md)
 * [User Management](user-management.md)
 * [Configuration / Settings](settings-config.md)
 * [Backup Agents](backup-agents.md)
 * [Backup Jobs](backup-jobs.md)
 * [Theshold Jobs](backup-thresholds.md)
-* [Backup Schedules](backup-schedules.md)
 * [Backup Job Management](job-management.md)
 * [Notifications](notifications.md)
 
