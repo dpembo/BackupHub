@@ -49,6 +49,42 @@ function noValue(inValue){
           M.toast({html: "FAILURE: Unable to connect to MQTT", displayLength: 5000});
         }
       }
+
+      function fetchApiData(url) {
+        return fetch(url)
+          .then(response => {
+            if (!response.ok) {
+              throw new Error('Network response was not ok');
+            }
+            return response.text(); // This will return the response body as a string
+          })
+          .catch(error => {
+            // Handle errors here or propagate them further
+            console.error('There was a problem with the fetch operation:', error);
+            //throw error; // ignore any error 
+          });
+      }
+      
+      function refreshTemplates()
+      {
+
+          var url = "/rest/templates/refresh"; 
+          fetchApiData(url)
+          .then(data => {
+            
+            // Handle the API data as a string here
+            //console.log(data);
+            //alert(data);
+            //element.style.color="red";
+            M.toast({html: "Templates Refreshed", displayLength: 5000});
+          })
+          .catch(error => {
+            // Handle errors here or display them to the user
+            console.error('Error:', error);
+            M.toast({html: "Template Refresh Failed: " + error, displayLength: 5000});
+          });
+      }
+
       function testEmail()
       {
         M.toast({html: "Starting Notification Test", displayLength: 1000});
@@ -429,9 +465,17 @@ function noValue(inValue){
                   <div class="row">
                     <div class="input-field col s8">
                       <input id="templateServer" type="text" name="templateServer" value="<%=serverConfig.templates.repositoryUrl%>" required>
-                      <label for="mqttServer">Templates Repository URL</label>
+                      <label for="templateServer">Templates Repository URL</label>
                     </div>
                   </div>
+                  <div class="row">
+                    <div class="input-field col s8">
+                      
+                      <span id="templaterefresh" onclick="refreshTemplates()" title="Refresh template list" style="cursor:pointer;font-size:20pt" class="material-icons vertMid tableIconButton ">refresh</span>
+                      <label class="active" style="position:relative;left:30px;">Refresh Templates Cache</label>
+                    </div>
+                  </div>
+                  
 
 
               </div>

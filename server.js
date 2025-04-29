@@ -1974,6 +1974,47 @@ app.post('/rest/updateAgent/:agentId', express.json(), User.isAuthenticated, (re
   }
 });
 
+app.get('/rest/templates', User.isAuthenticated, async (req, res) => {
+  const user = req.session.user;
+  if (!user) {
+    return res.redirect('/register.html');
+  }
+  var templateRepository = {};
+  templateRepository.status="unknown";
+  templateRepository.date=new Date();
+  templateRepository.templates = templates;
+  templateRepository.status="Retrieved Templates from cache";
+  templateRepository.date=new Date();
+  res.set('Content-Type', 'application/json'); // Set the content-type header
+  res.send(templateRepository);
+});
+
+app.get('/rest/templates/refresh', User.isAuthenticated, async (req, res) => {
+  const user = req.session.user;
+  if (!user) {
+    return res.redirect('/register.html');
+  }
+  var templateRepository = {};
+  templateRepository.status="unknown";
+
+  if(serverConfig.templates && serverConfig.templates.enabled=="true"){
+    (async () => {
+      templates = new TemplateRepository(serverConfig.templates.repositoryUrl);
+      await templates.init();
+    })();
+    templateRepository.status="refreshed" 
+    templateRepository.date=new Date();
+  }
+  else{
+    templateRepository.status="Template Scripts Disabled";
+    templateRepository.templates = null;
+    logger.info("Template Scripts Disabled");
+  }
+  res.set('Content-Type', 'application/json'); // Set the content-type header
+  res.send(templateRepository);
+
+});
+
 app.get('/rest/debug', User.isAuthenticated, async (req, res) => {
   const user = req.session.user;
   if (!user) {
