@@ -29,6 +29,17 @@ BackupHub is a lightweight yet powerful solution for managing and scheduling she
 - **Alerts & Notifications**: Email, webhooks, in-app alerts, and console output.
 - **Customizable UI**: Tailor the interface to your needs.
 
+## Backup Templates Included
+- **Backup proxmox VM**: Backups a VM from proxmox given the VM id
+- **Backup MySQL/MariaDN DB**: Runs a mysql dump of a database and moves it to a directory
+- **Delete Files**: Deletes files from a provided list
+- **Issue Reboot**: Issues reboot after a given delay
+- **Purge File Older than**: Purges files older than defined period (in days)
+- **Purge Files Matching wildcard Older than**: Purges files that match a wildcard and are older than defined period (in days)
+- **Rsync between two directories**: Performs a one-way Rsync between provided source and target directory
+- **Mount Threshold exceeded**: Sample to use when a mounted volume uses storage greater than value provided in settings
+- **Upload to Cloud Storage**: Using rclone, allows you to move files to many different cloud storage providers
+
 ## Technology Stack
 - **Hub**: Built with Node.js, accessible via a web-based interface.
 - **Agents**: Node.js CLI-based, running on Linux with Bash for script execution.
@@ -37,7 +48,7 @@ BackupHub is a lightweight yet powerful solution for managing and scheduling she
 
 ## Installation
 ### Prerequisites
-- Node.js (v20 or v21)
+- Node.js (v20+)
 - Docker (recommended for BackupHub server deployment)
 - Linux environment for agents
 
