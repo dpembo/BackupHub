@@ -205,10 +205,12 @@ function getAverageRuntime(inJobName)
 
 function getLastRun(inJobName){
     logger.debug("Getting Last Run for Job: " + inJobName);
-    for (var i = historyItems.length - 1; i >= 0; i--) {
-        if(historyItems[i].jobName==inJobName){
+    var items = getItemsUsingTZ();
+    for (var i = items.length - 1; i >= 0; i--) {
+        if(items[i].jobName==inJobName){
             //logger.debug("Found item at [" + i+"]: [" + JSON.stringify(historyItems[i]) + "]")
-            return historyItems[i];
+
+            return items[i];
         }
     }
     return null;
