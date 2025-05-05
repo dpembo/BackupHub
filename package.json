@@ -18,7 +18,7 @@
         "materialize-css": "^1.0.0",
         "moment-timezone": "^0.5.48",
         "monaco-editor": "^0.52.2",
-        "mongoose": "^8.14.0",
+        "mongoose": "^8.14.1",
         "mqtt": "^5.12.0",
         "nanoid": "^5.0.9",
         "node-schedule": "^2.1.1",
