@@ -65,6 +65,27 @@ function noValue(inValue){
   <script src="https://cdnjs.cloudflare.com/ajax/libs/spectrum/1.8.0/spectrum.min.js"></script>
   
   <script>
+  function extractHTMLParams(data) {
+    const startTag = '#start-params';
+    const endTag = '#end-params';
+    
+    // Find the positions of the start and end tags
+    const startIndex = data.indexOf(startTag);
+    const endIndex = data.indexOf(endTag);
+
+    // If both tags are found and the start tag comes before the end tag
+    if (startIndex !== -1 && endIndex !== -1 && startIndex < endIndex) {
+      // Extract the HTML content between the tags
+      let htmlContent = data.substring(startIndex + startTag.length, endIndex);
+      // Remove the hash symbols at the beginning of each line specifically
+      htmlContent = htmlContent.replace(/^#/gm, '');
+      return htmlContent;
+    } else {
+      // Return an empty string or some other value to indicate that the tags were not found
+      return '';
+    }
+  }
+
   function newCommand(select)
   {
     var url = "/rest/script/" + select.value;
@@ -77,7 +98,7 @@ function noValue(inValue){
     .then(data => {
       // Handle the API data as a string here
       //console.log(data);
-      document.getElementById('scriptInfoDetail').innerHTML=data;
+      document.getElementById('scriptInfoDetail').innerHTML=extractHTMLParams(data);
     })
     .catch(error => {
       // Handle errors here or display them to the user
@@ -489,6 +510,7 @@ function noValue(inValue){
 </script>
 
 <script>
+  
   function resetValidation(inputElement){
     var inputWrapper = inputElement.parentNode;  // The parent div with class 'input-field'
     //alert(inputWrapper.outerHTML);
@@ -503,7 +525,6 @@ function noValue(inValue){
     //alert("pause");
   }
   
-
   // Function to validate an input, select, or textarea field using Materialize classes
   function validateInput(inputElement) {
     if(!inputElement){
@@ -539,6 +560,24 @@ function noValue(inValue){
     }
   }
 
+  // onload event handler
+  window.addEventListener('load', function(event) {
+    // Get the select element
+    const selectElement = document.getElementById('agentcommand');
+    //alert(selectElement);
+    if (selectElement) {
+        // Get the selected value
+        const selectedValue = selectElement.value;
+        //alert(selectedValue);
+        //console.log('Selected value on load:', selectedValue);
+        newCommand(selectElement);
+        
+        // Optional: Do something with the value
+        // e.g., display it, send it to a server, etc.
+    } else {
+        //console.log('Select element not found');
+    }
+  });
   // Submit event handler
   document.getElementById('myForm').addEventListener('submit', function(event) {
 
