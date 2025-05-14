@@ -1531,15 +1531,7 @@ app.get('/index.html',User.isAuthenticated, (request, response) => {
   response.redirect("/");
 });
 
-app.get('/schedule',User.isAuthenticated, (request, response) => {
-  response.render('schedule', {
-    subject: 'BackupHub',
-    name: 'Control',
-    logs: logsStr,
-    config: config,
 
-  });
-});
 
 
 app.get('/agentHistory.html',User.isAuthenticated, async (request, response) => {
@@ -1696,94 +1688,7 @@ app.get('/rest/eta',User.isAuthenticated, (request, response) => {
 });
 
 var logsStr = "";
-app.get('/logs.html',User.isAuthenticated, (request, response) => {
-  var refresh = request.query["refresh"];
-  if (refresh === undefined) refresh = 0;
-  var sort = request.query["sort"];
-  if (sort === undefined) sort = "lastrun";
-  var order = request.query["order"];
-  if (order === undefined) order = "-1";
 
-  var sortStr = sort;
-
-  if (order == "-1") sortStr = "-" + sort;
-  else (sortStr = sort);
-
-  /* Check if one is queued */
-  //var cmd = "cat 
-  //populateBackupConfig(sortStr);
-
-  response.render('logs-ajax',
-    {
-      subject: 'EJS template engine',
-      name: 'Control/Logs',
-      logs: logsStr,
-      config: config,
-      refresh: request.query["refresh"],
-      sort: sort,
-      sortstr: sortStr,
-      order: order
-    });
-});
-
-
-app.get('/logs-ajax.html',User.isAuthenticated, (request, response) => {
-  var refresh = request.query["refresh"];
-  if (refresh === undefined) refresh = 0;
-  var sort = request.query["sort"];
-  if (sort === undefined) sort = "id";
-  var order = request.query["order"];
-  if (order === undefined) order = "1";
-
-  var sortStr = sort;
-
-  if (order == "-1") sortStr = "-" + sort;
-  else (sortStr = sort);
-
-  /* Check if one is queued */
-  //var cmd = "cat 
-  //populateBackupConfig(sortStr);
-
-  response.render('logs-ajax',
-    {
-      subject: 'EJS template engine',
-      name: 'Control/Logs',
-      logs: logsStr,
-      config: config,
-      refresh: request.query["refresh"],
-      sort: sort,
-      sortstr: sortStr,
-      order: order
-    });
-});
-
-app.get('/logs-inline.html',User.isAuthenticated, (request, response) => {
-  var refresh = request.query["refresh"];
-  if (refresh === undefined) refresh = 0;
-  var sort = request.query["sort"];
-  if (sort === undefined) sort = "id";
-  var order = request.query["order"];
-  if (order === undefined) order = "1";
-
-  var sortStr = sort;
-
-  if (order == "-1") sortStr = "-" + sort;
-  else (sortStr = sort);
-
-  //populateBackupConfig(sortStr);
-
-  response.render('logs-inline',
-    {
-      subject: 'EJS template engine',
-      name: 'Control/Logs',
-      logs: logsStr,
-      config: config,
-      refresh: request.query["refresh"],
-      sort: sort,
-      sortstr: sortStr,
-      order: order
-    });
-});
 
 app.post('/agent-submit.html',User.isAuthenticated, (req, res) => {
   //Get the form data
