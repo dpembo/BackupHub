@@ -162,27 +162,6 @@ function noValue(inValue){
   }
 
 
-    function invokeJobCall(joblog,jobName) {
-        var len = joblog.length;
-        len = len -4;
-        newjoblog = joblog.substr(0,len);
-
-        var xhttp = new XMLHttpRequest();
-        xhttp.open("GET", "http://192.168.1.24:1880/backup-init?dest=" + newjoblog, false);
-        xhttp.send(null);
- 
-        if (xhttp.status === 200) {
-          var obj = JSON.parse(xhttp.responseText);
-          if(obj.status=="Job Started")
-          {
-            doNotify("success","Job [" + jobName + "] Successfully Queued - Please wait for this to start" );
-          }
-          else
-          {
-            doNotify("error","Job [" + jobName + "] Not Queued - another job [" + obj.job + "] is already queued" );
-          }
-        }
-    };
     
     function setPickerColor(inColor){
       var colorPicker = $("#picker");
