@@ -1414,11 +1414,34 @@ app.post('/scheduler.html',User.isAuthenticated, (req, res) => {
 });
 
 app.get('/scheduleList.html',User.isAuthenticated, (req, res) => {
+  //console.time('getSchedules');
   const schedules = scheduler.getSchedules();
+  //console.timeEnd('getSchedules');
+  //console.time('getHitstItems');
+  const items = hist.getItemsUsingTZ();
+  //console.timeEnd('getHitstItems');
+
+  const lastRuns = {};
+  for (let i = items.length - 1; i >= 0; i--) {
+      const item = items[i];
+      if (!lastRuns[item.jobName]) { // Only set if not already found (first from end = last run)
+          lastRuns[item.jobName] = item;
+      }
+  }
+
+  // Enhance schedules with precomputed lastRun
+  const processedSchedules = schedules.map(schedule => ({
+      ...schedule,
+      returnCode: lastRuns[schedule.jobName] ? lastRuns[schedule.jobName].returnCode : '0',
+      successPercentage: hist.getSuccessPercentage(schedule.jobName)
+  }));
+
+  console.time('render');
   res.render('scheduleList', {
-    schedules,
+    schedules: processedSchedules,
     hist:hist, 
   });
+  console.timeEnd('render');
 });
 
 app.get('/scheduleListCalendar.html',User.isAuthenticated, (req, res) => {

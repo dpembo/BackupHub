@@ -184,8 +184,8 @@ function addDateSuffix(date) {
           
           <tbody>
             <% for (let i = 0; i < schedules.length; i++) { %>
+              <tr <% if(schedules[i].returnCode!=0){%>class="errorHighlight"<%}%>>
 
-              <tr <% if(hist.getLastRun(schedules[i].jobName)!=null && parseInt(hist.getLastRun(schedules[i].jobName).returnCode)!=0){%>class="errorHighlight"<%}%>>
                 <td><span class="material-icons vertMid" style="color:<%=schedules[i].color%>;font-size:24pt;"><%=schedules[i].icon%></span></td>
                 <td><%= schedules[i].jobName %></td>
                 <td>
@@ -214,7 +214,6 @@ function addDateSuffix(date) {
                   <% if(schedules[i].scheduleType=="storagethreshold" || schedules[i].scheduleType=="cputhreshold"){%>
                     N/A
                   <%}%>
-
                 </td>
                 <td><% if(schedules[i].scheduleType=="storagethreshold" || schedules[i].scheduleType=="cputhreshold"){%>
                   N/A
@@ -222,7 +221,7 @@ function addDateSuffix(date) {
                   <%= schedules[i].nextRunDate %></td>
                 <%}%>
                 <td><%= schedules[i].lastUpdated %></td>
-                <% var pct = hist.getSuccessPercentage(schedules[i].jobName);
+                <% var pct = schedules[i].successPercentage;
                 if(!isNaN(pct))pct=pct+"%";
                 else pct="n/a";
                 %> 
@@ -231,7 +230,7 @@ function addDateSuffix(date) {
                 <td><%= schedules[i].agent %></td>
                 <td>
                   <% var btnClass="tableIconButton"; 
-                    if(hist.getLastRun(schedules[i].jobName)!=null && parseInt(hist.getLastRun(schedules[i].jobName).returnCode)!=0){btnClass="errorIcons"}
+                    if(schedules[i].returnCode!=0){btnClass="errorIcons"}
                   %>
                   <a title="info" href="/ScheduleInfo.html?index=<%= i %>"><i class="material-icons <%=btnClass%> vertMid">info</i></a>
                   <a title="edit" href="/scheduler.html?index=<%= i %>"><i class="material-icons <%=btnClass%> vertMid">edit</i></a>
