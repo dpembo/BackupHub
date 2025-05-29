@@ -202,7 +202,11 @@ function displaySecs(secs) {
                 <%
               }
               else{%>
-                <span title="Error - Return code: <%=historyList[i].returnCode%>" class="errorIcons material-icons">flag_circle</span>
+                <% if(!deleted){%>
+                  <span title="Error - Return code: <%=historyList[i].returnCode%>" class="errorIcons material-icons">flag_circle</span>
+                <% } else {%>
+                  <span title="Error - Return code: <%=historyList[i].returnCode%>" class="deletedIcons material-icons">flag_circle</span>
+                <% }%>
               <%
               }
               %>
