@@ -137,9 +137,14 @@ function displaySecs(secs) {
             </tr>
           <% } %>
 
+          <% var deleted = (historyList[i].icon=="remove_circle")%>
+          <% var icons = "successIcons";%>
+          <% if(deleted)icons="deletedIcons"%>
+          <% var logClass="";%>
+          <% if(deleted)logclass="deletedIcons";%>
+
           <!--<%=groupId%>-<%=groupValue%>-->
-          
-          <tr class="toggle-row group-<%=groupId%>" style="display:none;" <% if(parseInt(historyList[i].returnCode)!=0){%>class="errorHighlight"<%}%>>
+          <tr class="toggle-row group-<%=groupId%> <%if(deleted){%>deleted<%}%>" style="display:none;" <% if(parseInt(historyList[i].returnCode)!=0){%>class="errorHighlight"<%}%>>
             <td><span class="material-icons vertMid" style="color:<%=historyList[i].color%>;font-size:24pt"><%=historyList[i].icon%></span></td>
             <td>
               <% if(itemInternal==true){%>
@@ -168,7 +173,7 @@ function displaySecs(secs) {
                 runType="disc_full";runDesc="Mount Threshold Exceeded";
               }
               %>
-              <span title="<%=runDesc%>" class="successIcons material-icons"><%=runType%></span>
+              <span title="<%=runDesc%>" class="<%=icons%> material-icons"><%=runType%></span>
 
             </td>
             <% 
@@ -193,7 +198,7 @@ function displaySecs(secs) {
             <td><span><%=successPct%>%</span></td>
             <td>
               <% if(parseInt(historyList[i].returnCode)==0){%>
-                <span title="Success - Return code <%=historyList[i].returnCode%>" class="successIcons material-icons">check_circle</span>
+                <span title="Success - Return code <%=historyList[i].returnCode%>" class="<%=icons%> material-icons">check_circle</span>
                 <%
               }
               else{%>
@@ -208,15 +213,22 @@ function displaySecs(secs) {
                var logclass="";
                if(parseInt(historyList[i].returnCode)!=0){logclass="tableIconButtonError";}else {logclass="tableIconButton"};
               %>
+              <% if(!deleted){%>
               <a href="#modal<%=i%>" id="modal-link<%=i%>" onclick="openModal('<%=historyList[i].icon%>','<%=historyList[i].color%>','<%=historyList[i].jobName%>','logdetail<%=i%>')" title="View Execution Log"><span class="material-icons <%=logclass%> vertTop">description</span></a>
+              <%} else {%>
+                <a href="#modal<%=i%>" id="modal-link<%=i%>" onclick="openModal('<%=historyList[i].icon%>','<%=historyList[i].color%>','<%=historyList[i].jobName%>','logdetail<%=i%>')" title="View Execution Log"><span class="material-icons <%=logclass%> deletedIcons vertTop">description</span></a>
+              <% } %>
 
-              <% if(itemInternal == false) {%>
-              <a title="Edit Job" href="/scheduler.html?jobname=<%=historyList[i].jobName%>&redir=<%=encodeURIComponent('/history.html')%>"><i class="material-icons <%=logclass%> vertTop">edit</i></a>
+              <% if(itemInternal == false)  {%>
+              <% if(!deleted){%><a title="Edit Job" href="/scheduler.html?jobname=<%=historyList[i].jobName%>&redir=<%=encodeURIComponent('/history.html')%>"><i class="material-icons <%=logclass%> vertTop">edit</i></a><%}%>
               <% if(parseInt(historyList[i].returnCode)!=0) {%>
-                <a title="Re-run" href="/runSchedule.html?jobname=<%=historyList[i].jobName%>&redir=<%=encodeURIComponent('/history.html')%>"><i class="material-icons <%=logclass%> vertTop">play_circle</i></a>
+                <% if(!deleted){%><a title="Re-run" href="/runSchedule.html?jobname=<%=historyList[i].jobName%>&redir=<%=encodeURIComponent('/history.html')%>"><i class="material-icons <%=logclass%> vertTop">play_circle</i></a><%}%>
               <%}%>
               <% } else { %> 
-                <i title="Internal Job"><i class="material-icons <%=logclass%> vertTop">blocked</i>
+                <% if(!deleted){%><a title="Internal Job"><i class="material-icons <%=logclass%> vertTop">blocked</a>
+                <% } else {%>
+                  <a title="Deleted Job"><i class="material-icons deletedIcons vertTop">blocked</a>
+                <%}%>
               <% } %>
             </td>
           </tr>

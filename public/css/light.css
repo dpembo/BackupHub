@@ -240,6 +240,10 @@ span.themeModeDark{
   color: #CF6679;
 }
 
+.deleted{
+  color: #888888;
+}
+
 .notification-badge-hidden {
   display:none;
 }
@@ -271,6 +275,10 @@ span.themeModeDark{
 
 .successIcons {
   color: #63ade9;
+}
+
+.deletedIcons {
+  color: #AAAAAA !important; 
 }
 
 .headerColor{

@@ -175,13 +175,7 @@ const { config } = require("process");
 agents = require("./agents.js");
 agents.init();
 
-//var agentConfig = require("./NOT_USED_agentConfig.js");
-//agentConfig.initialize("./data/agent-config.db",logger);
-//agentConfig.migrate(agents.getDict());
-
-
 const logpath = "/media/net/BackupHOMENAS/backups/";
-//const schedulePath = "/media/net/homenasdave/backup-controller/schedule.cfg";
 const port = serverConfig.server.port;
 
 
@@ -1110,6 +1104,11 @@ app.get('/historyList/data',User.isAuthenticated, (req, res) => {
         break;
       }
     }
+    if(!historyList[x].icon ||  historyList[x].icon.trim()===''){
+      historyList[x].icon="remove_circle";
+      historyList[x].color="#AAAAAA";
+    }
+    
   }
 
   var refresh = req.query["refresh"];
