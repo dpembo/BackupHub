@@ -234,6 +234,7 @@ function addDateSuffix(date) {
                   %>
                   <a title="info" href="/ScheduleInfo.html?index=<%= i %>"><i class="material-icons <%=btnClass%> vertMid">info</i></a>
                   <a title="edit" href="/scheduler.html?index=<%= i %>"><i class="material-icons <%=btnClass%> vertMid">edit</i></a>
+                  <a title="clone" href="/scheduler.html?copyIndex=<%= i %>"><i class="material-icons <%=btnClass%> vertMid">content_copy</i></a>
                   <a id="openModalButton<%=i%>" onclick="openModal('<%=schedules[i].jobName%>',<%=i%>);" title="delete" href="#<%=schedules[i].jobName%>"><i class="<%=btnClass%> material-icons vertMid">delete</i></a>
                   <a title="Run now" href="/runSchedule.html?index=<%= i %>"><i class="material-icons <%=btnClass%> vertMid">play_circle</i></a>
                 
