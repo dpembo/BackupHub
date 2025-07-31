@@ -203,6 +203,7 @@ function datesMatch(d1,d2){
           //alert(icon);
           //set the indx of the edit
           document.getElementById('editBtn').href="/scheduler.html?index=" + index + "&redir=" + document.location.href;
+          document.getElementById('cloneBtn').href="/scheduler.html?copyIndex=" + index + "&redir=" + document.location.href;
           document.getElementById('statusBtn').href="scheduleInfo.html?index=" + index + "&redir=" + document.location.href;
           document.getElementById('runBtn').href="runSchedule.html?index=" + index;
           //alert(colour);
@@ -312,6 +313,7 @@ function datesMatch(d1,d2){
       <a id="runBtn" href="#!" class="waves-effect waves-green btn-flat orange-text">Run</a>
       <a id="statusBtn" href="#!" class="waves-effect waves-green btn-flat orange-text">Last Run Info</a>
       <a id="editBtn" href="#!" class="waves-effect waves-green btn-flat orange-text">Edit</a>
+      <a id="cloneBtn" href="#!" class="waves-effect waves-green btn-flat orange-text">Clone</a>
       <a href="#!" class="modal-close waves-effect waves-green btn-flat brown-text">Close</a>
     </div>
   </div>

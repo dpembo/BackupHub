@@ -1289,22 +1289,40 @@ app.get('/scriptEditor.html',User.isAuthenticated, (req, res) => {
 app.get('/scheduler.html',User.isAuthenticated, (req, res) => {
   logger.info("Scheduler.html");
   var index=req.query.index;
+  var copyIndex=req.query.copyIndex;
   var internal=req.query.internal;
   var jobname=req.query.jobname;
   var redir=req.query.redir;
   var time=req.query.time;
   var day=req.query.day;
   var type=req.query.type;
-  
+  var copy = false;
+  if(copyIndex!==undefined && copyIndex!==null){
+    index = copyIndex;
+    copy = true;    
+  }
+ 
   if(index===undefined || index === null )index = scheduler.getScheduleIndex(jobname);
+  var scheduleItem = scheduler.getSchedules(index);
+ 
+  if(copy){
+    scheduleItem = JSON.parse(JSON.stringify(scheduleItem));
+    scheduleItem.index=undefined;
+    index = undefined;
+    scheduleItem.jobName = "Copy of " + scheduleItem.jobName;
+  };
   //refresh the scripts list
   refreshScripts();
+
+  //Get the schedule
+  
 
   res.render('scheduler',{
     scripts: scripts,
     scriptsDesc: scriptsDesc,
     agents: agents.getDict(),
-    schedule: scheduler.getSchedules(index),
+    schedule: scheduleItem,
+    copy:copy,
     index:index,  
     redir:redir,
     type:type,
