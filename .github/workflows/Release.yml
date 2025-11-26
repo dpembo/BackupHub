@@ -114,12 +114,6 @@ jobs:
       - name: Create Git Release
         shell: bash
         run: |
-          echo ${{ secrets.ACCESS_TOKEN }}
-          echo ${{ vars.ORG_NAME }}
-          echo ${{ vars.REPO_NAME }}
-          echo ${{ vars.BRANCH_NAME }}
-          #sudo apt-get update
-          #sudo apt-get install jq
           ./gitRelease.sh ${{ vars.ORG_NAME }} ${{ vars.REPO_NAME }} ${{ vars.BRANCH_NAME }} ${{ secrets.PAT_TOKEN }} "v${{inputs.version}}" "v${{inputs.version}}" "BackupHub [v${{inputs.version}}]"
 
 
