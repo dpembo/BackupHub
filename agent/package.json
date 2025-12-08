@@ -9,7 +9,7 @@
   "author": "pembo.co.uk",
   "license": "ISC",
   "dependencies": {
-    "express": "^5.2.0",
+    "express": "^5.2.1",
     "jsonwebtoken": "^9.0.2",
     "mqtt": "^5.14.1",
     "reconnecting-websocket": "^4.4.0",
