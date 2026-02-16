@@ -554,9 +554,13 @@ class WebSocketHandler {
     this.client = null;
     this.isConnected = false;
     this.isConnecting = false;
+    this.isReconnecting = false;
     this.connectionTimeout = options.connectionTimeout || 5000;
     this.processMessageCallback = processMessageCallback;
-    this.reconnectAttempts = 0;
+    this.reconnectAttempts = options.reconnectAttempts || 360;
+    this.reconnectDelay = options.reconnectDelay || 30000;
+    this.currentReconnectAttempt = 0;
+    this.reconnectTimeoutId = null;
   }
 
   checkConnected() {
@@ -573,10 +577,6 @@ class WebSocketHandler {
         debug(1, `WebSocket [${this.agentId}] connection in progress`);
         return reject(new Error('Connection already in progress'));
       }
-      if (this.client) {
-        debug(1, `WebSocket [${this.agentId}] reusing existing client`);
-        return resolve(this.client);
-      }
 
       this.isConnecting = true;
       const connId = `${encodeURIComponent(this.agentId)}`;
@@ -585,8 +585,8 @@ class WebSocketHandler {
       const options = {
         WebSocket: websocket,
         connectionTimeout: this.connectionTimeout,
-        maxRetries: 120,
-        reconnectInterval: 1000 // Start with 1s delay
+        maxRetries: 0, // Disable library's built-in retry, we'll handle it manually
+        reconnectInterval: 1000
       };
 
       debug(0, `Initiating WebSocket connection for [${connId}]`);
@@ -595,7 +595,8 @@ class WebSocketHandler {
       this.client.addEventListener('open', () => {
         this.isConnected = true;
         this.isConnecting = false;
-        this.reconnectAttempts = 0;
+        this.currentReconnectAttempt = 0;
+        this.isReconnecting = false;
         debug(1, `WebSocket [${connId}] connected to [${connectUrl}]`);
         resolve(this.client);
       });
@@ -604,12 +605,18 @@ class WebSocketHandler {
         this.isConnected = false;
         this.isConnecting = false;
         debug(2, `WebSocket [${connId}] closed`);
+        if (!this.isReconnecting) {
+          this.triggerReconnect();
+        }
       });
 
       this.client.addEventListener('error', (err) => {
         this.isConnected = false;
         this.isConnecting = false;
         debug(3, `WebSocket [${connId}] error: ${err.message}`);
+        if (!this.isReconnecting) {
+          this.triggerReconnect();
+        }
         reject(err);
       });
 
@@ -619,19 +626,72 @@ class WebSocketHandler {
         this.processMessageCallback(message);
       });
 
-      this.client.addEventListener('reconnecting', () => {
-        this.reconnectAttempts++;
-        debug(2, `Reconnection attempt ${this.reconnectAttempts} for [${connId}]`);
-      });
+      // Use a timeout to handle initial connection failures
+      const connectionTimeoutId = setTimeout(() => {
+        if (!this.isConnected && this.isConnecting) {
+          this.isConnecting = false;
+          debug(2, `WebSocket [${connId}] initial connection timeout`);
+          if (!this.isReconnecting) {
+            this.triggerReconnect();
+          }
+          reject(new Error('Connection timeout'));
+        }
+      }, this.connectionTimeout);
     });
   }
 
+  triggerReconnect() {
+    if (this.isReconnecting) return;
+    
+    this.isReconnecting = true;
+    const connId = `${encodeURIComponent(this.agentId)}`;
+
+    if (this.currentReconnectAttempt >= this.reconnectAttempts) {
+      debug(3, `Max WebSocket reconnection attempts reached for [${connId}] - exiting`);
+      process.exit(2);
+    }
+
+    // Clear any existing timeout
+    if (this.reconnectTimeoutId) {
+      clearTimeout(this.reconnectTimeoutId);
+    }
+
+    this.reconnectTimeoutId = setTimeout(() => {
+      this.currentReconnectAttempt++;
+      debug(2, `WebSocket reconnection attempt ${this.currentReconnectAttempt} of ${this.reconnectAttempts} for [${connId}]`);
+      this.isReconnecting = false;
+      this.connect()
+        .then(() => {
+          debug(1, `Successfully reconnected WebSocket [${connId}]`);
+          publishStatusUpdate('register', 'Agent Online - Awaiting provision');
+        })
+        .catch(() => {
+          // Reconnect will be triggered again by close/error events
+        });
+    }, this.reconnectDelay);
+  }
+
   sendMessage(message) {
-    if (this.isConnected && this.client) {
+    if (this.isConnected && this.client && this.client.readyState === 1) { // readyState 1 = OPEN
       this.client.send(message);
       debug(1, `Sent message on [${this.agentId}]`);
     } else {
-      debug(3, `Cannot send on [${this.agentId}]: WebSocket not connected`);
+      debug(2, `Cannot send on [${this.agentId}]: WebSocket not connected (state: ${this.client?.readyState})`);
+      // Trigger reconnection if not already reconnecting
+      if (!this.isConnecting && !this.isReconnecting) {
+        this.triggerReconnect();
+      }
+    }
+  }
+
+  disconnect() {
+    if (this.reconnectTimeoutId) {
+      clearTimeout(this.reconnectTimeoutId);
+    }
+    if (this.client) {
+      this.client.close();
+      this.isConnected = false;
+      debug(0, 'Disconnected from WebSocket server');
     }
   }
 }
@@ -701,7 +761,10 @@ if (useMQTT) {
   wsClient.connect().then(() => {
     console.log('WebSocket connected');
     publishStatusUpdate('register', 'Agent Online - Awaiting provision');
-  }).catch((err) => console.error(`WebSocket connection failed: ${err.message}`));
+  }).catch((err) => {
+    debug(2, `WebSocket connection failed: ${err.message} - triggering reconnection`);
+    wsClient.triggerReconnect();
+  });
 }
 
 app.get('/', async (req, res) => {
