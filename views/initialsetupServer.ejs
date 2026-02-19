@@ -103,6 +103,7 @@ function noValue(inValue){
     <h1 style="position:relative;top:-40px;">BackupHub Initial Setup</h1>
     <p style="position:relative;top:-45px;">Please provide or change any details for the BackupHub Server Setup</p>
     <form class="col s12" action="/initial-setup-server.html" method="POST">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
       <label for="timezone">Timezone</label>
       <% var timeZones = Intl.supportedValuesOf('timeZone');
       envTZ = process.env.TZ;

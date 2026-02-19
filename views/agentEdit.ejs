@@ -103,6 +103,7 @@
 
       <div class="row">
         <form class="col s12" method="post" action="/agentEdit.html">
+        <input type="hidden" name="_csrf" value="<%= csrf %>">
           <div class="row">
             <div class="input-field col s12">
               <input name="agentnamedisp" disabled value="<%=agent.name%>" id="agentNamedisp" type="text" class="validate">

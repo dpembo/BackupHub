@@ -90,7 +90,7 @@
     <p style="position:relative;top:-45px;">BackupHub communicates with agents via a websocket (default) or an external MQTT sever you must host yourself. 
       (e.g. <a href="https://mosquitto.org">Mosquitto</a>, <a href="https://hub.docker.com/_/eclipse-mosquitto/">Mosquitto Container</a>).  Please enable the External MQTT server option if required, and press "Next" to continue with the setup</p>
     <form class="col s12" action="/initial-setup1.html" method="POST">
-      
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
       <label for="mqttServer">Agent Communication Channel</label>
 
       <p style="display:none">

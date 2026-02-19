@@ -1,5 +1,5 @@
 var version="%%UNDEFINED%%";
-var supportedAgentVersion = "2025.03.30.01";
+var supportedAgentVersion = "2026.02.19.01";
 
 function getVersion(){
     return version

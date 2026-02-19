@@ -238,6 +238,7 @@ function noValue(inValue){
 
       <div >
         <form action="/scheduler.html" method="POST" id="myForm" novalidate>
+          <input type="hidden" name="_csrf" value="<%= csrf %>">
           <input type="hidden" name="index" value="<%=index%>">
           <input type="hidden" name="redir" value="<%=getRedir()%>">
 

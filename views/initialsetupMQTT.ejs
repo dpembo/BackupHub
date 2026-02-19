@@ -89,6 +89,7 @@
     <h1 style="position:relative;top:-40px;">BackupHub Initial Setup</h1>
     <p style="position:relative;top:-45px;">Please install and provide the details for an MQTT server below<br>(e.g. <a href="https://mosquitto.org">Mosquitto</a>, <a href="https://hub.docker.com/_/eclipse-mosquitto/">Mosquitto Container</a>)</p>
     <form class="col s12" action="/initial-setupMQTT.html" method="POST">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
       <label for="mqttServer">Hostname *</label>
       <input id="mqttServer" type="text" name="mqttServer" value="<%=hostName%>" required>
       <label for="mqttPort">Port *</label>

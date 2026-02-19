@@ -68,6 +68,7 @@
     <h1>Reset Password</h1>
     <p>Please provide a new password to reset your account, and then press 'Reset Password'</p>
     <form class="col s12" action="/reset/<%= token %>/<%=user%>" method="POST">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
       <label for="username">New Password</label>
       <input id="password" type="password" name="password" required>
       <button class="btn waves-effect waves-light orange" style="line-height:0px" type="submit">Reset Password</button>

@@ -49,6 +49,7 @@ confighandler = require("./configuration.js");
 var express = require('express');
 var session = require('express-session');
 var cookieParser = require('cookie-parser');
+var lusca = require('lusca');
 var querystring = require('querystring');
 var https = require('https');
 var bodyParser = require('body-parser');
@@ -442,6 +443,53 @@ app.use(session({
 
 app.use(bodyParser.urlencoded({ extended: false }));
 
+// Generate CSRF tokens for all requests but don't validate
+app.use((req, res, next) => {
+  // Generate a CSRF token if not already present
+  if (!req.csrfToken) {
+    const crypto = require('crypto');
+    req.csrfToken = () => {
+      if (!req.session.csrfToken) {
+        req.session.csrfToken = crypto.randomBytes(32).toString('hex');
+      }
+      return req.session.csrfToken;
+    };
+  }
+  next();
+});
+
+// CSRF validation middleware for form-based authenticated routes
+const validateCsrf = (req, res, next) => {
+  // Skip validation for public routes
+  const publicRoutes = ['/login.html', '/register.html', '/forgot.html', '/saveScript'];
+  if (publicRoutes.includes(req.path) || req.path.startsWith('/reset')) {
+    logger.debug(`[CSRF] Skipping validation for public route: ${req.path}`);
+    return next();
+  }
+  
+  // Skip validation for REST APIs
+  if (req.path.startsWith('/rest')) {
+    logger.debug(`[CSRF] Skipping validation for REST API: ${req.method} ${req.path}`);
+    return next();
+  }
+
+  // Get token from request body or headers
+  const tokenFromRequest = req.body._csrf || req.headers['x-csrf-token'];
+  const tokenFromSession = req.session.csrfToken;
+
+  logger.debug(`[CSRF] Validating token for ${req.method} ${req.path}`);
+  logger.debug(`[CSRF] Token from request: ${tokenFromRequest ? 'present' : 'missing'}`);
+  logger.debug(`[CSRF] Token from session: ${tokenFromSession ? 'present' : 'missing'}`);
+
+  if (!tokenFromSession || !tokenFromRequest || tokenFromSession !== tokenFromRequest) {
+    logger.warn(`[CSRF] CSRF token validation FAILED for ${req.method} ${req.path}`);
+    return res.status(403).json({ error: 'CSRF token validation failed' });
+  }
+
+  logger.debug(`[CSRF] CSRF token validation PASSED for ${req.method} ${req.path}`);
+  next();
+};
+
 // Routes
 // Login route: Redirect to registration if no user is registered
 app.get('/login.html', async (req, res) => {
@@ -455,6 +503,7 @@ app.get('/login.html', async (req, res) => {
       res.render('login',{
         version: version,
         redirect: redirect,
+        csrf: req.csrfToken(),
       });
     } else {
       logger.warn("no user exists - switching to first time register");
@@ -513,7 +562,7 @@ app.get('/register.html', async (req, res) => {
     var userCount = await User.getUserCount();
     logger.debug("User Count:" +userCount );
     if (userCount<=0) {
-      res.render('register');
+      res.render('register', { csrf: req.csrfToken() });
     } else {
       logger.warn("Register accessed when user already exists");
       res.redirect('/?message=Register+is+disabled');
@@ -524,7 +573,7 @@ app.get('/register.html', async (req, res) => {
   }
 });
 
-app.post('/register.html', async (req, res) => {
+app.post('/register.html', validateCsrf, async (req, res) => {
   try {
     if (await User.getUserCount()<=0) {
       const user = await User.createUser(req.body.username, req.body.email, req.body.password );
@@ -541,10 +590,10 @@ app.post('/register.html', async (req, res) => {
 // Forgot password route: displays forgot password form
 app.get('/forgot.html', (req, res) => {
   if(serverConfig.server.hostname=="UNDEFINED")serverConfig.server.hostname = req.hostname;
-  res.render('forgot');
+  res.render('forgot', { csrf: req.csrfToken() });
 });
 
-app.post('/forgot.html', async (req, res) => {
+app.post('/forgot.html', validateCsrf, async (req, res) => {
   try {
     const token = await User.generateResetToken(req.body.username);
     var message="Please+check+your+email+for+a+one+time+password+reset+link+to+continue";
@@ -560,7 +609,7 @@ app.get('/reset/:token/:user', async (req, res) => {
   try {
     const tokenValid = await User.isResetTokenValid(req.params.user,req.params.token);
     if (tokenValid !== null) {
-      res.render('reset', { token: req.params.token, user: req.params.user });
+      res.render('reset', { token: req.params.token, user: req.params.user, csrf: req.csrfToken() });
     } else {
       res.redirect('/forgot.html?message=Your+one+time+reset+token+has+already+been+used+or+timed+out.+Please+reset+your+passsword+again');
     }
@@ -570,7 +619,7 @@ app.get('/reset/:token/:user', async (req, res) => {
   }
 });
 
-app.post('/reset/:token/:user', async (req, res) => {
+app.post('/reset/:token/:user', validateCsrf, async (req, res) => {
   try {
     const tokenValid = await User.isResetTokenValid(req.params.user, req.params.token);
     if (tokenValid !== null) {
@@ -590,7 +639,7 @@ app.post('/reset/:token/:user', async (req, res) => {
 });
 
 
-app.post('/login.html', async (req, res) => {
+app.post('/login.html', validateCsrf, async (req, res) => {
   
   const { username, password, redirect } = req.body;
   const ipAddress = req.headers['x-forwarded-for'] || req.ip;
@@ -649,6 +698,7 @@ app.get('/initial-setup.html',User.isAuthenticated, async (req, res) => {
   res.render('initialsetup1',{
     version: version,
     serverConfig: serverConfig,
+    csrf: req.csrfToken(),
   }); 
 });
 
@@ -667,7 +717,8 @@ app.get('/initial-setup-mqtt.html',User.isAuthenticated, async (req, res) => {
   res.render('initialsetupMQTT',{
     version: version,
     serverConfig: serverConfig,
-    hostName: hostName
+    hostName: hostName,
+    csrf: req.csrfToken(),
   }); 
 });
 
@@ -685,7 +736,8 @@ app.get('/initial-setup-welcome.html',User.isAuthenticated, async (req, res) => 
   res.render('initialsetupWelcome',{
     version: version,
     serverConfig: serverConfig,
-    hostName: hostName
+    hostName: hostName,
+    csrf: req.csrfToken(),
   }); 
 });
 
@@ -699,6 +751,7 @@ app.get('/initial-setup-complete.html',User.isAuthenticated, async (req, res) =>
   res.render('initialsetupComplete',{
     version: version,
     serverConfig: serverConfig,
+    csrf: req.csrfToken(),
   }); 
 });
 
@@ -715,11 +768,12 @@ app.get('/initial-setup-server.html',User.isAuthenticated, async (req, res) => {
   res.render('initialsetupServer',{
     version: version,
     serverConfig: serverConfig,
-    hostName: hostName
+    hostName: hostName,
+    csrf: req.csrfToken(),
   }); 
 });
 
-app.post('/initial-setup-server.html',User.isAuthenticated, async (req, res) => {
+app.post('/initial-setup-server.html', validateCsrf, User.isAuthenticated, async (req, res) => {
   logger.debug("POST for initial-setup-server.html");
   const user = req.session.user;
   if (!user) {
@@ -744,7 +798,7 @@ app.post('/initial-setup-server.html',User.isAuthenticated, async (req, res) => 
 
 
 
-app.post('/initial-setup1.html',User.isAuthenticated, async (req, res) => {
+app.post('/initial-setup1.html', validateCsrf, User.isAuthenticated, async (req, res) => {
   logger.debug("POST for initial-setup1.html");
   const user = req.session.user;
   if (!user) {
@@ -778,7 +832,7 @@ app.post('/initial-setup1.html',User.isAuthenticated, async (req, res) => {
 });
 
 
-app.post('/initial-setupMQTT.html',User.isAuthenticated, async (req, res) => {
+app.post('/initial-setupMQTT.html', validateCsrf, User.isAuthenticated, async (req, res) => {
   const user = req.session.user;
   if (!user) {
     return res.redirect('/register.html?not+authenticated');
@@ -807,7 +861,7 @@ app.post('/initial-setupMQTT.html',User.isAuthenticated, async (req, res) => {
     }
 });
 
-app.post('/settings.html',User.isAuthenticated, async (req, res) => {
+app.post('/settings.html', validateCsrf, User.isAuthenticated, async (req, res) => {
   const user = req.session.user;
   if (!user) {
     return res.redirect('/register.html?not+authenticated');
@@ -905,7 +959,7 @@ app.get('/settings.html',User.isAuthenticated, async (req, res) => {
   if (!user) {
     return res.redirect('/register.html');
   }
-  res.render('settings.ejs', { serverConfig, user });
+  res.render('settings.ejs', { serverConfig, user, csrf: req.csrfToken() });
 });
 
 
@@ -1028,7 +1082,7 @@ app.get('/rest/mqtt/reconnect', User.isAuthenticated, async (req, res) => {
 app.get('/profile.html',User.isAuthenticated, async (req, res) => {
   const user = req.session.user;
   if (!user) return res.redirect('/register.html');
-  res.render('profile.ejs', { user });
+  res.render('profile.ejs', { user, csrf: req.csrfToken() });
 });
 
 app.get('/about.html',User.isAuthenticated, async (req, res) => {
@@ -1038,7 +1092,8 @@ app.get('/about.html',User.isAuthenticated, async (req, res) => {
 
   res.render('about.ejs', { 
     user: User,
-    version: version
+    version: version,
+    csrf: req.csrfToken(),
    });
   
 });
@@ -1066,6 +1121,7 @@ app.get('/runList/data',User.isAuthenticated, (req, res) => {
     res.render('runningListData',{
       runningList: runningList,
       schedules: schedules,
+      csrf: req.csrfToken(),
     });
   }
   else
@@ -1156,6 +1212,7 @@ app.get('/historyList/data',User.isAuthenticated, (req, res) => {
       sort: sort,
       order: order,  
       refresh: refresh,
+      csrf: req.csrfToken(),
     });
   }
   else
@@ -1179,6 +1236,7 @@ app.get('/history.html',User.isAuthenticated, (req, res) => {
     refresh: refresh,
     sort:sort,
     order:order,
+    csrf: req.csrfToken(),
   });
 });
 
@@ -1282,7 +1340,8 @@ app.get('/scriptEditor.html',User.isAuthenticated, (req, res) => {
   res.render('scripteditor',{
     scripts: scripts,
     scriptsDesc: scriptsDesc,
-    templates: templateData
+    templates: templateData,
+    csrf: req.csrfToken(),
   });
 });
 
@@ -1323,7 +1382,8 @@ app.get('/scheduler.html',User.isAuthenticated, (req, res) => {
     agents: agents.getDict(),
     schedule: scheduleItem,
     copy:copy,
-    index:index,  
+    index:index,
+    csrf: req.csrfToken(),  
     redir:redir,
     type:type,
     day:day,
@@ -1409,6 +1469,7 @@ app.get('/scheduleInfo.html',User.isAuthenticated, async(req, res) => {
     index:index,
     redir:redir,
     stats:stats,
+    csrf: req.csrfToken(),
     log:log,
     refresh,refresh,
     hist:hist,
@@ -1417,7 +1478,7 @@ app.get('/scheduleInfo.html',User.isAuthenticated, async(req, res) => {
 
 
 
-app.post('/scheduler.html',User.isAuthenticated, (req, res) => {
+app.post('/scheduler.html', validateCsrf, User.isAuthenticated, (req, res) => {
   
   let { jobName, colour,  description, scheduleType, scheduleTime,dayOfWeek,
     dayInMonth,agentselect, agentcommand,commandparams,index,redir,icon } = req.body;
@@ -1456,7 +1517,8 @@ app.get('/scheduleList.html',User.isAuthenticated, (req, res) => {
   console.time('render');
   res.render('scheduleList', {
     schedules: processedSchedules,
-    hist:hist, 
+    hist:hist,
+    csrf: req.csrfToken(), 
   });
   console.timeEnd('render');
 });
@@ -1470,6 +1532,7 @@ app.get('/scheduleListCalendar.html',User.isAuthenticated, (req, res) => {
     schedules: schedules,
     inViewType: viewType,
     inDate: inDate,
+    csrf: req.csrfToken(),
   });
 });
 
@@ -1496,10 +1559,11 @@ app.get('/edit/:index',User.isAuthenticated, (req, res) => {
     index,
     scripts: scripts,
     agents: agents.getDict(), 
+    csrf: req.csrfToken(),
   });
 });
 
-app.post('/edit/:index',User.isAuthenticated, (req, res) => {
+app.post('/edit/:index', validateCsrf, User.isAuthenticated, (req, res) => {
   const index = req.params.index;
   const schedules = scheduler.getSchedules();
   const schedule = schedules[index];
@@ -1667,6 +1731,7 @@ app.get('/agentEdit.html',User.isAuthenticated, (request, response) => {
     name: 'Control/AgentEdit',
     agent: agentObj,
     scripts: scripts,
+    csrf: request.csrfToken(),
   });
 });
 
@@ -1678,6 +1743,7 @@ app.get('/agentregister.html',User.isAuthenticated, (request, response) => {
     name: 'Control/AgentRegister',
     agent: agentObj,
     scripts: scripts,
+    csrf: request.csrfToken(),
   });
 });
 
@@ -1730,7 +1796,7 @@ app.get('/rest/eta',User.isAuthenticated, (request, response) => {
 var logsStr = "";
 
 
-app.post('/agent-submit.html',User.isAuthenticated, (req, res) => {
+app.post('/agent-submit.html', validateCsrf, User.isAuthenticated, (req, res) => {
   //Get the form data
   
   var name = req.body.agentname;
@@ -1743,7 +1809,7 @@ app.post('/agent-submit.html',User.isAuthenticated, (req, res) => {
 
 });
 
-app.post('/agentEdit.html',User.isAuthenticated, (req, res) => {
+app.post('/agentEdit.html', validateCsrf, User.isAuthenticated, (req, res) => {
   //Get the form data
   
   var name = req.body.agentname;

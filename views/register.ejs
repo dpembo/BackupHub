@@ -84,6 +84,7 @@
     <h1>BackupHub Register</h1>
     <p>No user is regiestered.<br>Please create a user profile for access</p>
     <form class="col s12" action="/register.html" method="POST">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
       <label for="username">Username</label>
       <input id="username" type="text" name="username" required>
       <label for="email">Email</label>

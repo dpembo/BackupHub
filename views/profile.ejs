@@ -54,6 +54,7 @@ function outputArray(inArray)
             
     <div class="row">
       <form class="col s12" action="/reset  /<%=user%>" method="POST">
+        <input type="hidden" name="_csrf" value="<%= csrf %>">
         <div class="row">
           <div class="input-field col s12">
             <input id="username" type="text" name="username" value="<%=user.username%>" readonly>
