@@ -704,7 +704,7 @@ app.get('/initial-setup.html',User.isAuthenticated, async (req, res) => {
 
 
 
-//Initial setup MWQTT
+//Initial setup MQTT
 app.get('/initial-setup-mqtt.html',User.isAuthenticated, async (req, res) => {
   const user = req.session.user;
   if (!user) {

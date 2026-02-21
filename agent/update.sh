@@ -101,8 +101,21 @@ fi
 # Get the current version from version.js in the script's directory
 current_version=$(grep -oP '(?<=var version=)[^;]+' "$destination/version.js" | tr -d '"')
 
+# Determine protocol and port string based on port number
+if [ "$port" = "443" ] || [ "$port" = "8443" ]; then
+  protocol="https"
+  if [ "$port" = "443" ]; then
+    port_string=""
+  else
+    port_string=":$port"
+  fi
+else
+  protocol="http"
+  port_string=":$port"
+fi
+
 # Download and untar the file into the temporary directory
-wget -O - "http://$host:$port/agent/agent.tar" | tar -xf - -C "$temp_dir"
+wget -O - "$protocol://$host$port_string/agent/agent.tar" | tar -xf - -C "$temp_dir"
 
 # Get the new version from the extracted version.js file
 new_version=$(grep -oP '(?<=var version=)[^;]+' "$temp_dir/version.js" | tr -d '"')
