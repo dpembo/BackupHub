@@ -12,7 +12,7 @@ function init() {
 async function getData() {
     try {
         logger.debug("Getting history item: " + DBKEY);
-        var obj = await db.simpleGetData(DBKEY);
+        var obj = await db.getData(DBKEY);
         if (obj !== undefined && obj !== null) historyItems = obj;
         //logger.debug("HISTORY: \n " + JSON.stringify(obj));
     }
@@ -34,16 +34,14 @@ function add(item) {
     updateDb();
 }
 
-function updateDb() {
+async function updateDb() {
     logger.info("Updating History Records");
-    //this.saveHistory();
-    db.putData(DBKEY, historyItems, (err, result) => {
-        if (err) {
-            logger.error(`unable to add history items [${DBKEY}] to DB`, err);
-        } else {
-            logger.debug(`History Data items created successfully`);
-        }
-    });
+    try {
+        await db.putData(DBKEY, historyItems);
+        logger.debug(`History Data items updated successfully`);
+    } catch (err) {
+        logger.error(`unable to update history items [${DBKEY}] to DB`, err);
+    }
 }
 
 function searchItemWithName(searchTerm)

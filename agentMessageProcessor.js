@@ -161,7 +161,7 @@ function processMessage(topic, message,protocol) {
       data+=obj.data;
       try{
         logger.debug(``)
-        resp = db.simplePutData(key,data);
+        resp = await db.simplePutData(key,data);
         logger.debug(`Data upadated successfully Key [${key}], Response [${resp}], Data \n${data}`);
       }
       catch (error){

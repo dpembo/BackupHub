@@ -331,7 +331,9 @@ function runUpdateJob(agentId,inCommandParams) {
   var jobName = "||INTERNAL||Update " + agentId;
   var description = "Update Agent"
   var agent = agents.getAgent(agentId);
-  db.deleteData(agentId + "_" + jobName + "_log",db.callback);
+  db.deleteData(agentId + "_" + jobName + "_log").catch(err => 
+    logger.debug(`No log entry to delete for job [${jobName}]`)
+  );
 
   if(agent.status!="online")
   {
@@ -366,7 +368,9 @@ function runJob(jobName,isManual,inData) {
       if(serverConfig.server.jobFailEnabled=="true")notifier.sendNotification(`Unable to execute job [${jobName}]`,message,"WARNING",`/scheduler.html?jobname=${jobName}`);
       return "error";
     }
-    db.deleteData(schedItem.agent + "_" + jobName + "_log",db.callback);
+    db.deleteData(schedItem.agent + "_" + jobName + "_log").catch(err => 
+      logger.debug(`No log entry to delete for job [${jobName}]`)
+    );
     
     if(agent.status!="online")
     {

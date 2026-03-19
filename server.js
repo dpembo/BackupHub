@@ -154,7 +154,11 @@ if(serverConfig.server.clearData=="true"){
   logger.warn("!!!!!!!!!!!!!!!!!!!!!!!!!");
   logger.warn("!! CLEARING DATA STORE !!");
   logger.warn("!!!!!!!!!!!!!!!!!!!!!!!!!");
-  db.clear(db.callback);
+  db.clearData().then(() => {
+    logger.warn("Data store cleared successfully.");
+  }).catch(err => {
+    logger.error("Error clearing data store:", err);
+  });
 }
 
 //------------------------------------------------------------------
