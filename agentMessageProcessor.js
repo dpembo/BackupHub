@@ -49,7 +49,7 @@ function processMessage(topic, message,protocol) {
         logger.debug("PONG RECEIVED: " + obj.status);
         logger.debug("AGENT STATUS: " + agents.getAgent(obj.name).status);
         logger.debug("--------------------------------------");
-        agentStats.add(obj.name,obj.data);
+        agentStats.set(obj.name,obj.data);
         logger.debug("--------------------------------------");
         if (agents.getAgent(obj.name).status != "running") {
           agents.updateAgentStatus(obj.name, "online", "Ping response returned",null,null,null,message,protocol);

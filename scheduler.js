@@ -6,43 +6,7 @@ var mqttCommand_topic;
 
 const fs = require('fs');
 const path = require('path');
-
-function displaySecs(secs) {
-    var ret;
-    //Secs
-    if (secs < 300) ret = secs + " secs";
-  
-    if (secs >= 300 && secs < 7200) {
-      //Mins
-      var mins = Math.floor(secs / 60);
-      secs = secs % 60;
-  
-      ret = mins + " mins ";
-  
-    }
-    if (secs >= 7200 && secs < 86400) {
-      //hours
-      var mins = Math.floor(secs / 60);
-      var secs = secs % 60;
-      var hours = Math.floor(mins / 60);
-      mins = mins % 60;
-      ret = hours + "h " + mins + " mins";
-    }
-  
-    if (secs >= 86400) {
-      var mins = Math.floor(secs / 60);
-      var secs = secs % 60;
-      var hours = Math.floor(mins / 60);
-      var days = Math.floor(hours / 24);
-      hours = hours - (days * 24);
-      //hours = days %24;
-      mins = mins % 60;
-      ret = days + " days " + hours + "h ";
-  
-    }
-  
-    return ret;
-  }
+const dateTimeUtils = require('./dateTimeUtils.js');
 
 function checkExecutePermissionCapability(directoryPath) {
   try {
@@ -290,7 +254,7 @@ function getNextRunDate(schedule) {
     if (future === true) delta = time - nowDate;
     else delta = nowDate - time;
     delta = delta / 1000;
-    const formattedDelta = displaySecs(delta);
+    const formattedDelta = dateTimeUtils.displaySecs(delta);
 
     if(addDelta!==undefined && addDelta == false ) return `${formattedDate}`;
     else return `${formattedDate} (${formattedDelta})`;

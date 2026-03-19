@@ -1,5 +1,4 @@
-const HashMap = require("./HashMap.js");
-var jobs = new HashMap();
+var jobs = new Map();
 var serverConfig;
 var THRESHOLD_COOLDOWN = 60 * 60 * 1000; // 60 minutes in milliseconds
 
@@ -9,7 +8,7 @@ function init(config){
 }
 function empty() {
     jobs = undefined;
-    jobs = new HashMap();
+    jobs = new Map();
 }
 
 function addJob(jobname, thresholdType) {
@@ -21,7 +20,7 @@ function addJob(jobname, thresholdType) {
     job.type = thresholdType;
     job.lastRun = null; // Initialize lastRun property
     var agent = scheduleItem.agent;
-    jobs.add(agent + "_" + jobname, job);
+    jobs.set(agent + "_" + jobname, job);
 }
 
 function checkExecuteThresholdJob(agent, message) {
@@ -30,8 +29,9 @@ function checkExecuteThresholdJob(agent, message) {
     var messObj = JSON.parse(message);
     var data = JSON.parse(messObj.data);
     
-    for (var i = 0; i < jobs.keys().length; i++) {
-        var key = jobs.keys()[i];
+    const jobKeys = Array.from(jobs.keys());
+    for (var i = 0; i < jobKeys.length; i++) {
+        var key = jobKeys[i];
         if (key.indexOf(agent + "_") === 0) {
             let job = jobs.get(key);
             let jobName = job.name;

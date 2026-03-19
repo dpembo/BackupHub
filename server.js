@@ -101,9 +101,20 @@ webSocketServer = require("./communications/wsServerTransport.js");
 webSocketServer.init();
 
 
-const HashMap = require("./HashMap.js");
-agentStats = new HashMap();
-wsClients = new HashMap();
+agentStats = new Map();
+wsClients = new Map();
+
+// Helper function to find a WebSocket client by key prefix (startsWith search)
+function findClientByPrefix(prefix) {
+  for (const [connId, client] of wsClients.entries()) {
+    if (connId.startsWith(prefix)) {
+      logger.debug(`Found client connection ID starting with [${prefix}]: [${connId}]`);
+      return client;
+    }
+  }
+  logger.debug(`No client connection ID found starting with [${prefix}]`);
+  return undefined;
+}
 
 const pingInterval = 60;
 const connTimeoutInterval = 180;
@@ -283,43 +294,6 @@ function execShellCommand(cmd) {
   return code;
 }
 
-function displaySecs(secs) {
-  var ret;
-  //Secs
-  if (secs < 300) ret = secs + " secs";
-
-  if (secs >= 300 && secs < 7200) {
-    //Mins
-    var mins = Math.floor(secs / 60);
-    secs = secs % 60;
-
-    ret = mins + " mins ";
-
-  }
-  if (secs >= 7200 && secs < 86400) {
-    //hours
-    var mins = Math.floor(secs / 60);
-    var secs = secs % 60;
-    var hours = Math.floor(mins / 60);
-    mins = mins % 60;
-    ret = hours + "h " + mins + " mins";
-  }
-
-  if (secs >= 86400) {
-    var mins = Math.floor(secs / 60);
-    var secs = secs % 60;
-    var hours = Math.floor(mins / 60);
-    var days = Math.floor(hours / 24);
-    hours = hours - (days * 24);
-    //hours = days %24;
-    mins = mins % 60;
-    ret = days + " days " + hours + "h ";
-
-  }
-
-  return ret;
-}
-
 //------------------------------------------------------------------
 /**
  * Calculates a time differente beween start time and now
@@ -403,8 +377,8 @@ async function getSchedulerData(index)
   logger.debug("Stats:\n" + stats);
   logger.debug("Log  :\n" + log);
   if(stats!=null){
-    stats.current.etaDisplay = displaySecs(stats.current.eta);
-    stats.etaRollingAvgDisplay = displaySecs(stats.etaRollingAvg);
+    stats.current.etaDisplay = dateTimeUtils.displaySecs(stats.current.eta);
+    stats.etaRollingAvgDisplay = dateTimeUtils.displaySecs(stats.etaRollingAvg);
   }
   else{
     if(stats !== undefined && stats!==null && (stats.etaRollingAvg == undefined || stats.etaRollingAvg ==null)) stats.etaRollingAvg=0;
@@ -419,7 +393,7 @@ async function getSchedulerData(index)
   data.log = log;
   data.hist = {};
   data.hist.histAvgRuntime = hist.getAverageRuntime(schedule.jobName);
-  data.hist.histAvgRuntimeSecs = displaySecs(hist.getAverageRuntime(schedule.jobName));
+  data.hist.histAvgRuntimeSecs = dateTimeUtils.displaySecs(hist.getAverageRuntime(schedule.jobName));
   data.hist.histLastRun = hist.getLastRun(schedule.jobName);
   return data;
 }
@@ -1459,8 +1433,8 @@ app.get('/scheduleInfo.html',User.isAuthenticated, async(req, res) => {
   }
 
   if(stats!=null){
-    stats.current.etaDisplay = displaySecs(stats.current.eta);
-    stats.etaRollingAvgDisplay = displaySecs(stats.etaRollingAvg);
+    stats.current.etaDisplay = dateTimeUtils.displaySecs(stats.current.eta);
+    stats.etaRollingAvgDisplay = dateTimeUtils.displaySecs(stats.etaRollingAvg);
   }
   else{
     if(stats !== undefined && stats!==null && (stats.etaRollingAvg == undefined || stats.etaRollingAvg ==null)) stats.etaRollingAvg=0;
@@ -2118,7 +2092,7 @@ function markOffline()
       {
         logger.warn(`Marking Agent [${key} as Offline`);
         agents.updateAgentStatus(key,"offline","",null,null,null,"");
-        client = wsClients.get(key,true);
+        client = findClientByPrefix(key);
         var connId;
         if(client!==undefined){
           try{ 
@@ -2129,7 +2103,7 @@ function markOffline()
           }
           logger.info(`Evicting dead client connection [${connId}]`);
           try{ 
-            wsClients.remove(connId); 
+            wsClients.delete(connId); 
           } catch (err) {
             logger.debug("Unable to remove: " + connId,err)
           }

@@ -82,5 +82,5 @@ function displaySecs(secs) {
 
 
 module.exports = {
-  convertToTimezone,applyTz,displayFormatDate
+  convertToTimezone,applyTz,displayFormatDate,displaySecs
 };
