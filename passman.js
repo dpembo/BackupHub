@@ -1,17 +1,52 @@
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const algorithm = 'aes-256-cbc';
-var key = process.env.BACKUPHUB_ENCRYPTION_KEY;
-if(key===undefined||key===null||key.length==0){
-  key="CHANGEIT";
-  //console.log("\x1b[33m" + "WARNING: Default master password in use, please change" + "\x1b[0m");
-}
-key = padStringTo256Bits(key);
 
+function initializeEncryptionKey() {
+  let key = process.env.BACKUPHUB_ENCRYPTION_KEY;
+  const keyEnforceLevel = process.env.BACKUPHUB_KEY_ENFORCE || 'warn'; // 'strict', 'warn', or 'silent'
+  
+  if(!key || key.length === 0) {
+    const DEFAULT_KEY = "CHANGEIT";
+    key = DEFAULT_KEY;
+    
+    switch(keyEnforceLevel) {
+      case 'strict':
+        logger.error("═══════════════════════════════════════════════════════════════");
+        logger.error("CRITICAL: Default encryption key in use. Server will not start.");
+        logger.error("═══════════════════════════════════════════════════════════════");
+        logger.error("Set BACKUPHUB_ENCRYPTION_KEY environment variable before starting.");
+        logger.error("This key must match the key configured on all agents.");
+        logger.error("═══════════════════════════════════════════════════════════════");
+        process.exit(1);
+      case 'warn':
+        logger.warn("═══════════════════════════════════════════════════════════════");
+        logger.warn("⚠️  WARNING: Using default encryption key (CHANGEIT)");
+        logger.warn("═══════════════════════════════════════════════════════════════");
+        logger.warn("This key should ONLY be used for development/testing.");
+        logger.warn("For production, set BACKUPHUB_ENCRYPTION_KEY environment variable.");
+        logger.warn("The same key must be set on all agents for communications.");
+        logger.warn("═══════════════════════════════════════════════════════════════");
+        break;
+      case 'silent':
+        logger.debug("Using default encryption key (not recommended for production)");
+        break;
+      default:
+        logger.warn("Unknown BACKUPHUB_KEY_ENFORCE value: " + keyEnforceLevel);
+    }
+  } else {
+    logger.info("Custom encryption key loaded from BACKUPHUB_ENCRYPTION_KEY");
+  }
+  
+  return padStringTo256Bits(key);
+}
+
+var key = initializeEncryptionKey();
 
 function checkKey()
 { 
-  if(key==padStringTo256Bits("CHANGEIT"))logger.warn("WARNING: Default encryption key in use. Please consider changing this before use. This will affect user password hash values, and message validation between hub and agent");
+  // Key validation now done during initialization in initializeEncryptionKey()
+  // This function kept for backwards compatibility
 }
 /**
  * Creates a JWT Token

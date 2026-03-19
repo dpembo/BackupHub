@@ -84,8 +84,7 @@ function removeItemByIndex(index)
         logger.warn("Running item not found for removal");
         return;
     }
-    if(historyItems.length<=1)historyItems=[];
-    else historyItems = historyItems.splice(index, 1);    
+    historyItems.splice(index, 1);    
 }
 
 function removeItem(jobName)

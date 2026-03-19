@@ -236,6 +236,7 @@
       document.getElementById('updateProgress').style.display = "block";
       document.getElementById('updateInfo').style.display = "none";
       document.getElementById("startButton").disabled = "true";
+      document.getElementById("cancelButtonProgress").disabled = "true";
       document.getElementById("progress-desc").innerText = "Update in Progress, Please Wait - ";
       progressInterval = setInterval(() => {
         //alert("in set interval");
@@ -260,7 +261,6 @@
 
     function updateProgressBar() {
       // Update progress bar width and the number of seconds elapsed
-      document.getElementById('cancelButtonProgress').disabled = "disabled";
       const progressBar = document.getElementById('progress-bar');
       const progressText = document.getElementById('progress-text');
 
@@ -268,6 +268,8 @@
       if (secondsElapsed < 120) {
         const time = convertSeconds(120 - secondsElapsed);
         displayText = `${time} remaining`;
+      } else {
+        displayText = '0:00 remaining';
       }
 
       progressBar.style.width = `${progress}%`;

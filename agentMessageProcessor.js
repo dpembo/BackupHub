@@ -63,7 +63,7 @@ function processMessage(topic, message,protocol) {
       }
   
       //Log submission received
-      if (topic = "backup/agent/status" && obj.status == "log_submission" ) {
+      if (obj.status == "log_submission") {
         logger.info("Received Log event");
         //add log to db
         //console.log("Received log event");
@@ -71,7 +71,7 @@ function processMessage(topic, message,protocol) {
       }
   
       //ETA Submission received
-      if (topic = "backup/agent/status" && obj.status == "eta_submission" ) {
+      if (obj.status == "eta_submission") {
         var runTime = obj.eta;
         var runningItm = running.getItemByName(obj.jobName);
         var startTime = runningItm.startTime;
