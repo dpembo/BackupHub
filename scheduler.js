@@ -4,96 +4,122 @@ var schedules = [];
 var mqttClient;
 var mqttCommand_topic;
 
-const fs = require('fs');
+const fs = require('fs').promises;
+const fsSync = require('fs');
 const path = require('path');
 const dateTimeUtils = require('./dateTimeUtils.js');
+const asyncUtils = require('./utils/asyncUtils.js');
+const { handleError, AppError } = require('./utils/errorHandler.js');
 
 function checkExecutePermissionCapability(directoryPath) {
   try {
     // Check if you have write permissions on the directory
-    fs.accessSync(directoryPath, fs.constants.W_OK);
+    fsSync.accessSync(directoryPath, fsSync.constants.W_OK);
 
     // Create a temporary file in the directory
     const tempFileName = '.tmp_permission_test';
     const tempFilePath = path.join(directoryPath, tempFileName);
-    fs.writeFileSync(tempFilePath, 'Temporary file content', 'utf8');
+    fsSync.writeFileSync(tempFilePath, 'Temporary file content', 'utf8');
 
     // Try to set execute permission on the temporary file
-    fs.chmodSync(tempFilePath, '755');
+    fsSync.chmodSync(tempFilePath, '755');
 
     // Clean up by removing the temporary file
-    fs.unlinkSync(tempFilePath);
+    fsSync.unlinkSync(tempFilePath);
 
     logger.info('Confirmed capabilities to set execute permissions on files in execute directory.');
-  } 
-  catch (err) {
-    logger.error('Error:',err);
+  } catch (err) {
+    logger.error('Error:', err);
     logger.error('You do not have capabilities to set execute permissions on files in the directory.');
     process.exit(1);
   }
 }
+// Initialize scheduler
+async function init() {
+  try {
+    checkExecutePermissionCapability("/tmp");
+    await readSchedules();
+    await scheduleJobs();
+    logger.info("Scheduler initialized successfully");
+  } catch (err) {
+    logger.error("Error initializing scheduler:", err.message);
+  }
+}
 
-function readFile(filePath, callback) {
-    fs.readFile(filePath, 'utf8', (err, data) => {
-        if (err) {
-        callback(err, null);
-        } else {
-        callback(null, data);
-        }
-    });
+function publishExecute(agent_id, command, commandParams, jobName, isManual) {
+  logger.info(`Executing Scheduled command on Agent [${agent_id}]`);
+  agentComms.sendCommand(agent_id, mqttTransport.getCommandTopic(), command, commandParams, jobName, undefined, isManual);
+}
+
+// Read schedules from the JSON file
+async function readSchedules() {
+  try {
+    logger.info("Loading Scheduler Data from: " + scheduleFile);
+    const data = await fs.readFile(scheduleFile, 'utf8');
+    schedules = JSON.parse(data);
+    logger.debug(`Loaded ${schedules.length} schedules`);
+  } catch (err) {
+    logger.error('Error reading schedules:', err.message);
+    schedules = [];
+  }
+}
+
+// Write schedules to the JSON file
+async function writeSchedules() {
+  try {
+    logger.info("Writing Schedules to disk");
+    
+    // Ensure data directory exists
+    const dataDir = path.dirname(scheduleFile);
+    if (!fsSync.existsSync(dataDir)) {
+      await fs.mkdir(dataDir, { recursive: true });
+      logger.debug(`Created directory: ${dataDir}`);
+    }
+    
+    await fs.writeFile(scheduleFile, JSON.stringify(schedules, null, 2), 'utf8');
+    logger.debug('Schedules saved successfully');
+    await scheduleJobs();
+  } catch (err) {
+    logger.error('Error writing schedules:', err.message);
+    throw new AppError(`Failed to save schedules: ${err.message}`, 500);
+  }
 }
 
 
-
-function init() {
-  
-  //var inCommand_topic = mqttTransport.getCommandTopic();
-  checkExecutePermissionCapability("/tmp");
-
-  readSchedules();
-  scheduleJobs();
-  
-}
-
-function publishExecute(agent_id,command,commandParams,jobName,isManual){
-    logger.info(`Executing Scheduled command on Agent [${agent_id}]`);
-    //logger.debug(token);
-    //mqttTransport.publishMessage(mqttTransport.getCommandTopic(),token);
-    agentComms.sendCommand(agent_id,mqttTransport.getCommandTopic(),command,commandParams,jobName,undefined,isManual);
-}
-
-
-function deleteSchedule(jobName)
-{
+function deleteSchedule(jobName) {
   logger.info(`Deleting Schedule with job name [${jobName}]`);
-  //find the index
-  var index =-1;
-  for(var i=0;i<schedules.length;i++){
-    if(schedules[i].jobName == jobName){
-      index=i;
+  var index = -1;
+  for (var i = 0; i < schedules.length; i++) {
+    if (schedules[i].jobName == jobName) {
+      index = i;
       break;
     }
   }
   logger.debug(`Found job at index [${index}]`);
-  if(i!=-1)deleteScheduleAtIndex(i);
+  if (index != -1) {
+    return deleteScheduleAtIndex(index);
+  }
+  return Promise.resolve();
 }
 
-function deleteScheduleAtIndex(index)
-{
-  logger.info(`Deleting Schedule with at index [${index}]`);
-  if(index>-1){ 
-
-    var newArr = [];
-    for(var i=0;i<schedules.length;i++){
-      if(i!=index)newArr.push(schedules[i]);
+async function deleteScheduleAtIndex(index) {
+  try {
+    logger.info(`Deleting Schedule at index [${index}]`);
+    if (index > -1) {
+      var newArr = [];
+      for (var i = 0; i < schedules.length; i++) {
+        if (i != index) newArr.push(schedules[i]);
+      }
+      schedules = [];
+      for (var i = 0; i < newArr.length; i++) {
+        schedules.push(newArr[i]);
+      }
+      await writeSchedules();
+      logger.info(`Schedule at index [${index}] deleted successfully`);
     }
-    //console.log(newArr);
-    schedules=[];
-    for(var i=0;i<newArr.length;i++){
-      schedules.push(newArr[i]);
-    }
-    //console.log(schedules);
-    writeSchedules();
+  } catch (err) {
+    logger.error(`Error deleting schedule at index [${index}]:`, err.message);
+    throw err;
   }
 }
 
@@ -135,26 +161,34 @@ function getScheduleObject(jobName, colour,  description, scheduleType, schedule
     return schedule;
 }
 
-function upsertSchedule(index, jobName, colour,  description, scheduleType, scheduleTime,dayOfWeek, dayInMonth,agentselect, agentcommand,commandparams,icon){
-    
-    logger.debug("Upserting Schedule");  
+function upsertSchedule(index, jobName, colour, description, scheduleType, scheduleTime, dayOfWeek, dayInMonth, agentselect, agentcommand, commandparams, icon) {
+  return _upsertScheduleAsync(index, jobName, colour, description, scheduleType, scheduleTime, dayOfWeek, dayInMonth, agentselect, agentcommand, commandparams, icon);
+}
 
-    var schedule = getScheduleObject(jobName, colour,  description, scheduleType, scheduleTime,dayOfWeek, dayInMonth,agentselect, agentcommand,commandparams,icon);
+async function _upsertScheduleAsync(index, jobName, colour, description, scheduleType, scheduleTime, dayOfWeek, dayInMonth, agentselect, agentcommand, commandparams, icon) {
+  try {
+    logger.debug("Upserting Schedule");
+
+    var schedule = getScheduleObject(jobName, colour, description, scheduleType, scheduleTime, dayOfWeek, dayInMonth, agentselect, agentcommand, commandparams, icon);
     logger.info(JSON.stringify(schedule));
     schedule.lastUpdated = new Date().toISOString();
-    if(index===undefined||index===null||index.length<=0||index==-1){
-        logger.info("Index is null");
-        if(schedules===undefined||schedules===null)schedules=[];
-        schedules.push(schedule);
 
-        logger.info("Number of schedules: " + schedules.length);
+    if (index === undefined || index === null || index.length <= 0 || index == -1) {
+      logger.info("Index is null - adding new schedule");
+      if (schedules === undefined || schedules === null) schedules = [];
+      schedules.push(schedule);
+      logger.info("Number of schedules: " + schedules.length);
+    } else {
+      logger.info("Index defined: " + index);
+      schedules[index] = schedule;
     }
-    else
-    {
-        logger.info("index defined: " + index);
-        schedules[index]=schedule;
-    }
-    writeSchedules();
+
+    await writeSchedules();
+    logger.info(`Schedule [${jobName}] upserted successfully`);
+  } catch (err) {
+    logger.error(`Error upserting schedule [${jobName}]:`, err.message);
+    throw err;
+  }
 }
 
 
@@ -163,30 +197,6 @@ function upsertSchedule(index, jobName, colour,  description, scheduleType, sche
     schedules.push(schedule);
     writeSchedules();
 }*/
-
-
-// Read schedules from the JSON file
-function readSchedules() {
-    try {
-        logger.info("Loading Scheduler Data");
-        const data = fs.readFileSync(scheduleFile);
-        schedules = JSON.parse(data);
-    } catch (err) {
-        logger.error('Error reading schedules', err)
-    }
-}
-
-// Write schedules to the JSON file
-function writeSchedules() {
-    try {
-        logger.info("Writing Schedules");
-        fs.writeFileSync(scheduleFile, JSON.stringify(schedules, null, 2));
-        logger.debug('Schedules saved successfully, reloading schedules');
-        scheduleJobs();
-    } catch (err) {
-        logger.error('Error writing schedules:', err);
-    }
-}
 
 function getNextRunDate(schedule) {
     //logger.debug(schedule);
@@ -317,90 +327,109 @@ function runUpdateJob(agentId,inCommandParams) {
 
 
 // Run the job function
-function runJob(jobName,isManual,inData) {
-    if(isManual===undefined){isManual=false;}
-    // Your job function implementation
-    logger.info(`Running job : ${jobName}`);
+async function runJob(jobName, isManual, inData) {
+  try {
+    if (isManual === undefined) { isManual = false; }
+    logger.info(`Running job: ${jobName}`);
     var schedItem = getSchedule(jobName);
-    logger.info(`Description : ${schedItem.description}`);
-    logger.info(`Agent       : ${schedItem.agent}`);
-    logger.info(`Mode        : ${isManual}`);
+    if (!schedItem) {
+      throw new AppError(`Schedule item not found for job: ${jobName}`, 404);
+    }
+
+    logger.info(`Description: ${schedItem.description}`);
+    logger.info(`Agent: ${schedItem.agent}`);
+    logger.info(`Mode: ${isManual}`);
+
     var agent = agents.getAgent(schedItem.agent);
-    if(agent===undefined || agent ===null){
-      var message=`Unable to execute job [${jobName}] agent[${schedItem.agent}] does not exist - please correct this job`;
+    if (agent === undefined || agent === null) {
+      var message = `Unable to execute job [${jobName}] agent[${schedItem.agent}] does not exist - please correct this job`;
       logger.error(message);
-      if(serverConfig.server.jobFailEnabled=="true")notifier.sendNotification(`Unable to execute job [${jobName}]`,message,"WARNING",`/scheduler.html?jobname=${jobName}`);
+      if (serverConfig.server.jobFailEnabled == "true") {
+        notifier.sendNotification(`Unable to execute job [${jobName}]`, message, "WARNING", `/scheduler.html?jobname=${jobName}`);
+      }
       return "error";
     }
-    db.deleteData(schedItem.agent + "_" + jobName + "_log").catch(err => 
-      logger.debug(`No log entry to delete for job [${jobName}]`)
-    );
-    
-    if(agent.status!="online")
-    {
-        var message=`Unable to execute job [${jobName}] agent[${schedItem.agent}] is not in the correct state [${agent.status}]`;
-        var fullMessage=message + "\n\nData:\n" + JSON.stringify(agent);
-        logger.error(message);
-        if(serverConfig.server.jobFailEnabled=="true")notifier.sendNotification(`Unable to execute job [${jobName}]`,message,"WARNING",`/scheduler.html?jobname=${jobName}`);
-        var obj = hist.createHistoryItem(jobName,new Date().toISOString(),9998,0,fullMessage,isManual);
-        hist.add(obj);
-        return "error";
+
+    // Delete old log entry
+    try {
+      await db.deleteData(schedItem.agent + "_" + jobName + "_log");
+    } catch (err) {
+      logger.debug(`No log entry to delete for job [${jobName}]`);
+    }
+
+    if (agent.status != "online") {
+      var message = `Unable to execute job [${jobName}] agent[${schedItem.agent}] is not in the correct state [${agent.status}]`;
+      var fullMessage = message + "\n\nData:\n" + JSON.stringify(agent);
+      logger.error(message);
+      if (serverConfig.server.jobFailEnabled == "true") {
+        notifier.sendNotification(`Unable to execute job [${jobName}]`, message, "WARNING", `/scheduler.html?jobname=${jobName}`);
+      }
+      var obj = hist.createHistoryItem(jobName, new Date().toISOString(), 9998, 0, fullMessage, isManual);
+      hist.add(obj);
+      return "error";
     }
 
     var command = schedItem.command;
     var commandParams = schedItem.commandParams;
-    logger.info(`Command [${command}]`)
-    
-    var content;
-    if(command!==undefined && command!==null && command.length>0)
-    {
-        readFile("./scripts/" + command, (err, data) => {
-            if (err) {
-              logger.error('Error reading file:',err);
-              if(serverConfig.server.jobFailEnabled=="true")notifier.sendNotification(`Error reading backup script for job [${jobName}]`,`${err}`,"ERROR",`/scheduler.html?jobname=${jobName}`);
-            } else {
-              logger.debug('File content:');
-              logger.debug(data);
-    
-              if(inData!==undefined &&inData!==null){commandParams+=inData}; 
-              publishExecute(schedItem.agent,data,commandParams,jobName,isManual);
+    logger.info(`Command [${command}]`);
 
-            }
-          });
+    if (command !== undefined && command !== null && command.length > 0) {
+      try {
+        const scriptPath = "./scripts/" + command;
+        const data = await fs.readFile(scriptPath, 'utf8');
+        logger.debug('Script file content loaded successfully');
+
+        if (inData !== undefined && inData !== null) {
+          commandParams += inData;
+        }
+        publishExecute(schedItem.agent, data, commandParams, jobName, isManual);
+      } catch (err) {
+        logger.error(`Error reading script file for job [${jobName}]:`, err.message);
+        if (serverConfig.server.jobFailEnabled == "true") {
+          notifier.sendNotification(`Error reading backup script for job [${jobName}]`, `${err.message}`, "ERROR", `/scheduler.html?jobname=${jobName}`);
+        }
+        return "error";
+      }
+    } else {
+      publishExecute(schedItem.agent, commandParams, "", jobName, isManual);
     }
-    else{
-      publishExecute(schedItem.agent,commandParams,"",jobName,isManual);
-    }
-  return "ok";
+
+    return "ok";
+  } catch (err) {
+    logger.error(`Error in runJob [${jobName}]:`, err.message);
+    throw err;
+  }
 }
 
 // Manual execution of job
-function manualJobRun(index,jobName){
-    logger.debug('Initiating Manual Run of Job With name [' + jobName + "] and Index [" + index +"]");
-    
-    if (Array.isArray(jobName)) {   	      
+async function manualJobRun(index, jobName) {
+  try {
+    logger.debug('Initiating Manual Run of Job With name [' + jobName + "] and Index [" + index + "]");
+
+    if (Array.isArray(jobName)) {
       logger.error("Error: jobName was an array");
-      return("error");
-    } 
-  
+      return "error";
+    }
+
     logger.debug("passed array check");
-    
-    if (jobName!==undefined && jobName !== null && typeof jobName !== 'string') {
-      logger.error("Error in jobname santization");
-      return("error");
+
+    if (jobName !== undefined && jobName !== null && typeof jobName !== 'string') {
+      logger.error("Error in jobname sanitization");
+      return "error";
     }
 
     logger.debug("passed string check");
 
-    //jobName = getSchedules(index).jobName;	    
-    
-    logger.debug('Requesting Manual Run of:' + jobName);
-    
-    if(index!==undefined && index!==null && index.length>0 )
-    {
+    if (index !== undefined && index !== null && index.length > 0) {
       jobName = getSchedules(index).jobName;
     }
-    return runJob(jobName,"manual");
+
+    logger.debug('Requesting Manual Run of:' + jobName);
+    return await runJob(jobName, "manual");
+  } catch (err) {
+    logger.error(`Error in manualJobRun:`, err.message);
+    throw err;
+  }
 }
 
 
@@ -417,23 +446,21 @@ function manualJobRun(index,jobName){
 │    └──────────────────── minute (0 - 59)
 └───────────────────────── second (0 - 59, OPTIONAL)
 */
-function createScheduleCron(second,minute,hour,dayOfMonth,month,dayOfweek){    
-    return second.toString() + " " + minute.toString() + " " + hour.toString() + " " + dayOfMonth.toString() + " " + month.toString() + " " + dayOfweek.toString();
+function createScheduleCron(second, minute, hour, dayOfMonth, month, dayOfweek) {
+  return second.toString() + " " + minute.toString() + " " + hour.toString() + " " + dayOfMonth.toString() + " " + month.toString() + " " + dayOfweek.toString();
 }
 
-function scheduleJobs(){
-
-  //First clear any jobs so they can be reset
-  // Loop through and cancel all schedules
-
-  thresholdJobs.empty();
-  if(nodeschedule.scheduledJobs!==undefined && nodeschedule.scheduledJobs!==null){
-      
+async function scheduleJobs() {
+  try {
+    logger.debug("Scheduling jobs - clearing existing schedules");
+    
+    // First clear any jobs so they can be reset
+    thresholdJobs.empty();
+    if (nodeschedule.scheduledJobs !== undefined && nodeschedule.scheduledJobs !== null) {
       var jobList = nodeschedule.scheduledJobs;
-      for(jobName in jobList){
-          // Here inside **jobName** you are getting name of each Schedule.
-          var EachJobObject = nodeschedule.scheduledJobs[jobName];
-          logger.debug(`Cancelling Schedule Item [${jobName}]`);
+      for (jobName in jobList) {
+        var EachJobObject = nodeschedule.scheduledJobs[jobName];
+        logger.debug(`Cancelling Schedule Item [${jobName}]`);
           EachJobObject.cancel();
       }
   }
@@ -467,14 +494,21 @@ function scheduleJobs(){
     if (startType == "clock") {
       logger.debug(`Scheduling Job [${jobName}] with schedule [${scheduleCron}]`);
       job = nodeschedule.scheduleJob(scheduleCron, function () {
-        runJob(jobName, "schdeule");
+        runJob(jobName, "schedule").catch(err => 
+          logger.error(`Error in scheduled job [${jobName}]:`, err.message)
+        );
       });
-    }
-    else {
+    } else {
       logger.debug(`Discovered Threshold Job [${jobName}] with schedule [${scheduleType}]`);
-      thresholdJobs.addJob(jobName,scheduleType);
+      thresholdJobs.addJob(jobName, scheduleType);
     }
   });
+  
+  logger.info(`Scheduled ${schedules.length} jobs successfully`);
+} catch (err) {
+  logger.error("Error scheduling jobs:", err.message);
+  throw new AppError(`Failed to schedule jobs: ${err.message}`, 500);
+}
 } 
 
 function isSameDate(date1, date2) {

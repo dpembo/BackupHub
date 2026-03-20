@@ -55,6 +55,8 @@ var https = require('https');
 var bodyParser = require('body-parser');
 
 const User = require('./models/user');
+const { asyncHandler, errorHandlerMiddleware, AppError } = require('./utils/errorHandler.js');
+const asyncUtils = require('./utils/asyncUtils.js');
 dateTimeUtils = require('./dateTimeUtils.js');
 mathUtils = require('./mathUtils.js');
 passman = require('./passman.js');
@@ -189,7 +191,13 @@ const execSync = require('child_process').execSync;
 const { config } = require("process");
 
 agents = require("./agents.js");
-agents.init();
+agents.init()
+  .then(() => {
+    logger.info('Agents initialized successfully');
+  })
+  .catch((error) => {
+    logger.error('Error initializing agents:', error.message);
+  });
 
 const logpath = "/media/net/BackupHOMENAS/backups/";
 const port = serverConfig.server.port;
@@ -470,100 +478,70 @@ const validateCsrf = (req, res, next) => {
 
 // Routes
 // Login route: Redirect to registration if no user is registered
-app.get('/login.html', async (req, res) => {
-  try {
-    const redirect=req.query.redirect;
-    logger.debug("Getting login page");
-    if(serverConfig.server.hostname=="UNDEFINED")serverConfig.server.hostname = req.hostname;
-
-    if(await User.getUserCount()>0){
-      logger.debug("A user is registered");
-      res.render('login',{
-        version: version,
-        redirect: redirect,
-        csrf: req.csrfToken(),
-      });
-    } else {
-      logger.warn("no user exists - switching to first time register");
-      res.redirect('/register.html');
-    }
-  } catch (error) {
-    console.error(error);
-    res.redirect('/');
+app.get('/login.html', asyncHandler(async (req, res) => {
+  const redirect = req.query.redirect;
+  logger.debug("Getting login page");
+  if (serverConfig.server.hostname == "UNDEFINED") {
+    serverConfig.server.hostname = req.hostname;
   }
-});
+
+  const userCount = await User.getUserCount();
+  if (userCount > 0) {
+    logger.debug("A user is registered");
+    res.render('login', {
+      version: version,
+      redirect: redirect,
+      csrf: req.csrfToken(),
+    });
+  } else {
+    logger.warn("no user exists - switching to first time register");
+    res.redirect('/register.html');
+  }
+}));
 
 // Logout route
 app.get('/logout.html', (req, res) => {
-  //req.session.destroy();
-  //res.redirect('/login.html');  
   req.session.destroy(() => {
     res.redirect('/login.html');
   });
 });
 
 
-app.post('/saveScript', express.json(), (req, res) => {
-  //console.log(req.body);
+app.post('/saveScript', express.json(), asyncHandler(async (req, res) => {
   const scriptName = req.body.scriptName.replace(/[^a-zA-Z0-9_.]/g, '');
   const scriptContent = req.body.script;
-  //console.log("SCRIPT NAME:" + scriptName);
-  //console.log("SCRIPT CONTENT" + scriptContent);
   const filePath = `./scripts/${scriptName}`;
 
-  fs.writeFile(filePath, scriptContent, { flag: 'wx' }, (err) => {
-    if (err) {
-      if (err.code === 'EEXIST') {
-        fs.writeFile(filePath, scriptContent, (err) => {
-          if (err) {
-            console.error(err);
-            res.status(500).json({ status: 'error', message: 'Failed to update file.' });
-          } else {
-            //console.log(`File ${scriptName} updated successfully!`);
-            res.json({ status: 'success', message: 'File updated successfully.' });
-          }
-        });
-      } else {
-        console.error(err);
-        res.status(500).json({ status: 'error', message: 'Failed to create file.' });
-      }
-    } else {
-      //console.log(`File ${scriptName} created successfully!`);
-      res.json({ status: 'success', message: 'File created successfully.' });
-    }
-  });
-});
+  try {
+    await asyncUtils.writeFileAsync(filePath, scriptContent);
+    logger.info(`File ${scriptName} saved successfully`);
+    res.json({ status: 'success', message: 'File saved successfully.' });
+  } catch (error) {
+    logger.error(`Error saving script ${scriptName}:`, error.message);
+    throw new AppError(`Failed to save script: ${error.message}`, 500);
+  }
+}));
 
 // Register route: displays registration form if allowed and not already registered
-app.get('/register.html', async (req, res) => {
-  try {
-    var userCount = await User.getUserCount();
-    logger.debug("User Count:" +userCount );
-    if (userCount<=0) {
-      res.render('register', { csrf: req.csrfToken() });
-    } else {
-      logger.warn("Register accessed when user already exists");
-      res.redirect('/?message=Register+is+disabled');
-    }
-  } catch (error) {
-    logger.error("An error occurred in register",error);
-    res.redirect('/?message=An+error+occurred+during+register');
+app.get('/register.html', asyncHandler(async (req, res) => {
+  const userCount = await User.getUserCount();
+  logger.debug("User Count:" + userCount);
+  if (userCount <= 0) {
+    res.render('register', { csrf: req.csrfToken() });
+  } else {
+    logger.warn("Register accessed when user already exists");
+    res.redirect('/?message=Register+is+disabled');
   }
-});
+}));
 
-app.post('/register.html', validateCsrf, async (req, res) => {
-  try {
-    if (await User.getUserCount()<=0) {
-      const user = await User.createUser(req.body.username, req.body.email, req.body.password );
-      res.redirect('/login.html?message=User+Created.+Please+authenticate+with+your+credentials');
-    } else {
-      res.redirect('/?message="Error+occurred+creating+the+user');
-    }
-  } catch (error) {
-    logger.error("An unknown error occurred posting the register",error);
-    res.redirect('/register.html?message="an+unknown+error+occured');
+app.post('/register.html', validateCsrf, asyncHandler(async (req, res) => {
+  if (await User.getUserCount() <= 0) {
+    const user = await User.createUser(req.body.username, req.body.email, req.body.password);
+    res.redirect('/login.html?message=User+Created.+Please+authenticate+with+your+credentials');
+  } else {
+    throw new AppError('User registration is disabled', 400);
   }
-});
+}));
 
 // Forgot password route: displays forgot password form
 app.get('/forgot.html', (req, res) => {
@@ -571,114 +549,97 @@ app.get('/forgot.html', (req, res) => {
   res.render('forgot', { csrf: req.csrfToken() });
 });
 
-app.post('/forgot.html', validateCsrf, async (req, res) => {
-  try {
-    const token = await User.generateResetToken(req.body.username);
-    var message="Please+check+your+email+for+a+one+time+password+reset+link+to+continue";
-    res.redirect('/login.html?message=' + message);
-  } catch (error) {
-    logger.error("An error occurred during forgot process",error);
-    res.redirect('/forgot.html?message=An+error+occurred+trying+to+reset+your+password');
-  }
-});
+app.post('/forgot.html', validateCsrf, asyncHandler(async (req, res) => {
+  const token = await User.generateResetToken(req.body.username);
+  logger.info(`Reset token generated for user: ${req.body.username}`);
+  const message = "Please+check+your+email+for+a+one+time+password+reset+link+to+continue";
+  res.redirect('/login.html?message=' + message);
+}));
 
 // Reset password route: displays reset password form
-app.get('/reset/:token/:user', async (req, res) => {
-  try {
-    const tokenValid = await User.isResetTokenValid(req.params.user,req.params.token);
-    if (tokenValid !== null) {
-      res.render('reset', { token: req.params.token, user: req.params.user, csrf: req.csrfToken() });
-    } else {
-      res.redirect('/forgot.html?message=Your+one+time+reset+token+has+already+been+used+or+timed+out.+Please+reset+your+passsword+again');
-    }
-  } catch (error) {
-    logger.error("An error occurred during reset process",error);
-    res.redirect('/forgot.html?message=An+error+occurred+trying+to+reset+your+password');
+app.get('/reset/:token/:user', asyncHandler(async (req, res) => {
+  const tokenValid = await User.isResetTokenValid(req.params.user, req.params.token);
+  if (tokenValid !== null) {
+    res.render('reset', { token: req.params.token, user: req.params.user, csrf: req.csrfToken() });
+  } else {
+    res.redirect('/forgot.html?message=Your+one+time+reset+token+has+already+been+used+or+timed+out.+Please+reset+your+passsword+again');
   }
-});
+}));
 
-app.post('/reset/:token/:user', validateCsrf, async (req, res) => {
-  try {
-    const tokenValid = await User.isResetTokenValid(req.params.user, req.params.token);
-    if (tokenValid !== null) {
-      const resetSuccessful = await User.resetPassword(req.params.user, req.params.token, req.body.password);
-      if (resetSuccessful) {
-        res.redirect('/login.html?message=Your+password+has+been+reset.+Please+login+with+your+new+credentials');
-      } else {
-        res.redirect(`/reset/${req.params.token}/${req.params.user}?message=Unable+to+reset+the+password`);
-      }
+app.post('/reset/:token/:user', validateCsrf, asyncHandler(async (req, res) => {
+  const tokenValid = await User.isResetTokenValid(req.params.user, req.params.token);
+  if (tokenValid !== null) {
+    const resetSuccessful = await User.resetPassword(req.params.user, req.params.token, req.body.password);
+    if (resetSuccessful) {
+      logger.info(`Password reset successful for user: ${req.params.user}`);
+      res.redirect('/login.html?message=Your+password+has+been+reset.+Please+login+with+your+new+credentials');
     } else {
-      res.redirect('/forgot.html?message=Your+one+time+reset+token+has+already+been+used+or+timed+out.+Please+reset+your+passsword+again');
+      res.redirect(`/reset/${req.params.token}/${req.params.user}?message=Unable+to+reset+the+password`);
     }
-  } catch (error) {
-    logger.error("An error occurred during reset post process",error);
-    res.redirect(`/reset/${req.params.token}/${req.params.user}?message=An+error+occurred+resetting+your+password`);
+  } else {
+    res.redirect('/forgot.html?message=Your+one+time+reset+token+has+already+been+used+or+timed+out.+Please+reset+your+passsword+again');
   }
-});
+}));
 
 
-app.post('/login.html', validateCsrf, async (req, res) => {
-  
+app.post('/login.html', validateCsrf, asyncHandler(async (req, res) => {
   const { username, password, redirect } = req.body;
   const ipAddress = req.headers['x-forwarded-for'] || req.ip;
   logger.info(`Logging in user ${username} from IP: ${ipAddress}`);
 
-  try {
-    const user = await User.getUserByUsername(username.toLowerCase());
-    //console.log(user);
-    if (user) {
-      logger.debug("found user");
-      const passwordMatch = await bcrypt.compare(password, user.password);
-      if (passwordMatch) {
-        logger.debug("passwords match");
-        req.session.user = user;
-        
-        if(serverConfig.server.loginSuccessEnabled=="true")notifier.sendNotification("UserAuthentication",`User Logged in for account ${username} from IP: ${ipAddress}`,"INFORMATION");
-        //Working where to redirect
-        if(serverConfig.websocket_server.port && serverConfig.websocket_server.port !== null && serverConfig.websocket_server.port.length>0)
-        {
-          if(redirect && redirect!==null){
-            logger.debug(`Found redir in url: ${redirect}`);
-            res.redirect(redirect);
-          }
-          else {
-            res.redirect('/');
-          }
-        }
-        else{
-          //MQTT Not connected - go to initial setup
-          res.redirect('/initial-setup-welcome.html');
-
-        }
-
-
-      } else {
-        if(serverConfig.server.loginFailEnabled=="true")notifier.sendNotification("Authentication Failure",`User Login for account ${username} from IP: ${ipAddress} failed.  If this was is unexpected, please change the password immediately`,"WARNING");
-        res.redirect('/login.html?message=Unable+to+login+with+those+credentials');
-
-      }
-    } else {
-      res.redirect('/login.html?message=Unable+to+login+with+those+credentials.+No+user+exists');
-    }
-  } catch (error) {
-    logger.error("An error occurred logged in user",error);
-    res.redirect('/login.html?message=Error&message=' + JSON.stringify(error));
+  const user = await User.getUserByUsername(username.toLowerCase());
+  if (!user) {
+    logger.warn(`Login attempt for non-existent user: ${username}`);
+    throw new AppError('Unable to login with those credentials', 401);
   }
-});
+
+  const passwordMatch = await bcrypt.compare(password, user.password);
+  if (!passwordMatch) {
+    logger.warn(`Failed login attempt for user: ${username} from IP: ${ipAddress}`);
+    if (serverConfig.server.loginFailEnabled == "true") {
+      notifier.sendNotification("Authentication Failure",
+        `User Login for account ${username} from IP: ${ipAddress} failed. If this was unexpected, please change the password immediately`,
+        "WARNING");
+    }
+    throw new AppError('Unable to login with those credentials', 401);
+  }
+
+  logger.debug("passwords match - authentication successful");
+  req.session.user = user;
+
+  if (serverConfig.server.loginSuccessEnabled == "true") {
+    notifier.sendNotification("UserAuthentication",
+      `User Logged in for account ${username} from IP: ${ipAddress}`,
+      "INFORMATION");
+  }
+
+  // Determine redirect location
+  if (serverConfig.websocket_server.port && serverConfig.websocket_server.port !== null && serverConfig.websocket_server.port.length > 0) {
+    if (redirect && redirect !== null) {
+      logger.debug(`Found redirect in url: ${redirect}`);
+      res.redirect(redirect);
+    } else {
+      res.redirect('/');
+    }
+  } else {
+    // MQTT Not connected - go to initial setup
+    res.redirect('/initial-setup-welcome.html');
+  }
+}));
 
 //Initial setup
-app.get('/initial-setup.html',User.isAuthenticated, async (req, res) => {
+app.get('/initial-setup.html', User.isAuthenticated, asyncHandler(async (req, res) => {
   const user = req.session.user;
   if (!user) {
     return res.redirect('/register.html?not+authenticated');
   }
 
-  res.render('initialsetup1',{
+  res.render('initialsetup1', {
     version: version,
     serverConfig: serverConfig,
     csrf: req.csrfToken(),
-  }); 
-});
+  });
+}));
 
 
 
@@ -1514,18 +1475,18 @@ app.get('/scheduleListCalendar.html',User.isAuthenticated, (req, res) => {
   });
 });
 
-app.get('/runSchedule.html',User.isAuthenticated, (req, res) => {
+app.get('/runSchedule.html',User.isAuthenticated, asyncHandler(async (req, res) => {
   var index=req.query.index;
   var jobname=req.query.jobname;
   var redir=req.query.redir;
   //logger.info(`Running Schedule - Index: ${index}, Jobname: ${jobName}, Redir: ${redir}`);
   logger.info(`Running Schedule - Index: ${index ?? 'undefined'}, Jobname: ${jobname ?? 'undefined'}, Redir: ${redir ?? 'undefined'}`);
   if(redir===undefined || redir === null || redir.length<=0)redir="/scheduleInfo.html?index=" + index + "&refresh=3";
-  var status = scheduler.manualJobRun(index,jobname);
+  var status = await scheduler.manualJobRun(index,jobname);
   logger.info(`Status: ${status}`)
   if(status!="ok")redir+="&message=Job+Execution+Failed.";
   res.redirect(redir);
-});
+}));
 
 app.get('/edit/:index',User.isAuthenticated, (req, res) => {
   const index = req.params.index;
@@ -1795,7 +1756,9 @@ app.post('/agentEdit.html', validateCsrf, User.isAuthenticated, (req, res) => {
   var imageurl = req.body.imageurl;
   var agentObj = agents.getAgent(name);
   agentObj.display = description;
-  agents.addObjToAgentStatusDict(agentObj)
+  agents.addObjToAgentStatusDict(agentObj).catch(err => {
+    logger.error(`Failed to update agent [${name}]:`, err.message);
+  });
 
   //agents.registerAgent(name,description,command,imageurl,undefined,description);
   res.redirect("/agentstatus.html");
@@ -2115,6 +2078,11 @@ function markOffline()
   }
 }
 
+// ============================================================================
+// ERROR HANDLING MIDDLEWARE (must be registered last)
+// ============================================================================
+app.use(errorHandlerMiddleware);
+
 //______________________________________________________________________________________________________
 
 var server = app.listen(port, function () {
@@ -2127,7 +2095,14 @@ var server = app.listen(port, function () {
   
   passman.checkKey();
 
-  scheduler.init();
+  scheduler.init()
+    .then(() => {
+      logger.info('Scheduler initialized successfully');
+    })
+    .catch((error) => {
+      logger.error('Error initializing scheduler:', error.message);
+    });
+  
   hist.init();
   //debug.Info("initiatilizing notification data");
   notificationData.init()

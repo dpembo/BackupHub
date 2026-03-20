@@ -67,7 +67,7 @@ function processMessage(topic, message,protocol) {
         logger.info("Received Log event");
         //add log to db
         //console.log("Received log event");
-        updateLogRecord(obj);
+        updateLogRecord(obj).catch(err => logger.error('Failed to update log record:', err.message));
       }
   
       //ETA Submission received
@@ -104,7 +104,9 @@ function processMessage(topic, message,protocol) {
     else {
       //Register an unknown agent
       if (topic == "backup/agent/status" && obj.status == "register") {
-        agents.addObjToAgentStatusDict(obj);
+        agents.addObjToAgentStatusDict(obj).catch(err => {
+          logger.error(`Failed to register unknown agent [${obj.name}]:`, err.message);
+        });
         webSocketBrowser.emitNotification('register', `${message.toString()}`);
       }
   

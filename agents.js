@@ -1,97 +1,76 @@
 //const { clear } = require('console');
 const fs = require('fs');
+const fsPromises = require('fs').promises;
+const path = require('path');
 //const { ignore } = require('nodemon/lib/rules');
 const filePath = './data/agent-config.json';
 //const agentConfig = loadConfigJson(filePath);
-var agentStatusDict={};
+var agentStatusDict = {};
+const { handleError, AppError } = require('./utils/errorHandler.js');
+
+// Debounce timer for config writes (prevents excessive disk writes)
+let configWriteTimer = null;
+const CONFIG_WRITE_DELAY = 50; // ms - batch writes within 50ms
 
 
-function reset()
-{
+function reset() {
   for (const [key, value] of Object.entries(agentStatusDict)) {
-    value.status="offline";
+    value.status = "offline";
   }
-
 }
 
-function init(){
-  logger.info("Loading and Initializing Agent Configuration File");
+async function init() {
   try {
-    var data = fs.readFileSync(filePath, 'utf8')
-  } catch(err) {
-    logger.error("Error getting/reading agent config file",err);
-    return;
-  }
-
-  try {
-    const jsonData = JSON.parse(data);      
+    logger.info("Loading and Initializing Agent Configuration File");
+    const data = await fsPromises.readFile(filePath, 'utf8');
+    const jsonData = JSON.parse(data);
     agentStatusDict = jsonData;
     reset();
+    logger.info(`Loaded ${Object.keys(agentStatusDict).length} agents from configuration`);
   } catch (err) {
-    logger.error('Error parsing JSON:', error); 
+    logger.error("Error initializing agent config:", err.message);
+    agentStatusDict = {};
   }
 }
 
-//@deprecated
-function initAsync(){
-  logger.info("Loading and Initializing Agent Configuration File");
-  fs.readFile(filePath, 'utf8', (err, data) => {
-    if (err) {
-      logger.error("Error getting agent config file",err);
-      return;
-    }
-  
-    try {
-      const jsonData = JSON.parse(data);      
-      agentStatusDict = jsonData;
-      reset();
-      //return jsonData;
-    } catch (error) {
-      logger.error('Error parsing JSON:', error);
-    }
-  });
-  //return undefined;
-}
-
-function deleteAgent(name)
-{
-  logger.info(`Deleting Agent [${name}]`)
+function deleteAgent(name) {
+  logger.info(`Deleting Agent [${name}]`);
   delete agentStatusDict[name];
-  updateConfig();
+  return debouncedUpdateConfig();
 }
 
-
-function registerAgent(name,description,command,imageurl,commsType,display){
+function registerAgent(name, description, command, imageurl, commsType, display) {
   logger.info(`Registering Agent [${name}] Display [${description}]`);
-  updateAgentStatus(name,"online",description,command,undefined,undefined,undefined,commsType,display);
+  updateAgentStatus(name, "online", description, command, undefined, undefined, undefined, commsType, display);
 }
 
-function getDict()
-{
+function getDict() {
   return agentStatusDict;
 }
 
-function addToAgentStatusDict(agentJson) {
-
-  // Parse the JSON string
-  var jsonData = JSON.parse(agentJson);
-  //logger.message("Received: " + agentJson)
-  //logger.message("Received: " + jsonData)
-  logger.warn("Adding AGENT Status: " + agentJson);
-  return addObjToAgentStatusDict(jsonData);
+async function addToAgentStatusDict(agentJson) {
+  try {
+    // Parse the JSON string
+    var jsonData = JSON.parse(agentJson);
+    logger.warn("Adding AGENT Status: " + agentJson);
+    return await addObjToAgentStatusDict(jsonData);
+  } catch (error) {
+    logger.error('Error parsing JSON:', error);
+    throw new AppError(`Failed to parse agent JSON: ${error.message}`, 400);
+  }
 }
 
-function addObjToAgentStatusDict(agentObj) {
+async function addObjToAgentStatusDict(agentObj) {
   try {
-    logger.info("Processing agent [" + agentObj.name + "] status [" +  agentObj.status + "]");  
-    if(agentObj.status=="online")agentObj.isOnline="true";
-    if(agentObj.status=="offline")agentObj.isOnline="false";
-    if(agentObj.isOnline===undefined || agentObj.isOnline===null || agentObj.isOnline.length===0)agentObj.isOnline="UNKNOWN"
+    logger.info("Processing agent [" + agentObj.name + "] status [" + agentObj.status + "]");
+    if (agentObj.status == "online") agentObj.isOnline = "true";
+    if (agentObj.status == "offline") agentObj.isOnline = "false";
+    if (agentObj.isOnline === undefined || agentObj.isOnline === null || agentObj.isOnline.length === 0) agentObj.isOnline = "UNKNOWN"
     agentStatusDict[agentObj.name] = agentObj;
-    updateConfig();
-  } 
-  catch (error) {
-    logger.error('Error parsing JSON:',error);
+    return await debouncedUpdateConfig();
+  } catch (error) {
+    logger.error('Error processing agent object:', error);
+    throw new AppError(`Failed to process agent object: ${error.message}`, 500);
   }
 }
 
@@ -127,7 +106,9 @@ function updateAgentStatus(inAgentName,status,description,command,jobName,dateTi
       break
   }*/
   agentHistory.addStatus(agent.name,date,status,agent.jobName);
-  addObjToAgentStatusDict(agent);
+  addObjToAgentStatusDict(agent).catch(err => {
+    logger.error(`Failed to update agent config after status update for [${agent.name}]:`, err.message);
+  });
   //updateConfig();
 }  
 
@@ -163,34 +144,67 @@ function createAgentObject(name, server, description, command, status, lastStatu
   return agent;
 }
 
-function updateConfig() {
-  const tempFilePath = `${filePath}.tmp`; // Temporary file
-  const backupFilePath = `${filePath}.backup`; // Backup file
-  var agents = [];
-  logger.info("Updating Agent Configuration File");
-
-  for (const [key, value] of Object.entries(agentStatusDict)) {
-    agents.push(value);
-  }
-
-  const updatedConfig = JSON.stringify(agentStatusDict, null, 2); // Convert object to JSON string with indentation
-
+async function updateConfig() {
+  // Use unique temp file to prevent race conditions with concurrent writes
+  const uniqueSuffix = `${Date.now()}.${Math.random().toString(36).substr(2, 9)}`;
+  const tempFilePath = `${filePath}.${uniqueSuffix}.tmp`;
+  const backupFilePath = `${filePath}.backup`;
+  const dataDir = path.dirname(filePath);
+  
   try {
-    // Create a backup of the existing file before overwriting
-    if (fs.existsSync(filePath)) {
-      fs.copyFileSync(filePath, backupFilePath);  // Create a backup
-      logger.debug('Backup created successfully.');
+    logger.debug("Writing Agent Configuration File to disk");
+
+    // Ensure data directory exists
+    if (!fs.existsSync(dataDir)) {
+      await fsPromises.mkdir(dataDir, { recursive: true });
+      logger.debug(`Created directory: ${dataDir}`);
     }
 
-    // Write to a temporary file first
-    fs.writeFileSync(tempFilePath, updatedConfig, 'utf8');
+    const updatedConfig = JSON.stringify(agentStatusDict, null, 2);
+
+    // Create a backup of the existing file before overwriting (using sync for backup)
+    if (fs.existsSync(filePath)) {
+      try {
+        fs.copyFileSync(filePath, backupFilePath);
+        logger.debug('Backup created successfully.');
+      } catch (err) {
+        logger.warn(`Could not create backup: ${err.message}`);
+      }
+    }
+
+    // Write to a temporary file first (unique to prevent race conditions)
+    await fsPromises.writeFile(tempFilePath, updatedConfig, 'utf8');
 
     // Rename the temporary file to the original file path atomically
-    fs.renameSync(tempFilePath, filePath);
-    logger.debug('Config file updated successfully.');
+    await fsPromises.rename(tempFilePath, filePath);
+    logger.info('Agent config file updated successfully.');
   } catch (err) {
-    logger.error('Error updating the config file:', err);
+    logger.error('Error updating the agent config file:', err.message);
+    throw new AppError(`Failed to update agent config: ${err.message}`, 500);
   }
+}
+
+/**
+ * Debounced config write - batches multiple writes within CONFIG_WRITE_DELAY ms
+ * @returns {Promise} Resolves when write completes
+ */
+function debouncedUpdateConfig() {
+  return new Promise((resolve, reject) => {
+    // Clear any pending write timer
+    if (configWriteTimer) {
+      clearTimeout(configWriteTimer);
+    }
+
+    // Set new timer to write after delay
+    configWriteTimer = setTimeout(async () => {
+      try {
+        await updateConfig();
+        resolve();
+      } catch (err) {
+        reject(err);
+      }
+    }, CONFIG_WRITE_DELAY);
+  });
 }
 
 module.exports = { init, getDict, addToAgentStatusDict,addObjToAgentStatusDict, getAgent,searchAgent, registerAgent, deleteAgent, updateAgentStatus,reset};
