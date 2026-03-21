@@ -28,7 +28,12 @@ async function getData(key) {
     logger.debug(`Found item [${key}]`);
     return value;
   } catch (err) {
-    logger.error(`Error fetching key [${key}]: ${err.message}`);
+    // NotFoundError is expected behavior, log at debug level
+    if (err.message && err.message.includes('NotFoundError')) {
+      logger.debug(`Key not found [${key}] (expected if data hasn't been created yet)`);
+    } else {
+      logger.error(`Error fetching key [${key}]: ${err.message}`);
+    }
     throw err;
   }
 }

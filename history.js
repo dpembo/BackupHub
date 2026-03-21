@@ -21,7 +21,12 @@ async function getData() {
         //logger.debug("HISTORY: \n " + JSON.stringify(obj));
     }
     catch (err) {
-        logger.warn("Unable to find history data");
+        // NotFoundError is expected on first startup - don't log as warning
+        if (err.message && err.message.includes('NotFoundError')) {
+            logger.debug("No history items found on startup (expected on first run)");
+        } else {
+            logger.warn("Unable to find history data:", err.message);
+        }
         //logger.warn(JSON.stringify(err));
     }
 }
