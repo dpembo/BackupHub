@@ -1476,12 +1476,53 @@ app.get('/runSchedule.html',User.isAuthenticated, asyncHandler(async (req, res) 
   var index=req.query.index;
   var jobname=req.query.jobname;
   var redir=req.query.redir;
-  //logger.info(`Running Schedule - Index: ${index}, Jobname: ${jobName}, Redir: ${redir}`);
-  logger.info(`Running Schedule - Index: ${index ?? 'undefined'}, Jobname: ${jobname ?? 'undefined'}, Redir: ${redir ?? 'undefined'}`);
+  logger.info(`Running Schedule - Index: ${index ?? 'undefined'}, Jobname: ${jobname ?? 'undefined'}`);
+  
   if(redir===undefined || redir === null || redir.length<=0)redir="/scheduleInfo.html?index=" + index + "&refresh=3";
-  var status = await scheduler.manualJobRun(index,jobname);
-  logger.info(`Status: ${status}`)
-  if(status!="ok")redir+="&message=Job+Execution+Failed.";
+  
+  let errorMessage = null;
+  
+  // Get the schedule - either by index or by jobname
+  const schedules = scheduler.getSchedules();
+  let schedule = null;
+  
+  if (index !== undefined && index !== null) {
+    schedule = schedules[index];
+  }
+  
+  // If not found by index, look up by jobname
+  if (!schedule && jobname) {
+    schedule = scheduler.getSchedule(jobname);
+  }
+  
+  // Check if agent is online before attempting to run
+  if (schedule) {
+    const agent = agents.getAgent(schedule.agent);
+    
+    if (agent) {
+      if (agent.status !== "online") {
+        errorMessage = `Agent '${schedule.agent}' is ${agent.status} - cannot execute job`;
+      }
+    } else {
+      errorMessage = `Agent '${schedule.agent}' does not exist`;
+    }
+  }
+  
+  // Only attempt to run if no pre-check errors
+  if (!errorMessage) {
+    var status = await scheduler.manualJobRun(index,jobname);
+    logger.info(`Job execution status: ${status}`)
+    if(status!="ok") {
+      errorMessage = "Job execution failed";
+    }
+  }
+  
+  if(errorMessage) {
+    logger.info(`Job failed: ${errorMessage}`);
+    const separator = redir.includes('?') ? '&' : '?';
+    const encodedMsg = encodeURIComponent(errorMessage);
+    redir += separator + "message=" + encodedMsg;
+  }
   res.redirect(redir);
 }));
 
