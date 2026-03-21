@@ -1,7 +1,11 @@
 
+const dateTimeUtils = require('./utils/dateTimeUtils.js');
+
 const MAX_HISTORY_ITEMS = 150;
 const DBKEY = "JOB_HISTORY";
 var historyItems = [];
+
+// Note: logger, db, and serverConfig are injected as globals from server.js
 
 /** Initialize  */
 function init() {

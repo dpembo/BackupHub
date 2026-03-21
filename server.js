@@ -163,41 +163,38 @@ if(serverConfig.server.debug=="true"){
 else{
   logger.level="warn";
 }
-if(serverConfig.server.clearData=="true"){
-  logger.warn("!!!!!!!!!!!!!!!!!!!!!!!!!");
-  logger.warn("!! CLEARING DATA STORE !!");
-  logger.warn("!!!!!!!!!!!!!!!!!!!!!!!!!");
-  db.clearData().then(() => {
-    logger.warn("Data store cleared successfully.");
-  }).catch(err => {
-    logger.error("Error clearing data store:", err);
-  });
-}
+// Initialize database and agents asynchronously
+(async () => {
+  try {
+    if(serverConfig.server.clearData=="true"){
+      logger.warn("!!!!!!!!!!!!!!!!!!!!!!!!!");
+      logger.warn("!! CLEARING DATA STORE !!");
+      logger.warn("!!!!!!!!!!!!!!!!!!!!!!!!!");
+      await db.clearData();
+      logger.warn("Data store cleared successfully.");
+    }
 
-//------------------------------------------------------------------
+    //------------------------------------------------------------------
 
-db.initializeDB('./data/data.db');
-User.init('./data/user.db',logger,notifier);
-agentHistory.initializeDB("./data/agentHistory.db");
+    db.initializeDB('./data/data.db');
+    User.init('./data/user.db',logger,notifier);
+    agentHistory.initializeDB("./data/agentHistory.db");
 
-//------------------------------------------------------------------
+    //------------------------------------------------------------------
 
+    mqttDisconnectNotificiationSent=false;
 
+    const execSync = require('child_process').execSync;
+    const { config } = require("process");
 
-
-mqttDisconnectNotificiationSent=false;
-
-const execSync = require('child_process').execSync;
-const { config } = require("process");
-
-agents = require("./agents.js");
-agents.init()
-  .then(() => {
+    agents = require("./agents.js");
+    await agents.init();
     logger.info('Agents initialized successfully');
-  })
-  .catch((error) => {
-    logger.error('Error initializing agents:', error.message);
-  });
+  } catch (error) {
+    logger.error('Error during initialization:', error.message);
+    process.exit(1);
+  }
+})();
 
 const logpath = "/media/net/BackupHOMENAS/backups/";
 const port = serverConfig.server.port;
@@ -1748,21 +1745,22 @@ app.post('/agent-submit.html', validateCsrf, User.isAuthenticated, (req, res) =>
 
 });
 
-app.post('/agentEdit.html', validateCsrf, User.isAuthenticated, (req, res) => {
-  //Get the form data
-  
-  var name = req.body.agentname;
-  var description = req.body.agentdescription;
-  var imageurl = req.body.imageurl;
-  var agentObj = agents.getAgent(name);
-  agentObj.display = description;
-  agents.addObjToAgentStatusDict(agentObj).catch(err => {
-    logger.error(`Failed to update agent [${name}]:`, err.message);
-  });
+app.post('/agentEdit.html', validateCsrf, User.isAuthenticated, async (req, res) => {
+  try {
+    //Get the form data
+    var name = req.body.agentname;
+    var description = req.body.agentdescription;
+    var imageurl = req.body.imageurl;
+    var agentObj = agents.getAgent(name);
+    agentObj.display = description;
+    await agents.addObjToAgentStatusDict(agentObj);
 
-  //agents.registerAgent(name,description,command,imageurl,undefined,description);
-  res.redirect("/agentstatus.html");
-
+    //agents.registerAgent(name,description,command,imageurl,undefined,description);
+    res.redirect("/agentstatus.html");
+  } catch (err) {
+    logger.error(`Failed to update agent [${req.body.agentname}]:`, err.message);
+    res.status(500).send('Error updating agent');
+  }
 });
 
 app.get('/socket.io/socket.io.js', (req, res) => {
@@ -2085,7 +2083,7 @@ app.use(errorHandlerMiddleware);
 
 //______________________________________________________________________________________________________
 
-var server = app.listen(port, function () {
+var server = app.listen(port, async function () {
   var host = server.address().address
   var port = server.address().port
   debug.startBanner(version);
@@ -2093,26 +2091,21 @@ var server = app.listen(port, function () {
   //if(debug.enabled())debug.warn("DEBUG ENABLED");
   logger.info("\x1b[32m----------------------------------------------------------------------------------------------\x1b[0m\n");
   
-  passman.checkKey();
+  try {
+    passman.checkKey();
 
-  scheduler.init()
-    .then(() => {
-      logger.info('Scheduler initialized successfully');
-    })
-    .catch((error) => {
-      logger.error('Error initializing scheduler:', error.message);
-    });
-  
-  hist.init();
-  //debug.Info("initiatilizing notification data");
-  notificationData.init()
-  .then(() => {
+    await scheduler.init();
+    logger.info('Scheduler initialized successfully');
+    
+    hist.init();
+    //debug.Info("initiatilizing notification data");
+    await notificationData.init();
     logger.debug('Initiatilizing notification data completed.');
-  })
-  .catch((error) => {
-    logger.error('Error in initiatilizing notification data:', error);
-  });
-  running.init();
+    
+    await running.init();
+  } catch (error) {
+    logger.error('Error during server startup initialization:', error.message);
+  }
 })
   
 
