@@ -44,6 +44,34 @@ jobs:
           fi
           echo "version=$version" >> $GITHUB_OUTPUT
 
+      - name: Install server dependencies
+        run: npm ci
+
+      - name: Run server tests (with coverage)
+        run: npm run test:coverage
+
+      - name: Upload server coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-coverage
+          path: coverage/
+
+      - name: Install agent dependencies
+        run: |
+          cd agent
+          npm ci
+
+      - name: Run agent tests (with coverage)
+        run: |
+          cd agent
+          npm run test:coverage
+
+      - name: Upload agent coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-coverage
+          path: agent/coverage/
+
       - name: Set version and create agent tar
         run: |
           replace_text() {
