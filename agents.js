@@ -41,7 +41,29 @@ function deleteAgent(name) {
 
 function registerAgent(name, description, command, imageurl, commsType, display) {
   logger.info(`Registering Agent [${name}] Display [${description}]`);
-  updateAgentStatus(name, "online", description, command, undefined, undefined, undefined, commsType, display);
+  
+  // Create the agent if it doesn't exist
+  let agent = getAgent(name);
+  if (agent === undefined) {
+    agent = {
+      name: name,
+      status: 'online',
+      description: description,
+      command: command,
+      commsType: commsType,
+      display: display,
+      lastStatusReport: new Date().toISOString(),
+      isOnline: 'true',
+    };
+    agentStatusDict[name] = agent;
+    // Persist the new agent to config
+    debouncedUpdateConfig().catch(err => {
+      logger.error(`Failed to persist new agent [${name}]:`, err.message);
+    });
+  } else {
+    // Agent exists, update it using the existing function
+    updateAgentStatus(name, "online", description, command, undefined, undefined, undefined, commsType, display);
+  }
 }
 
 function getDict() {

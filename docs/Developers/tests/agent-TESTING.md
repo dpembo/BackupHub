@@ -1,0 +1,3 @@
+# Agent Test Suite Documentation
+
+...existing content from agent/tests/TESTING.md...

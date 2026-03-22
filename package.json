@@ -1,4 +1,26 @@
 {
+    "name": "BackupHub",
+    "version": "1.0.0",
+    "description": "Automated backup management system with scheduling, agent coordination, and job monitoring",
+    "main": "server.js",
+    "scripts": {
+        "start": "node server.js",
+        "test": "jest",
+        "test:verbose": "jest --verbose",
+        "test:detail": "jest --verbose --no-coverage",
+        "test:debug": "jest --verbose --bail --detectOpenHandles",
+        "test:watch": "jest --watch",
+        "test:coverage": "jest --coverage",
+        "dev": "nodemon server.js"
+    },
+    "keywords": [
+        "backup",
+        "scheduling",
+        "automation",
+        "agent"
+    ],
+    "author": "BackupHub Contributors",
+    "license": "MIT",
     "dependencies": {
         "@mdi/js": "^7.4.47",
         "axios": "^1.13.2",
@@ -36,6 +58,7 @@
     },
     "devDependencies": {
         "ejs-lint": "^2.0.0",
+        "jest": "^29.7.0",
         "nodemon": "^3.1.11"
     }
 }

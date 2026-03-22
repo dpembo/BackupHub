@@ -275,7 +275,7 @@ function getSchedules(index){
     {
         for(var i=0;i<schedules.length;i++){
             schedules[i].nextRunDate = displayFormatDate(new Date(getNextRunDate(schedules[i])),true,serverConfig.server.timezone,"YYYY-MM-DDTHH:mm:ss",true); 
-            schedules[i].eta=hist.getAverageRuntime(schedules[i].jobName)/60;
+             schedules[i].eta=hist.getAverageRuntime(schedules[i].jobName)/60;
             schedules[i].lastUpdated = displayFormatDate(new Date(schedules[i].lastUpdated),false,serverConfig.server.timezone,"YYYY-MM-DDTHH:mm:ss",false);
 
             //schedules[i].lastRun = displayFormatDate(new Date(schedules[i].lastRun),false); 
