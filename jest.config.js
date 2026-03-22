@@ -8,6 +8,7 @@ module.exports = {
     'history.js',
     'running.js',
     'db.js',
+    'agent/agent.js',
     'utils/**/*.js',
   ],
   testTimeout: 10000,
