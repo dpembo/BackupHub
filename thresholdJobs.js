@@ -24,7 +24,7 @@ function addJob(jobname, thresholdType) {
 }
 
 function checkExecuteThresholdJob(agent, message) {
-    logger.info(`Checking for Threshold Execution for [${agent}] with message [${message}]`);
+    logger.info(`Checking for Threshold Execution for [${agent}] `);
     logger.debug(`Checking for Threshold Execution with message [${message}]`);
     var messObj = JSON.parse(message);
     var data = JSON.parse(messObj.data);

@@ -589,7 +589,10 @@ app.post('/login.html', validateCsrf, asyncHandler(async (req, res) => {
   const user = await User.getUserByUsername(username.toLowerCase());
   if (!user) {
     logger.warn(`Login attempt for non-existent user: ${username}`);
-    throw new AppError('Unable to login with those credentials', 401);
+    const loginUrl = new URL('/login.html', `${req.protocol}://${req.get('host')}`);
+    loginUrl.searchParams.append('message', 'Invalid username or password');
+    if (redirect) loginUrl.searchParams.append('redirect', redirect);
+    return res.redirect(loginUrl.toString());
   }
 
   const passwordMatch = await bcrypt.compare(password, user.password);
@@ -600,7 +603,10 @@ app.post('/login.html', validateCsrf, asyncHandler(async (req, res) => {
         `User Login for account ${username} from IP: ${ipAddress} failed. If this was unexpected, please change the password immediately`,
         "WARNING");
     }
-    throw new AppError('Unable to login with those credentials', 401);
+    const loginUrl = new URL('/login.html', `${req.protocol}://${req.get('host')}`);
+    loginUrl.searchParams.append('message', 'Invalid username or password');
+    if (redirect) loginUrl.searchParams.append('redirect', redirect);
+    return res.redirect(loginUrl.toString());
   }
 
   logger.debug("passwords match - authentication successful");
