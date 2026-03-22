@@ -1,0 +1,3 @@
+# Server Test Suite Documentation
+
+...existing content from tests/TESTING.md...

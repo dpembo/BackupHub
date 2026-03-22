@@ -1,11 +1,12 @@
 name: Build and Attest Release
 
+
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version number for the Docker image (e.g., v1.0.0)'
-        required: true
+        description: 'Version number for the Docker image (e.g., 2026.03.22.01) — leave blank for auto-versioning'
+        required: false
         type: string
 
 # Add this permissions block
@@ -19,9 +20,57 @@ jobs:
   build-and-attest:
     runs-on: ubuntu-latest
 
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Set version (auto or manual)
+        id: set_version
+        run: |
+          set -e
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            version="${{ github.event.inputs.version }}"
+            echo "Manual version input: $version"
+          else
+            echo "No manual version provided, attempting auto-versioning..."
+            chmod +x .github/workflows/_get-version.sh
+            version=$(.github/workflows/_get-version.sh "${{ secrets.GITHUB_TOKEN }}")
+            if [ -z "$version" ]; then
+              echo "Auto-versioning failed, please provide a version manually."
+              exit 1
+            fi
+            echo "Auto-generated version: $version"
+          fi
+          echo "version=$version" >> $GITHUB_OUTPUT
+
+      - name: Install server dependencies
+        run: npm ci
+
+      - name: Run server tests (with coverage)
+        run: npm run test:coverage
+
+      - name: Upload server coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-coverage
+          path: coverage/
+
+      - name: Install agent dependencies
+        run: |
+          cd agent
+          npm ci
+
+      - name: Run agent tests (with coverage)
+        run: |
+          cd agent
+          npm run test:coverage
+
+      - name: Upload agent coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-coverage
+          path: agent/coverage/
 
       - name: Set version and create agent tar
         run: |
@@ -40,8 +89,7 @@ jobs:
               sed -i "s/$search_text/$replacement_text/g" "$file_path"
           }
 
-          # Set version from workflow input
-          version="${{ inputs.version }}"
+          version="${{ steps.set_version.outputs.version }}"
           if [ -z "$version" ]; then
               echo "Version is not provided."
               exit 1
@@ -76,10 +124,10 @@ jobs:
           push: true
           tags: |
             ghcr.io/dpembo/backuphub/hub:latest
-            ghcr.io/dpembo/backuphub/hub:${{ inputs.version }}
+            ghcr.io/dpembo/backuphub/hub:${{ steps.set_version.outputs.version }}
           labels: |
             org.opencontainers.image.title=dpembo/backuphub/hub
-            org.opencontainers.image.version=${{ inputs.version }}
+            org.opencontainers.image.version=${{ steps.set_version.outputs.version }}
 
       - name: Attest build provenance for BackupHub/hub
         uses: actions/attest-build-provenance@v2
@@ -98,10 +146,10 @@ jobs:
           push: true
           tags: |
             ghcr.io/dpembo/backuphub/agent:latest
-            ghcr.io/dpembo/backuphub/agent:${{ inputs.version }}
+            ghcr.io/dpembo/backuphub/agent:${{ steps.set_version.outputs.version }}
           labels: |
             org.opencontainers.image.title=dpembo/backuphub/agent
-            org.opencontainers.image.version=${{ inputs.version }}
+            org.opencontainers.image.version=${{ steps.set_version.outputs.version }}
 
       - name: Attest build provenance for backuphub/agent
         uses: actions/attest-build-provenance@v2
@@ -114,6 +162,6 @@ jobs:
       - name: Create Git Release
         shell: bash
         run: |
-          ./gitRelease.sh ${{ vars.ORG_NAME }} ${{ vars.REPO_NAME }} ${{ vars.BRANCH_NAME }} ${{ secrets.PAT_TOKEN }} "v${{inputs.version}}" "v${{inputs.version}}" "BackupHub [v${{inputs.version}}]"
+          ./gitRelease.sh ${{ vars.ORG_NAME }} ${{ vars.REPO_NAME }} ${{ vars.BRANCH_NAME }} ${{ secrets.PAT_TOKEN }} "v${{ steps.set_version.outputs.version }}" "v${{ steps.set_version.outputs.version }}" "BackupHub [v${{ steps.set_version.outputs.version }}]"
 
 

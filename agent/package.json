@@ -4,7 +4,9 @@
   "description": "Agent for BackupHub",
   "main": "agent.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
   },
   "author": "pembo.co.uk",
   "license": "ISC",
@@ -15,5 +17,8 @@
     "mqtt": "^5.14.1",
     "reconnecting-websocket": "^4.4.0",
     "uuid": "^13.0.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
   }
 }

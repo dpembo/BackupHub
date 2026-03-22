@@ -1,10 +1,42 @@
+const dateTimeUtils = require('./utils/dateTimeUtils.js');
+
 const MAX_HISTORY_ITEMS = 50;
 const DBKEY = "JOB_RUNNING";
 var historyItems = [];
 
+// Note: logger and serverConfig are injected as globals from server.js
+
 /** Initialize  */
 async function init() {
-    historyItems=[];    
+    await getData();
+}
+
+async function getData() {
+    try {
+        logger.debug("Getting running items: " + DBKEY);
+        var obj = await db.getData(DBKEY);
+        if (obj !== undefined && obj !== null) historyItems = obj;
+        logger.debug(`Loaded ${historyItems.length} running items from database`);
+    }
+    catch (err) {
+        // NotFoundError is expected on first startup - don't log as warning
+        if (err.message && err.message.includes('NotFoundError')) {
+            logger.debug("No running items found on startup (expected on first run)");
+        } else {
+            logger.warn("Unable to find running data on startup:", err.message);
+        }
+        historyItems = [];
+    }
+}
+
+async function updateDb() {
+    logger.debug("Updating Running Records");
+    try {
+        await db.putData(DBKEY, historyItems);
+        logger.debug(`Running data items updated successfully (${historyItems.length} items)`);
+    } catch (err) {
+        logger.error(`unable to update running items [${DBKEY}] to DB`, err);
+    }
 }
 
 /** Add a new item */
@@ -15,6 +47,7 @@ function add(item) {
         historyItems.shift();
     }
     logger.info("Added running item - new list " + historyItems.length);
+    updateDb();
 }
 
 function createItem(jobName,startTime,mode){
@@ -84,8 +117,8 @@ function removeItemByIndex(index)
         logger.warn("Running item not found for removal");
         return;
     }
-    if(historyItems.length<=1)historyItems=[];
-    else historyItems = historyItems.splice(index, 1);    
+    historyItems.splice(index, 1);
+    updateDb();
 }
 
 function removeItem(jobName)
@@ -99,7 +132,9 @@ function removeItem(jobName)
             break;
         }
     }
-    removeItemByIndex(index);
+    if (index !== -1) {
+        removeItemByIndex(index);
+    }
 }
 
 module.exports = { init, add, getItems,getItemsUsingTZ, getItemByName, searchItemWithName, getItem , createItem, removeItem};

@@ -389,6 +389,16 @@ function displaySecs(secs) {
     document.addEventListener('DOMContentLoaded', function() {
       var elems = document.querySelectorAll('.modal');
       var instances = M.Modal.init(elems, {});
+      
+      // Check for message parameter in URL and display as toast
+      const urlParams = new URLSearchParams(window.location.search);
+      const message = urlParams.get('message');
+      if (message) {
+        M.toast({html: message, displayLength: 5000});
+        // Clean up URL to remove the message parameter
+        const newUrl = window.location.pathname + window.location.hash;
+        window.history.replaceState({}, document.title, newUrl);
+      }
     });
   </script>
   </body>

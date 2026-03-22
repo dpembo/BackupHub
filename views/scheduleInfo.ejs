@@ -13,21 +13,28 @@
       $('select').formSelect();
     });
 
+    let currentScheduleData = null;
+    let progressUpdateIntervalId = null;
+    let socketListenersInitialized = false;
+    const currentURL = window.location.href;
+    
+    // Function to extract the value of a parameter from the URL
+    function getParameterValue(parameterName, url) {
+      const urlObject = new URL(url);
+      const parameterValue = urlObject.searchParams.get(parameterName);
+      return parameterValue;
+    }
+
     function checkScroll(){
       const div = document.getElementById("logView");
       if (div) {
-      div.scrollTop = div.scrollHeight;
+        div.scrollTop = div.scrollHeight;
       }
     }
 
     function expandLog(){
       const div = document.getElementById("logView");
       div.className="card-content logView logmax";
-      document.getElementById("refreshtoggle").checked=null;
-      document.getElementById("refreshval").value="0";
-      var event = new Event('change');
-      document.getElementById('refreshtoggle').dispatchEvent(event);
-      clearInterval(intervalId);
     }
 
     function fetchScheduleData(inId) {
@@ -42,29 +49,19 @@
           return response.json();
         })
         .then(data => {
-          // Handle the JSON data retrieved from the API
-          //console.log('Data from the API:', data);
-          // Perform operations with the retrieved data here
+          currentScheduleData = data;
           updateScreen(data);
+          // Initialize websocket listeners after we have the schedule data
+          initializeWebSocket(inId);
           return data;
         })
         .catch(error => {
-          // Handle any errors that occurred during the fetch
           console.error('There was a problem fetching the data:', error);
+          document.getElementById("refreshindicator").style.display="none";
         });
     }
 
-    const currentURL = window.location.href;
-    // Function to extract the value of a parameter from the URL
-    function getParameterValue(parameterName, url) {
-      const urlObject = new URL(url);
-      // Retrieve the value of the parameter by its name
-      const parameterValue = urlObject.searchParams.get(parameterName);
-      return parameterValue;
-    }
-
     function updateScreen(inData){
-      //alert(JSON.stringify(inData));
       document.getElementById('schedule-jobname').innerHTML=inData.schedule.jobName;
       document.getElementById('schedule-jobicon').innerHTML=inData.schedule.icon;
       document.getElementById('schedule-jobicon').style.color=inData.schedule.color;
@@ -78,13 +75,14 @@
       document.getElementById('schedule-averageduration').innerHTML=inData.hist.histAvgRuntimeSecs;
       document.getElementById('schedule-jobstarted').innerHTML=inData.agent.jobStarted.replace('T',' ').split('.')[0];
       
-      var status = "";
       var statusElem = document.getElementById('cardStatusIndicatorScheduleInfo');
       if(inData.agent.status=="running"){
         statusElem.innerHTML="pending";
         statusElem.className="blinking orange-text material-icons";
         statusElem.title="Running";
         document.getElementById('schedule-log').innerHTML=inData.log;
+        document.getElementById('jobInProgressDiv').style.visibility="visible";
+        startProgressUpdateTimer();
       }
       else{
         if(inData.hist.histLastRun!=null){
@@ -96,9 +94,10 @@
         statusElem.innerHTML="flag_circle";
         statusElem.className="grey-text material-icons";
         statusElem.title="Unknown";
+        document.getElementById('jobInProgressDiv').style.visibility="hidden";
+        stopProgressUpdateTimer();
       }
       if(inData.stats!==undefined && inData.stats!==null && inData.agent.status!="running"){
-      
         if(inData.stats.current.returnCode==0){
           statusElem.innerHTML="check_circle";
           statusElem.className="successIcons material-icons";
@@ -111,81 +110,45 @@
         }
       }
       
-
-      var agentJobRunning = false;
-      if(inData.agent.status=="running" && inData.agent.jobName==inData.schedule.jobName)agentJobRunning=true;
-      console.log("AgentJobRunning: " + agentJobRunning);
-      if(agentJobRunning==true){
-        //alert("agent job running is true");
-        document.getElementById('jobInProgressDiv').style.visibility="visible";
-        document.getElementById('refreshtoggle').checked=true;
-        var event = new Event('change');
-        document.getElementById('refreshtoggle').dispatchEvent(event);
-      }
-      else{
-        //alert("agent job running is false");
-        document.getElementById('jobInProgressDiv').style.visibility="hidden";
-        document.getElementById('refreshtoggle').checked=false;
-        var event = new Event('change');
-        document.getElementById('refreshtoggle').dispatchEvent(event);
-        clearInterval(intervalId);
-
-      }
-      //alert(document.getElementById('jobInProgressDiv').style.display);
-      if(agentJobRunning==true){
-        checkScroll();
-        calculatePercent(inData);
-      }
-      
       document.getElementById("refreshindicator").style.display="none";
       document.getElementById('loader-container').style.display="none";
       document.getElementById('pagedata').style.display="";
-      
     }
 
     function calculatePercent(inData){
       var barWidth="400";
       if(inData==null)return;
-      //Calc percent
       var start = new Date(inData.agent.jobStarted);
-      //alert(start);
       var startedMs = start.getTime();
       var curr = new Date().getTime();
       var delta = curr - startedMs;
 
-      //alert(delta)
       var targetEta = 0
       var pctComplete = 0;
       var pctbarWidth = 0;
       var runtime = 0;
       
       targetEta = parseFloat(inData.hist.histAvgRuntimeSecs);
-      //alert(targetEta);
       var deltaSecs = delta / 1000;
       if(targetEta==0){
          pctComplete = "No History";
       }
       else {
-        pctComplete = (deltaSecs/targetEta); //*100; 
+        pctComplete = (deltaSecs/targetEta);
         pctComplete = Math.round(pctComplete * 100);
       }
       runtime = displaySecs(Math.round(deltaSecs));
-      //alert("PCTComplete:" +pctComplete);
-      if(pctComplete>100)
-      {
-        pctComplete="Overunning"
+      
+      if(pctComplete>100){
+        pctComplete="Overrunning"
         pctbarWidth = barWidth + "px";
       }
       else{
-        //alert(barWidth);
-        //alert("(" + pctComplete +"/100 ) * " + "350");
         pctbarWidth = Math.round((pctComplete/100)*barWidth) + "px";
-        
         if(!isNaN(pctComplete))pctComplete=pctComplete + "%";
         else{pctComplete="NO KNOWN ETA";}
       }
 
-      //alert("setting progress bar width to: " + pctbarWidth);
       document.getElementById("progressbar").style.width=pctbarWidth;
       if(inData.hist.histLastRun!=null){
         document.getElementById("progressbarText").innerHTML =" " + pctComplete + " (" + runtime + ")";
@@ -196,48 +159,59 @@
       }
     }
 
+    function startProgressUpdateTimer(){
+      if(progressUpdateIntervalId !== null) return; // Already running
+      progressUpdateIntervalId = setInterval(() => {
+        if(currentScheduleData && currentScheduleData.agent.status == "running"){
+          calculatePercent(currentScheduleData);
+          checkScroll();
+        }
+        else{
+          stopProgressUpdateTimer();
+        }
+      }, 3000); // Update every 3 seconds
+    }
+
+    function stopProgressUpdateTimer(){
+      if(progressUpdateIntervalId !== null){
+        clearInterval(progressUpdateIntervalId);
+        progressUpdateIntervalId = null;
+      }
+    }
+
+    function initializeWebSocket(scheduleIndex){
+      // Only initialize listeners once per schedule
+      if(socketListenersInitialized) {
+        console.log('Socket listeners already initialized for schedule ' + scheduleIndex);
+        return;
+      }
+
+      if(!scheduleIndex) return;
+      
+      console.log('Setting up websocket listeners for schedule ' + scheduleIndex);
+
+      socket.on('scheduleLog:' + scheduleIndex, (data) => {
+        console.log('Received scheduleLog event for schedule ' + scheduleIndex);
+        if(currentScheduleData){
+          currentScheduleData.log = data.log;
+          document.getElementById('schedule-log').innerHTML = data.log;
+          checkScroll();
+        }
+      });
+
+      socket.on('scheduleUpdate:' + scheduleIndex, (data) => {
+        console.log('Received scheduleUpdate event for schedule ' + scheduleIndex);
+        currentScheduleData = data;
+        updateScreen(data);
+      });
+
+      socketListenersInitialized = true;
+      console.log('Websocket listeners initialized successfully');
+    }
+
     function runOnLoad(){
-      //If refresh is provided, enable the refresh
-      var refresh = getParameterValue("refresh",currentURL);
-      //alert(refresh)
-      if(refresh!=null&&refresh.length>0){
-        //alert("in toggle");
-        document.getElementById('refreshtoggle').checked=true;
-        var event = new Event('change');
-        document.getElementById('refreshtoggle').dispatchEvent(event); // Trigger the 'change' event
-        dorefresh();
-      }
-      else{
-        getData();
-      }
-
-    }
-    function getData(){
-      var index = getParameterValue("index",currentURL);
+      var index = getParameterValue("index", currentURL);
       fetchScheduleData(index);
-    }
-
-    var intervalId;
-    function dorefresh()
-    {
-      //alert("in do refresh");
-      var refreshEnabled = document.getElementById("refreshtoggle").checked;
-      var refresh = document.getElementById("refreshval").value;
-      //alert(refreshEnabled);
-      if(refreshEnabled){
-        if(parseInt(refresh)==0)refresh=3;
-        refreshMs = refresh*1000;
-
-        //refreshExecute = setInterval(refresh,refreshMs);
-
-        intervalId = setInterval(() => {
-          //alert("Timeout executed!");
-          getData();
-          }, refreshMs);
-      }
-      else{
-        clearInterval(intervalId);
-      }
     }
   </script>
   <script src="js/utils.js"></script>
@@ -256,22 +230,6 @@
       <div class="container fillWidth">
 
         <h5 class="header orange-text">Schedule Information<span style="display:none" id="refreshindicator" class="refreshindicator refreshloader"></span></h5>
-        
-        <div id="buttons">
-          <!-- Switch -->
-        <div id="refreshLabel">Refresh</div>
-          <div class="input-field refreshTime">
-            <input type="text" id="refreshval" class="refreshTimeInput" value="3" style="width: 40px"/>
-            <span id="secslabel">seconds</span>
-          </div>
-          <div class="switch" id="refreshSwitch">
-            <label>
-              <input type="checkbox" id="refreshtoggle" onclick="dorefresh()">
-              <span class="lever"></span>
-            </label>  
-          </div>
-        </div>
-
         
           
 

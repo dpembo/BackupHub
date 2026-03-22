@@ -1,6 +1,5 @@
 const versionInfo = require('./version.js');
 const version = versionInfo.getVersion();
-const { v4: uuidv4 } = require('uuid');
 const fs = require('fs');
 const path = require('path');
 const mqtt = require('mqtt');
@@ -11,6 +10,7 @@ const { execSync } = require('child_process');
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const os = require('os');
+const crypto = require('crypto');
 
 const PORT = 49991;
 const app = express();
@@ -35,8 +35,6 @@ const TOPIC_COMMAND = 'backup/agent/command';
 const TOPIC_STATUS = 'backup/agent/status';
 const LOG_STATUS = 'backup/agent/log';
 
-let RETRY_ATTEMPTS = 360;
-let RETRY_DELAY = 30000;
 let RETRY_TIMEOUT = 5000;
 let FILE_SYSTEMS = "/,/home,/var,/tmp,/boot,/usr";
 let FILE_SYSTEMS_THRESHOLD = 80;
@@ -79,12 +77,6 @@ let WS_SERVER = wsServerIndex !== -1 ? process.argv[wsServerIndex + 1] : DEFAULT
 const wsPortIndex = process.argv.indexOf('--wsPort');
 let WS_SERVER_PORT = wsPortIndex !== -1 ? process.argv[wsPortIndex + 1] : DEFAULT_WS_SERVER_PORT;
 
-const retryCountIndex = process.argv.indexOf('--retryCount');
-RETRY_ATTEMPTS = retryCountIndex !== -1 ? process.argv[retryCountIndex + 1] : RETRY_ATTEMPTS;
-
-const retryDelayIndex = process.argv.indexOf('--retryDelay');
-RETRY_DELAY = retryDelayIndex !== -1 ? process.argv[retryDelayIndex + 1] : RETRY_DELAY;
-
 const retryTimeoutIndex = process.argv.indexOf('--retryTimeout');
 RETRY_TIMEOUT = retryTimeoutIndex !== -1 ? process.argv[retryTimeoutIndex + 1] : RETRY_TIMEOUT;
 
@@ -101,8 +93,54 @@ CPU_THRESHOLD = cpuThresholdIndex !== -1 ? parseInt(process.argv[cpuThresholdInd
 let childProcess;
 let useMQTT = false;
 let commsType = "websocket";
+let activeJobs = new Map();  // Track active backup jobs
+let activeIntervals = [];  // Track intervals for cleanup
 
-let enckey = process.env.BACKUPHUB_ENCRYPTION_KEY || padStringTo256Bits("CHANGEIT");
+// Debug token management (10 minute expiry, resets on each use)
+let debugToken = null;
+let debugTokenExpiry = null;
+const DEBUG_TOKEN_EXPIRY_MS = 10 * 60 * 1000;  // 10 minutes
+
+function initializeEncryptionKey() {
+  let key = process.env.BACKUPHUB_ENCRYPTION_KEY;
+  const keyEnforceLevel = process.env.BACKUPHUB_KEY_ENFORCE || 'warn'; // 'strict', 'warn', or 'silent'
+  
+  if(!key || key.length === 0) {
+    const DEFAULT_KEY = "CHANGEIT";
+    key = DEFAULT_KEY;
+    
+    switch(keyEnforceLevel) {
+      case 'strict':
+        console.error("═══════════════════════════════════════════════════════════════");
+        console.error("CRITICAL: Default encryption key in use. Agent will not start.");
+        console.error("═══════════════════════════════════════════════════════════════");
+        console.error("Set BACKUPHUB_ENCRYPTION_KEY environment variable before starting.");
+        console.error("This key must match the key configured on the Server.");
+        console.error("═══════════════════════════════════════════════════════════════");
+        process.exit(1);
+      case 'warn':
+        console.warn("═══════════════════════════════════════════════════════════════");
+        console.warn("⚠️  WARNING: Using default encryption key (CHANGEIT)");
+        console.warn("═══════════════════════════════════════════════════════════════");
+        console.warn("This key should ONLY be used for development/testing.");
+        console.warn("For production, set BACKUPHUB_ENCRYPTION_KEY environment variable.");
+        console.warn("The same key must be set on the Server for communications.");
+        console.warn("═══════════════════════════════════════════════════════════════");
+        break;
+      case 'silent':
+        debug(DEBUG_LEVEL.DEBUG, "Using default encryption key (not recommended for production)");
+        break;
+      default:
+        console.warn("Unknown BACKUPHUB_KEY_ENFORCE value: " + keyEnforceLevel);
+    }
+  } else {
+    debug(DEBUG_LEVEL.INFO, "Custom encryption key loaded from BACKUPHUB_ENCRYPTION_KEY");
+  }
+  
+  return padStringTo256Bits(key);
+}
+
+let enckey = initializeEncryptionKey();
 let pushVerificationNotification = true;
 
 const helpInfo = {
@@ -123,7 +161,7 @@ const helpInfo = {
 
 function parseSettingsFile(filePath) {
   try {
-    console.log("Loading Settings file [" + filePath + "]");
+    debug(DEBUG_LEVEL.TRACE, `Loading Settings file [${filePath}]`);
     const data = fs.readFileSync(filePath, 'utf8');
     const lines = data.split('\n');
     lines.forEach(line => {
@@ -149,19 +187,59 @@ function parseSettingsFile(filePath) {
     useMQTT = process.argv.includes('--mqttServer') || MQTT_ENABLED;
     commsType = useMQTT ? "mqtt" : "websocket";
   } catch (err) {
-    debug(0, 'Error reading settings file');
-    debug(0, err);
+    debug(DEBUG_LEVEL.TRACE, 'Error reading settings file');
+    debug(DEBUG_LEVEL.TRACE, err);
   }
 }
 
-function debug(level, message) {
-  switch (level) {
-    case 0: if (!DEBUG_MODE) return; console.log("\x1b[37m\x1b[2m" + message + "\x1b[0m"); break;
-    case 1: console.log("\x1b[37m\x1b[1m" + message + "\x1b[0m"); break;
-    case 2: console.log("\x1b[33m" + message + "\x1b[0m"); break;
-    case 3: console.log("\x1b[31m" + message + "\x1b[0m"); break;
-    case 4: console.log("\x1b[37m\x1b[41m" + message + "\x1b[0m"); break;
+// Debug level enumeration
+const DEBUG_LEVEL = Object.freeze({
+  TRACE: 'trace',      // Verbose debug info, only shown when DEBUG_MODE enabled
+  INFO: 'info',        // General information (default for most messages)
+  WARN: 'warn',        // Warning messages
+  ERROR: 'error',      // Error messages
+  CRITICAL: 'critical' // Critical errors with visual alert
+});
+
+// Debug styles with ANSI codes
+const DEBUG_STYLES = Object.freeze({
+  trace: { code: '\x1b[37m\x1b[2m', label: '[TRACE]' },         // dim white
+  info: { code: '\x1b[37m\x1b[1m', label: '[INFO]' },           // bright white
+  warn: { code: '\x1b[33m', label: '[WARN]' },                  // yellow
+  error: { code: '\x1b[31m', label: '[ERROR]' },                // red
+  critical: { code: '\x1b[37m\x1b[41m', label: '[CRITICAL]' },  // white on red background
+  reset: '\x1b[0m',
+  dim: '\x1b[2m'                                                 // dim text for timestamps
+});
+
+function debug(level, ...args) {
+  // Validate level is recognized
+  if (!Object.values(DEBUG_LEVEL).includes(level)) {
+    console.error(`Invalid debug level: ${level}. Valid levels: ${Object.values(DEBUG_LEVEL).join(', ')}`);
+    return;
   }
+
+  // Skip trace logs unless DEBUG_MODE is enabled
+  if (level === DEBUG_LEVEL.TRACE && !DEBUG_MODE) {
+    return;
+  }
+
+  // Get style for this level
+  const style = DEBUG_STYLES[level];
+
+  // Format timestamp as HH:mm:ss.sss
+  const now = new Date();
+  const timestamp = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}.${now.getMilliseconds().toString().padStart(3, '0')}`;
+
+  // Format message from all arguments (supports multiple args like console.log)
+  const message = args.map(arg => {
+    if (typeof arg === 'string') return arg;
+    if (arg instanceof Error) return `${arg.name}: ${arg.message}`;
+    return JSON.stringify(arg);
+  }).join(' ');
+
+  // Output: [HH:mm:ss.sss] [LEVEL] message
+  console.log(`${style.code}${DEBUG_STYLES.dim}[${timestamp}]${DEBUG_STYLES.reset}${style.code} ${style.label} ${message}${DEBUG_STYLES.reset}`);
 }
 
 function validateJWTToken(inToken) {
@@ -179,19 +257,18 @@ function checkExecutePermissionCapability(directoryPath, liveness) {
     fs.writeFileSync(tempFilePath, 'Temporary file content', 'utf8');
     fs.chmodSync(tempFilePath, '755');
     fs.unlinkSync(tempFilePath);
-    debug(0, 'Confirmed execute permissions capability.');
+    debug(DEBUG_LEVEL.TRACE, 'Confirmed execute permissions capability.');
     return "ok";
   } catch (err) {
-    debug(3, 'Error:');
-    console.error(err);
-    debug(4, 'No execute permissions capability.');
+    debug(DEBUG_LEVEL.ERROR, `Permission capability check failed: ${err.message}`);
+    debug(DEBUG_LEVEL.CRITICAL, 'No execute permissions capability.');
     return liveness ? "No execute permissions capability." : process.exit(1);
   }
 }
 
 function addExecutePermission(filePath) {
   fs.chmod(filePath, '755', (err) => {
-    err ? debug(4, `Error setting execute permission: ${err}`) : debug(0, 'Execute permission added.');
+    err ? debug(DEBUG_LEVEL.CRITICAL, `Error setting execute permission: ${err}`) : debug(DEBUG_LEVEL.TRACE, 'Execute permission added.');
   });
 }
 
@@ -202,28 +279,28 @@ function generateRandomFileName() {
 function writeFileAndWait(filePath, dataToWrite) {
   try {
     fs.writeFileSync(filePath, dataToWrite, 'utf8');
-    debug(0, 'File written successfully!');
+    debug(DEBUG_LEVEL.TRACE, 'File written successfully!');
   } catch (err) {
-    debug(3, `Error writing file: ${err}`);
+    debug(DEBUG_LEVEL.ERROR, `Error writing file: ${err}`);
   }
 }
 
 function createEmptyFile(filePath) {
   fs.writeFile(filePath, '', (err) => {
-    err ? debug(3, `Error creating file: ${filePath}`) : debug(1, `Empty file created: ${filePath}`);
+    err ? debug(DEBUG_LEVEL.ERROR, `Error creating file: ${filePath}`) : debug(DEBUG_LEVEL.TRACE, `Empty file created: ${filePath}`);
   });
 }
 
 function deleteFile(filePathToDelete) {
   try {
     fs.unlinkSync(filePathToDelete);
-    debug(1, `File removed: ${filePathToDelete}`);
+    debug(DEBUG_LEVEL.TRACE, `File removed: ${filePathToDelete}`);
   } catch (err) {
-    debug(3, `Error deleting file: ${err}`);
+    debug(DEBUG_LEVEL.ERROR, `Error deleting file: ${err}`);
   }
 }
 
-function publishStatusUpdate(status, description, data, jobName, callback, isManual) {
+function publishStatusUpdate(status, description, data, jobName, callback, isManual, retryCount = 0) {
   const message = {
     name: AGENT_ID,
     topic: TOPIC_STATUS,
@@ -237,20 +314,54 @@ function publishStatusUpdate(status, description, data, jobName, callback, isMan
     lastStatusReport: new Date().toISOString(),
   };
   pubCount++;
+  const maxRetries = 6;
+  
   if (useMQTT) {
     mqttClient.connect().then(() => {
+      // Verify connection state before publishing
+      if (!mqttClient.isConnected) {
+        throw new Error('MQTT connection lost after initial connect');
+      }
       mqttClient.publish(TOPIC_STATUS, JSON.stringify(message));
-      debug(1, `Published status update over MQTT: ${status}`);
-    }).catch((err) => debug(3, `MQTT publish failed: ${err.message}`));
+      debug(DEBUG_LEVEL.TRACE, `Published status update over MQTT: ${status}`);
+    }).catch((err) => {
+      debug(DEBUG_LEVEL.TRACE, `MQTT publish failed: ${err.message}`);
+      // Retry with exponential backoff
+      if (retryCount < maxRetries) {
+        const retryDelay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s, 8s, 16s, 32s
+        debug(DEBUG_LEVEL.TRACE, `Retrying MQTT publish in ${retryDelay}ms (attempt ${retryCount + 1}/${maxRetries})`);
+        setTimeout(() => publishStatusUpdate(status, description, data, jobName, callback, isManual, retryCount + 1), retryDelay);
+      } else {
+        debug(DEBUG_LEVEL.WARN, `MQTT publish failed after ${maxRetries} retries`);
+      }
+    });
   } else {
     if (wsClient.isConnected) {
-      wsClient.sendMessage(JSON.stringify(message));
-      debug(1, `Sent status update: ${status}`);
+      // Verify connection state is still good
+      if (wsClient.client && wsClient.client.readyState === 1) {
+        wsClient.sendMessage(JSON.stringify(message));
+        debug(DEBUG_LEVEL.TRACE, `Sent status update: ${status}`);
+      } else {
+        // Connection state mismatch, trigger reconnection and retry
+        wsClient.isConnected = false;
+        debug(DEBUG_LEVEL.WARN, `WebSocket connection state mismatch, reconnecting...`);
+        publishStatusUpdate(status, description, data, jobName, callback, isManual, retryCount);
+      }
     } else {
       wsClient.connect().then(() => {
         wsClient.sendMessage(JSON.stringify(message));
-        debug(1, `Connected and sent status update: ${status}`);
-      }).catch((err) => debug(3, `Failed to send status update: ${err.message}`));
+        debug(DEBUG_LEVEL.TRACE, `Connected and sent status update: ${status}`);
+      }).catch((err) => {
+        debug(DEBUG_LEVEL.TRACE, `Failed to send status update: ${err.message}`);
+        // Retry with exponential backoff
+        if (retryCount < maxRetries) {
+          const retryDelay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s, 8s, 16s, 32s
+          debug(DEBUG_LEVEL.TRACE, `Retrying WebSocket publish in ${retryDelay}ms (attempt ${retryCount + 1}/${maxRetries})`);
+          setTimeout(() => publishStatusUpdate(status, description, data, jobName, callback, isManual, retryCount + 1), retryDelay);
+        } else {
+          debug(DEBUG_LEVEL.WARN, `WebSocket publish failed after ${maxRetries} retries`);
+        }
+      });
     }
   }
 }
@@ -262,6 +373,13 @@ function getCurrentDateTimeFormatted() {
 
 function executeBackupCommand(command, commandParams, jobName, callback, manual) {
   jobCount++;
+  
+  // Validate and sanitize commandParams to prevent shell injection
+  const sanitizedParams = String(commandParams || '').replace(/[;&|`$()\\\"'<>]/g, '\\$&');
+  
+  // Track this job
+  activeJobs.set(jobName, { startTime: Date.now(), status: 'running' });
+  
   status = AGENT_STATUS.RUNNING;
   publishStatusUpdate('running', `Backup in progress for job [${jobName}]`, null, jobName, undefined, manual);
 
@@ -271,12 +389,19 @@ function executeBackupCommand(command, commandParams, jobName, callback, manual)
   writeFileAndWait(file, command);
   addExecutePermission(file);
 
-  const runCommand = `. ${file} ${commandParams} >> ${logfile}`;
+  const runCommand = `. ${file} ${sanitizedParams} >> ${logfile}`;
   const start = new Date().getTime();
-  debug(1, `Executing backup command: ${runCommand}`);
+  debug(DEBUG_LEVEL.INFO, `Starting backup: ${jobName}`);
 
   childProcess = spawn('bash', ['-c', runCommand], { detached: true, stdio: 'ignore' });
   childProcess.unref();
+  
+  // Add error handler for spawn failures
+  childProcess.on('error', (err) => {
+    debug(DEBUG_LEVEL.ERROR, `Failed to spawn backup process for [${jobName}]: ${err.message}`);
+    activeJobs.delete(jobName);
+    publishStatusUpdate('error', `Backup failed to start: ${err.message}`, null, jobName, undefined, manual);
+  });
 
   let lastOffset = 0;
   let logStreamInterval;
@@ -284,14 +409,14 @@ function executeBackupCommand(command, commandParams, jobName, callback, manual)
 
   logStreamInterval = setInterval(() => {
     if (!fs.existsSync(logfile)) {
-      debug(2, `Log file [${logfile}] not accessible`);
+      debug(DEBUG_LEVEL.TRACE, `Log file [${logfile}] not accessible`);
     } else {
       try {
         const stats = fs.statSync(logfile);
         const currentSize = stats.size;
 
         if (lastOffset > currentSize) {
-          debug(2, `Size reset: ${currentSize} < ${lastOffset}`);
+          debug(DEBUG_LEVEL.TRACE, `Size reset: ${currentSize} < ${lastOffset}`);
           lastOffset = currentSize;
         }
 
@@ -302,29 +427,32 @@ function executeBackupCommand(command, commandParams, jobName, callback, manual)
             lastOffset += chunk.length;
             publishLogData(logData, jobName, undefined, undefined, undefined, manual);
           });
-          readStream.on('error', (err) => debug(2, `Read stream error: ${err.message}`));
+          readStream.on('error', (err) => debug(DEBUG_LEVEL.TRACE, `Read stream error: ${err.message}`));
         }
 
         if (childProcessExited && lastOffset >= currentSize) {
           clearInterval(logStreamInterval);
+          activeIntervals = activeIntervals.filter(id => id !== logStreamInterval);
           const stop = new Date().getTime();
-          debug(1, `Backup completed: ${runCommand} [${returnCode}]`);
+          debug(DEBUG_LEVEL.INFO, `Backup completed: ${jobName} [exit code: ${returnCode}]`);
           returnCode !== 0 ? failJobCount++ : successJobCount++;
+          activeJobs.delete(jobName);
+          status = AGENT_STATUS.IDLE;
           deleteFile(file);
           callback(jobName, (stop - start) / 1000, manual);
         }
       } catch (err) {
-        debug(2, `Logfile read error: ${err.message}`);
+        debug(DEBUG_LEVEL.TRACE, `Logfile read error: ${err.message}`);
       }
     }
   }, 1000);
+  
+  activeIntervals.push(logStreamInterval);
 
   childProcess.on('exit', (code, signal) => {
     childProcessExited = true;
     returnCode = signal === "SIGKILL" ? 999 : signal === "SIGTERM" ? 998 : code === null ? 99999 : code;
   });
-
-  publishStatusUpdate('online', 'Backup completed');
 }
 
 function publishLogData(logData, jobName, eta, returnCode, callback, manual) {
@@ -344,16 +472,17 @@ function publishLogData(logData, jobName, eta, returnCode, callback, manual) {
     mqttClient.connect().then(() => {
       mqttClient.publish(TOPIC_STATUS, JSON.stringify(message));
       if (callback) callback();
-    }).catch((err) => debug(3, `MQTT publish failed: ${err.message}`));
+    }).catch((err) => debug(DEBUG_LEVEL.TRACE, `MQTT publish failed: ${err.message}`));
   } else {
-    if (wsClient.isConnected) {
+    if (wsClient.isConnected && wsClient.client && wsClient.client.readyState === 1) {
       wsClient.sendMessage(JSON.stringify(message));
-      debug(1, `Sent log update: ${message.status}`);
+      debug(DEBUG_LEVEL.TRACE, `Sent log update: ${message.status}`);
     } else {
+      wsClient.isConnected = false; // Force reconnection
       wsClient.connect().then(() => {
         wsClient.sendMessage(JSON.stringify(message));
-        debug(1, `Connected and sent log update: ${message.status}`);
-      }).catch((err) => debug(3, `Failed to send log update: ${err.message}`));
+        debug(DEBUG_LEVEL.TRACE, `Connected and sent log update: ${message.status}`);
+      }).catch((err) => debug(DEBUG_LEVEL.TRACE, `Failed to send log update: ${err.message}`));
     }
   }
 }
@@ -361,20 +490,52 @@ function publishLogData(logData, jobName, eta, returnCode, callback, manual) {
 function backupComplete(jobName, eta, manual) {
   status = AGENT_STATUS.IDLE;
   publishLogData("", jobName, eta, returnCode, undefined, manual);
-  debug(2, `BACKUP COMPLETE IN ${eta} secs`);
+  debug(DEBUG_LEVEL.INFO, `Backup completed in ${eta} seconds`);
 }
 
 function sanitizeUnixFilename(filename) {
   return filename.replace(/[^a-zA-Z0-9_.-]/g, '_');
 }
 
+// Debug token management functions
+function generateDebugToken() {
+  const token = crypto.randomBytes(8).toString('hex');
+  debugToken = token;
+  debugTokenExpiry = Date.now() + DEBUG_TOKEN_EXPIRY_MS;
+  debug(DEBUG_LEVEL.WARN, `Debug access requested. Token: ${token}`);
+  return token;
+}
+
+function isValidDebugToken(token) {
+  // Check if token exists and is not expired
+  if (!debugToken || !debugTokenExpiry) {
+    return false;
+  }
+  
+  if (Date.now() > debugTokenExpiry) {
+    debugToken = null;
+    debugTokenExpiry = null;
+    return false;
+  }
+  
+  // Token matches and is still valid
+  if (token === debugToken) {
+    // Reset expiry timer on successful validation
+    debugTokenExpiry = Date.now() + DEBUG_TOKEN_EXPIRY_MS;
+    debug(DEBUG_LEVEL.TRACE, `Debug token validated. Expiry reset.`);
+    return true;
+  }
+  
+  return false;
+}
+
 async function handleCommand(message) {
-  debug(0, "Received Command from BackupHub Server");
+  debug(DEBUG_LEVEL.TRACE, "Received Command from BackupHub Server");
   subCount++;
   validateJWTToken(message).then(async decodedPayload => {
     const { name: agentId, command, manual = false, commandParams = "", jobName } = decodedPayload;
-    debug(0, `Job: [${jobName}] for agent: [${agentId}]`);
-    debug(0, `Command: ${command}, Manual: ${manual}, Params: ${commandParams}`);
+    debug(DEBUG_LEVEL.TRACE, `Job: [${jobName}] for agent: [${agentId}]`);
+    debug(DEBUG_LEVEL.TRACE, `Command: ${command}, Manual: ${manual}, Params: ${commandParams}`);
 
     if (agentId !== AGENT_ID) return;
 
@@ -387,7 +548,7 @@ async function handleCommand(message) {
     executeBackupCommand(command, commandParams, jobName, backupComplete, manual);
     pushVerificationNotification = true;
   }).catch(error => {
-    console.error('Token validation failed:', error.message);
+    debug(DEBUG_LEVEL.ERROR, `Token validation failed: ${error.message}`);
     if (pushVerificationNotification) {
       publishStatusUpdate("notification", "Message failed signature verification.", message.toString());
       pushVerificationNotification = false;
@@ -402,7 +563,7 @@ function getCPULoadPercentage() {
     const cpuCount = os.cpus().length;
     return (oneMinLoad / cpuCount) * 100;
   } catch (error) {
-    debug(3, "Error reading load average:", error);
+    debug(DEBUG_LEVEL.ERROR, "Error reading load average:", error);
     return 0;
   }
 }
@@ -417,8 +578,93 @@ function getFileSystemUsagePercentage() {
     });
     return result;
   } catch (error) {
-    console.error("Error checking disk usage:", error);
+    debug(DEBUG_LEVEL.ERROR, `Error checking disk usage: ${error.message}`);
     return [];
+  }
+}
+
+// Cleanup function for graceful shutdown
+function cleanupBackgroundTasks() {
+  activeIntervals.forEach(intervalId => {
+    try {
+      clearInterval(intervalId);
+    } catch (err) {
+      debug(DEBUG_LEVEL.TRACE, `Error clearing interval: ${err.message}`);
+    }
+  });
+  activeIntervals = [];
+  
+  activeJobs.forEach((job, jobName) => {
+    debug(DEBUG_LEVEL.WARN, `Cleaning up active job on shutdown: ${jobName}`);
+  });
+  activeJobs.clear();
+}
+
+// Graceful shutdown on termination signals
+process.on('SIGINT', () => {
+  debug(DEBUG_LEVEL.INFO, 'SIGINT received, cleaning up...');
+  cleanupBackgroundTasks();
+  process.exit(0);
+});
+
+process.on('SIGTERM', () => {
+  debug(DEBUG_LEVEL.INFO, 'SIGTERM received, cleaning up...');
+  cleanupBackgroundTasks();
+  process.exit(0);
+});
+
+// Retry Backoff Manager
+// Implements exponential backoff strategy for connection retries
+class RetryBackoffManager {
+  constructor(agentId, handlerType) {
+    this.agentId = agentId;
+    this.handlerType = handlerType; // 'MQTT' or 'WebSocket'
+    this.currentAttempt = 0;
+    this.startTime = Date.now();
+    this.lastBackoffChangeTime = this.startTime;
+    this.currentBackoffStage = 0;
+    
+    // Define backoff stages: { durationMs, intervalMs, stageName }
+    this.backoffStages = [
+      { durationMs: 10 * 60 * 1000, intervalMs: 1 * 60 * 1000, stageName: '1-min backoff (10 mins)' },
+      { durationMs: 10 * 60 * 1000, intervalMs: 5 * 60 * 1000, stageName: '5-min backoff (10 mins)' },
+      { durationMs: 60 * 60 * 1000, intervalMs: 10 * 60 * 1000, stageName: '10-min backoff (1 hour)' },
+      { durationMs: 60 * 60 * 1000, intervalMs: 20 * 60 * 1000, stageName: '20-min backoff (1 hour)' },
+      { durationMs: 60 * 60 * 1000, intervalMs: 30 * 60 * 1000, stageName: '30-min backoff (1 hour)' },
+      { durationMs: Infinity, intervalMs: 60 * 60 * 1000, stageName: '1-hour backoff (indefinite)' }
+    ];
+  }
+
+  getNextRetryDelay() {
+    const now = Date.now();
+    const currentStage = this.backoffStages[this.currentBackoffStage];
+    const timeInStage = now - this.lastBackoffChangeTime;
+
+    // Check if we need to move to the next stage
+    if (timeInStage > currentStage.durationMs && this.currentBackoffStage < this.backoffStages.length - 1) {
+      this.currentBackoffStage++;
+      this.lastBackoffChangeTime = now;
+      const nextStage = this.backoffStages[this.currentBackoffStage];
+      debug(DEBUG_LEVEL.INFO, `Backoff stage changed to: ${nextStage.stageName}`);
+      return nextStage.intervalMs;
+    }
+
+    return currentStage.intervalMs;
+  }
+
+  recordAttempt() {
+    this.currentAttempt++;
+    const elapsed = Math.floor((Date.now() - this.startTime) / 1000);
+    const currentStage = this.backoffStages[this.currentBackoffStage];
+    debug(DEBUG_LEVEL.INFO, `[${this.handlerType}] ${this.agentId} - Retry attempt ${this.currentAttempt} after ${elapsed}s (${currentStage.stageName})`);
+  }
+
+  reset() {
+    this.currentAttempt = 0;
+    this.startTime = Date.now();
+    this.lastBackoffChangeTime = this.startTime;
+    this.currentBackoffStage = 0;
+    debug(DEBUG_LEVEL.INFO, `[${this.handlerType}] ${this.agentId} - Connection successful, backoff reset`);
   }
 }
 
@@ -432,11 +678,9 @@ class MqttHandler {
     this.isConnected = false;
     this.isReconnecting = false;
     this.isConnecting = false;
-    this.reconnectAttempts = options.reconnectAttempts || 120;
-    this.reconnectDelay = options.reconnectDelay || 5000;
     this.connectionTimeout = options.connectionTimeout || 5000;
-    this.currentAttempts = 0;
     this.connectionTimeoutHandler = null;
+    this.retryManager = new RetryBackoffManager(this.server, 'MQTT');
   }
 
   checkConnected() {
@@ -444,14 +688,12 @@ class MqttHandler {
   }
 
   connect() {
-    debug(0, `Connecting to MQTT Server [mqtt://${this.server}:${this.port}]`);
     if (this.isConnected && this.client) {
-      debug(0, "Connection exists and is connected");
+      debug(DEBUG_LEVEL.TRACE, "MQTT connection exists and is connected");
       return Promise.resolve(this.client);
     }
     if (this.isConnecting) {
-      debug(0, "Connection attempt in progress");
-      return Promise.reject(new Error("Connection attempt in progress"));
+      return Promise.reject(new Error("MQTT connection attempt in progress"));
     }
     this.isConnecting = true;
     return new Promise((resolve, reject) => {
@@ -468,16 +710,16 @@ class MqttHandler {
 
       this.client.on('connect', () => {
         this.isConnected = true;
-        this.currentAttempts = 0;
+        this.retryManager.reset();
         clearTimeout(this.connectionTimeoutHandler);
         this.isReconnecting = false;
-        debug(1, `Connected to MQTT server [mqtt://${this.server}:${this.port}]`);
+        debug(DEBUG_LEVEL.INFO, `MQTT server connected [${this.server}:${this.port}]`);
         this.isConnecting = false;
         resolve(this.client);
       });
 
       this.client.on('error', (err) => {
-        debug(3, `MQTT connection error: ${err.message}`);
+        debug(DEBUG_LEVEL.ERROR, `MQTT connection error: ${err.message}`);
         this.client.end();
         this.isConnected = false;
         clearTimeout(this.connectionTimeoutHandler);
@@ -488,7 +730,6 @@ class MqttHandler {
 
       this.client.on('close', () => {
         this.isConnected = false;
-        debug(0, 'MQTT connection closed');
         this.isConnecting = false;
         this.retryConnection();
       });
@@ -498,25 +739,23 @@ class MqttHandler {
   retryConnection() {
     if (this.isReconnecting) return;
     this.isReconnecting = true;
-    if (this.currentAttempts >= this.reconnectAttempts) {
-      console.error('Max reconnection attempts reached - exiting');
-      process.exit(2);
-    }
+
+    // Get next retry delay from backoff manager
+    const retryDelay = this.retryManager.getNextRetryDelay();
+    
     setTimeout(() => {
-      this.currentAttempts++;
-      debug(2, `Reconnection attempt ${this.currentAttempts} of ${this.reconnectAttempts}`);
+      this.retryManager.recordAttempt();
       this.connect().then(() => {
         this.isReconnecting = false;
         publishStatusUpdate('register', 'Agent Online - Awaiting provision');
       }).catch(() => this.retryConnection());
-    }, this.reconnectDelay);
+    }, retryDelay);
   }
 
   disconnect() {
     if (this.client) {
       this.client.end();
       this.isConnected = false;
-      debug(0, 'Disconnected from MQTT server');
     }
   }
 
@@ -532,16 +771,16 @@ class MqttHandler {
   subscribe(topic, callback) {
     if (this.isConnected && this.client) {
       this.client.subscribe(topic, (err) => {
-        if (err) console.error(`Failed to subscribe to ${topic}: ${err.message}`);
+        if (err) debug(DEBUG_LEVEL.ERROR, `Failed to subscribe to ${topic}: ${err.message}`);
         else {
-          console.log(`Subscribed to ${topic}`);
+          debug(DEBUG_LEVEL.TRACE, `Subscribed to ${topic}`);
           this.client.on('message', (receivedTopic, message) => {
             if (receivedTopic === topic) callback(message.toString());
           });
         }
       });
     } else {
-      console.error('Cannot subscribe, MQTT client not connected');
+      debug(DEBUG_LEVEL.ERROR, 'Cannot subscribe, MQTT client not connected');
     }
   }
 }
@@ -557,10 +796,8 @@ class WebSocketHandler {
     this.isReconnecting = false;
     this.connectionTimeout = options.connectionTimeout || 5000;
     this.processMessageCallback = processMessageCallback;
-    this.reconnectAttempts = options.reconnectAttempts || 360;
-    this.reconnectDelay = options.reconnectDelay || 30000;
-    this.currentReconnectAttempt = 0;
     this.reconnectTimeoutId = null;
+    this.retryManager = new RetryBackoffManager(this.agentId, 'WebSocket');
   }
 
   checkConnected() {
@@ -570,12 +807,10 @@ class WebSocketHandler {
   connect() {
     return new Promise((resolve, reject) => {
       if (this.isConnected) {
-        debug(1, `WebSocket [${this.agentId}] already connected`);
         return resolve(this.client);
       }
       if (this.isConnecting) {
-        debug(1, `WebSocket [${this.agentId}] connection in progress`);
-        return reject(new Error('Connection already in progress'));
+        return reject(new Error('WebSocket connection attempt in progress'));
       }
 
       this.isConnecting = true;
@@ -589,22 +824,22 @@ class WebSocketHandler {
         reconnectInterval: 1000
       };
 
-      debug(0, `Initiating WebSocket connection for [${connId}]`);
+      debug(DEBUG_LEVEL.TRACE, `Initiating WebSocket connection for [${connId}]`);
+      debug(DEBUG_LEVEL.TRACE, `Initiating WebSocket connection for [${connId}]`);
       this.client = new ReconnectingWebSocket(connectUrl, [], options);
 
       this.client.addEventListener('open', () => {
         this.isConnected = true;
         this.isConnecting = false;
-        this.currentReconnectAttempt = 0;
+        this.retryManager.reset();
         this.isReconnecting = false;
-        debug(1, `WebSocket [${connId}] connected to [${connectUrl}]`);
+        debug(DEBUG_LEVEL.INFO, `WebSocket server connected [${this.agentId}]`);
         resolve(this.client);
       });
 
       this.client.addEventListener('close', () => {
         this.isConnected = false;
         this.isConnecting = false;
-        debug(2, `WebSocket [${connId}] closed`);
         if (!this.isReconnecting) {
           this.triggerReconnect();
         }
@@ -613,7 +848,7 @@ class WebSocketHandler {
       this.client.addEventListener('error', (err) => {
         this.isConnected = false;
         this.isConnecting = false;
-        debug(3, `WebSocket [${connId}] error: ${err.message}`);
+        debug(DEBUG_LEVEL.TRACE, `WebSocket error: ${err.message}`);
         if (!this.isReconnecting) {
           this.triggerReconnect();
         }
@@ -622,7 +857,7 @@ class WebSocketHandler {
 
       this.client.addEventListener('message', (event) => {
         const message = `"${event.data}"`;
-        debug(0, `Received message on [${connId}]: ${message}`);
+        debug(DEBUG_LEVEL.TRACE, `Received message on [${connId}]: ${message}`);
         this.processMessageCallback(message);
       });
 
@@ -630,7 +865,7 @@ class WebSocketHandler {
       const connectionTimeoutId = setTimeout(() => {
         if (!this.isConnected && this.isConnecting) {
           this.isConnecting = false;
-          debug(2, `WebSocket [${connId}] initial connection timeout`);
+          debug(DEBUG_LEVEL.WARN, `WebSocket [${connId}] initial connection timeout`);
           if (!this.isReconnecting) {
             this.triggerReconnect();
           }
@@ -646,37 +881,35 @@ class WebSocketHandler {
     this.isReconnecting = true;
     const connId = `${encodeURIComponent(this.agentId)}`;
 
-    if (this.currentReconnectAttempt >= this.reconnectAttempts) {
-      debug(3, `Max WebSocket reconnection attempts reached for [${connId}] - exiting`);
-      process.exit(2);
-    }
-
-    // Clear any existing timeout
+    // Clear any existing timeout (resource cleanup - recommendation 3)
     if (this.reconnectTimeoutId) {
       clearTimeout(this.reconnectTimeoutId);
+      this.reconnectTimeoutId = null;
     }
 
+    // Get next retry delay from backoff manager
+    const retryDelay = this.retryManager.getNextRetryDelay();
+
     this.reconnectTimeoutId = setTimeout(() => {
-      this.currentReconnectAttempt++;
-      debug(2, `WebSocket reconnection attempt ${this.currentReconnectAttempt} of ${this.reconnectAttempts} for [${connId}]`);
+      this.retryManager.recordAttempt();
       this.isReconnecting = false;
       this.connect()
         .then(() => {
-          debug(1, `Successfully reconnected WebSocket [${connId}]`);
+          debug(DEBUG_LEVEL.INFO, `WebSocket server reconnected [${this.agentId}]`);
           publishStatusUpdate('register', 'Agent Online - Awaiting provision');
         })
         .catch(() => {
           // Reconnect will be triggered again by close/error events
         });
-    }, this.reconnectDelay);
+    }, retryDelay);
   }
 
   sendMessage(message) {
     if (this.isConnected && this.client && this.client.readyState === 1) { // readyState 1 = OPEN
       this.client.send(message);
-      debug(1, `Sent message on [${this.agentId}]`);
+      debug(DEBUG_LEVEL.TRACE, `Sent message on [${this.agentId}]`);
     } else {
-      debug(2, `Cannot send on [${this.agentId}]: WebSocket not connected (state: ${this.client?.readyState})`);
+      debug(DEBUG_LEVEL.WARN, `Cannot send on [${this.agentId}]: WebSocket not connected (state: ${this.client?.readyState})`);
       // Trigger reconnection if not already reconnecting
       if (!this.isConnecting && !this.isReconnecting) {
         this.triggerReconnect();
@@ -687,11 +920,13 @@ class WebSocketHandler {
   disconnect() {
     if (this.reconnectTimeoutId) {
       clearTimeout(this.reconnectTimeoutId);
+      this.reconnectTimeoutId = null;
     }
     if (this.client) {
       this.client.close();
       this.isConnected = false;
-      debug(0, 'Disconnected from WebSocket server');
+      this.isConnecting = false;
+      this.isReconnecting = false;
     }
   }
 }
@@ -718,8 +953,8 @@ console.log('888                                                                
 console.log('888                                                                                           ');
 console.log('\x1b[36m _________________');
 console.log('|# \x1b[30m\x1b[47m:           :\x1b[0m\x1b[36m #|');
-console.log('|  \x1b[30m\x1b[47m:  BACK-UP  :\x1b[0m\x1b[36m  |');
-console.log('|  \x1b[30m\x1b[47m:   AGENT   :\x1b[0m\x1b[36m  |');
+console.log('|  \x1b[30m\x1b[47m: BackupHub :\x1b[0m\x1b[36m  |');
+console.log('|  \x1b[30m\x1b[47m:   Agent   :\x1b[0m\x1b[36m  |');
 console.log('|  \x1b[30m\x1b[47m:           :\x1b[0m\x1b[36m  |       \x1b[32mVersion: ' + version + '\x1b[36m');
 console.log('|  \x1b[30m\x1b[47m:___________:\x1b[0m\x1b[36m  |');
 console.log('|    \x1b[90m _________\x1b[36m   |');
@@ -734,35 +969,26 @@ parseSettingsFile("settings.sh");
 
 if (process.argv.includes('--debug')) {
   DEBUG_MODE = true;
-  debug(2, "DEBUG ENABLED");
-}
-
-if (enckey === padStringTo256Bits("CHANGEIT")) {
-  debug(3, "WARNING: Default encryption key in use. Please change this before use.");
+  debug(DEBUG_LEVEL.WARN, "DEBUG ENABLED");
 }
 
 if (useMQTT) {
   mqttClient = new MqttHandler(MQTT_SERVER, MQTT_SERVER_PORT, {
-    reconnectAttempts: RETRY_ATTEMPTS,
-    reconnectDelay: RETRY_DELAY,
     connectionTimeout: RETRY_TIMEOUT,
   });
   mqttClient.connect().then(() => {
     mqttClient.subscribe(TOPIC_COMMAND, handleCommand);
     publishStatusUpdate('register', 'Agent Online - Awaiting provision');
-  }).catch((err) => console.error(`MQTT connection failed: ${err.message}`));
+  }).catch((err) => debug(DEBUG_LEVEL.ERROR, `MQTT connection failed: ${err.message}`));
 } else {
   wsClient = new WebSocketHandler(WS_SERVER, WS_SERVER_PORT, AGENT_ID, handleCommand, {
-    reconnectAttempts: RETRY_ATTEMPTS,
-    reconnectDelay: RETRY_DELAY,
     connectionTimeout: RETRY_TIMEOUT,
   });
-  debug(1, `Establishing WebSocket Connection`);
+  debug(DEBUG_LEVEL.INFO, `Establishing WebSocket Connection`);
   wsClient.connect().then(() => {
-    console.log('WebSocket connected');
     publishStatusUpdate('register', 'Agent Online - Awaiting provision');
   }).catch((err) => {
-    debug(2, `WebSocket connection failed: ${err.message} - triggering reconnection`);
+    debug(DEBUG_LEVEL.WARN, `WebSocket connection failed: ${err.message} - triggering reconnection`);
     wsClient.triggerReconnect();
   });
 }
@@ -776,18 +1002,124 @@ app.get('/', async (req, res) => {
   }
 });
 
-app.get('/debug', async (req, res) => res.json({ DEBUG_MODE }));
-app.get('/debug/on', async (req, res) => res.json({ DEBUG_MODE: (DEBUG_MODE = true) }));
-app.get('/debug/off', async (req, res) => res.json({ DEBUG_MODE: (DEBUG_MODE = false) }));
+app.get('/debug', async (req, res) => {
+  const token = req.query.token || req.headers['x-debug-token'];
+  
+  if (!token) {
+    // Generate a new token and log it
+    generateDebugToken();
+    return res.status(401).json({ 
+      error: 'Token required',
+      message: 'Debug access token required. Check logs for token.',
+      current_state: DEBUG_MODE
+    });
+  }
+  
+  if (!isValidDebugToken(token)) {
+    return res.status(401).json({ 
+      error: 'Invalid or expired token',
+      message: 'Token is invalid or has expired. Request new token.',
+      current_state: DEBUG_MODE
+    });
+  }
+  
+  res.json({ DEBUG_MODE, message: 'Token valid for next 10 minutes' });
+});
+
+app.get('/debug/on', async (req, res) => {
+  const token = req.query.token || req.headers['x-debug-token'];
+  
+  if (!token) {
+    generateDebugToken();
+    return res.status(401).json({ 
+      error: 'Token required',
+      message: 'Debug access token required. Check logs for token.'
+    });
+  }
+  
+  if (!isValidDebugToken(token)) {
+    return res.status(401).json({ 
+      error: 'Invalid or expired token',
+      message: 'Token is invalid or has expired. Request new token.'
+    });
+  }
+  
+  DEBUG_MODE = true;
+  debug(DEBUG_LEVEL.WARN, 'DEBUG_MODE enabled via API');
+  res.json({ DEBUG_MODE: true, message: 'Debug mode enabled. Token valid for next 10 minutes' });
+});
+
+app.get('/debug/off', async (req, res) => {
+  const token = req.query.token || req.headers['x-debug-token'];
+  
+  if (!token) {
+    generateDebugToken();
+    return res.status(401).json({ 
+      error: 'Token required',
+      message: 'Debug access token required. Check logs for token.'
+    });
+  }
+  
+  if (!isValidDebugToken(token)) {
+    return res.status(401).json({ 
+      error: 'Invalid or expired token',
+      message: 'Token is invalid or has expired. Request new token.'
+    });
+  }
+  
+  DEBUG_MODE = false;
+  debug(DEBUG_LEVEL.WARN, 'DEBUG_MODE disabled via API');
+  res.json({ DEBUG_MODE: false, message: 'Debug mode disabled. Token valid for next 10 minutes' });
+});
 
 const server = app.listen(PORT, () => {
-  console.log(`Listening on port ${PORT}`);
+  debug(DEBUG_LEVEL.TRACE, `Express server listening on port ${PORT}`);
   status = AGENT_STATUS.IDLE;
 });
 
-debug(2, `\n+-----------------------------------------------------\n|Agent Name        : ${AGENT_ID}\n+-----------------------------------------------------`);
-debug(2, useMQTT ? `|Connecting via MQTT\n|MQTT Server       : ${MQTT_SERVER}\n|MQTT Server Port  : ${MQTT_SERVER_PORT}` : `|Connecting via WebSocket\n|Websocket Server  : ${WS_SERVER}\n|Websocket Port    : ${WS_SERVER_PORT}`);
-debug(2, `+-----------------------------------------------------\n|Retry Count       : ${RETRY_ATTEMPTS}\n|Retry Backoff     : ${RETRY_DELAY / 1000} secs\n|Connection Timeout: ${RETRY_TIMEOUT / 1000} secs\n+-----------------------------------------------------\n|Working Dir       : ${workingDir}\n+-----------------------------------------------------\n`);
+// Display startup configuration with colors and horizontal separators
+const colors = {
+  brightYellow: '\x1b[93m',
+  yellow: '\x1b[33m',
+  reset: '\x1b[0m'
+};
+
+const separator = `${colors.brightYellow}${'═'.repeat(63)}${colors.reset}`;
+const divider = `${colors.yellow}${'─'.repeat(63)}${colors.reset}`;
+
+console.log(`\n${separator}`);
+console.log(`${colors.brightYellow}  🤖 BACKUPHUB AGENT CONFIGURATION${colors.reset}`);
+console.log(`${separator}\n`);
+
+// Agent Information Section
+console.log(`${colors.brightYellow}  📋 Agent Information${colors.reset}`);
+console.log(`${divider}`);
+console.log(`${colors.brightYellow}    🔹 Agent Name:${colors.reset}          ${colors.yellow}${AGENT_ID}${colors.reset}`);
+console.log(`${colors.brightYellow}    🔹 Host Name:${colors.reset}           ${colors.yellow}${HOSTNAME}${colors.reset}`);
+
+
+// Connection Settings Section
+console.log(`\n${colors.brightYellow}  🔌 Connection Settings${colors.reset}`);
+console.log(`${divider}`);
+if (useMQTT) {
+  console.log(`${colors.brightYellow}    🔹 Mode:${colors.reset}                ${colors.yellow}MQTT${colors.reset}`);
+  console.log(`${colors.brightYellow}    🔹 Server:${colors.reset}              ${colors.yellow}${MQTT_SERVER}${colors.reset}`);
+  console.log(`${colors.brightYellow}    🔹 Port:${colors.reset}                ${colors.yellow}${MQTT_SERVER_PORT}${colors.reset}`);
+} else {
+  console.log(`${colors.brightYellow}    🔹 Mode:${colors.reset}                ${colors.yellow}WebSocket${colors.reset}`);
+  console.log(`${colors.brightYellow}    🔹 Server:${colors.reset}              ${colors.yellow}${WS_SERVER}${colors.reset}`);
+  console.log(`${colors.brightYellow}    🔹 Port:${colors.reset}                ${colors.yellow}${WS_SERVER_PORT}${colors.reset}`);
+}
+console.log(`${colors.brightYellow}    🔹 Webserver Port:${colors.reset}      ${colors.yellow}${PORT}${colors.reset}`);
+console.log(`${colors.brightYellow}    🔹 Connection Timeout:${colors.reset}  ${colors.yellow}${RETRY_TIMEOUT / 1000} secs${colors.reset}`);
+
+// Environment Section
+console.log(`\n${colors.brightYellow}  🌍 Environment${colors.reset}`);
+console.log(`${divider}`);
+console.log(`${colors.brightYellow}    🔹 Working Dir:${colors.reset}        ${colors.yellow}${workingDir}${colors.reset}`);
+console.log(`${colors.brightYellow}    🔹 Install Dir:${colors.reset}        ${colors.yellow}${INSTALL_DIR}${colors.reset}`);
+
+console.log(`\n${separator}\n`);
 
 checkExecutePermissionCapability(workingDir);
 

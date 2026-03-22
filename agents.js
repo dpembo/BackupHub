@@ -1,97 +1,154 @@
 //const { clear } = require('console');
 const fs = require('fs');
+const fsPromises = require('fs').promises;
+const path = require('path');
 //const { ignore } = require('nodemon/lib/rules');
+const db = require('./db.js');
 const filePath = './data/agent-config.json';
+const DB_KEY = 'AGENTS_CONFIG';
 //const agentConfig = loadConfigJson(filePath);
-var agentStatusDict={};
+var agentStatusDict = {};
+const { handleError, AppError } = require('./utils/errorHandler.js');
+
+// Debounce timer for config writes (prevents excessive disk writes)
+let configWriteTimer = null;
+const CONFIG_WRITE_DELAY = 50; // ms - batch writes within 50ms
 
 
-function reset()
-{
+function reset() {
   for (const [key, value] of Object.entries(agentStatusDict)) {
-    value.status="offline";
+    value.status = "offline";
   }
-
 }
 
-function init(){
-  logger.info("Loading and Initializing Agent Configuration File");
+/**
+ * Migrate agent config from JSON file to database
+ * Checks if the JSON file exists, and if so, migrates all agents to the database
+ * and deletes the file after successful migration
+ */
+async function migrateAgentConfigToDatabase() {
   try {
-    var data = fs.readFileSync(filePath, 'utf8')
-  } catch(err) {
-    logger.error("Error getting/reading agent config file",err);
-    return;
-  }
+    // Check if the JSON file exists
+    if (!fs.existsSync(filePath)) {
+      logger.info("Agent config JSON file not found - no migration needed");
+      return false;
+    }
 
-  try {
-    const jsonData = JSON.parse(data);      
-    agentStatusDict = jsonData;
-    reset();
+    logger.info("Found agent config JSON file, starting migration to database...");
+    
+    // Read the JSON file
+    const data = await fsPromises.readFile(filePath, 'utf8');
+    const jsonData = JSON.parse(data);
+    const agentCount = Object.keys(jsonData).length;
+
+    if (agentCount === 0) {
+      logger.info("Agent config file is empty, deleting file");
+      await fsPromises.unlink(filePath);
+      return false;
+    }
+
+    // Migrate all agents to database
+    await db.putData(DB_KEY, jsonData);
+    logger.info(`Successfully migrated ${agentCount} agents to database`);
+
+    // Delete the JSON file after successful migration
+    await fsPromises.unlink(filePath);
+    logger.info("Agent config JSON file deleted after successful migration");
+    
+    return true;
   } catch (err) {
-    logger.error('Error parsing JSON:', error); 
+    logger.error(`Error during agent config migration: ${err.message}`);
+    throw new AppError(`Failed to migrate agent config: ${err.message}`, 500);
   }
 }
 
-//@deprecated
-function initAsync(){
-  logger.info("Loading and Initializing Agent Configuration File");
-  fs.readFile(filePath, 'utf8', (err, data) => {
-    if (err) {
-      logger.error("Error getting agent config file",err);
-      return;
-    }
-  
+async function init() {
+  try {
+    logger.info("Initializing Agent Configuration");
+    
+    // Attempt automatic migration from JSON file to database
+    const migrated = await migrateAgentConfigToDatabase();
+
+    // Load agents from database
     try {
-      const jsonData = JSON.parse(data);      
-      agentStatusDict = jsonData;
+      const data = await db.getData(DB_KEY);
+      agentStatusDict = data || {};
       reset();
-      //return jsonData;
-    } catch (error) {
-      logger.error('Error parsing JSON:', error);
+      logger.info(`Loaded ${Object.keys(agentStatusDict).length} agents from database${migrated ? ' (after migration)' : ''}`);
+    } catch (err) {
+      if (err.message && err.message.includes('NotFoundError')) {
+        logger.info("No agent config found in database, starting with empty config");
+        agentStatusDict = {};
+      } else {
+        throw err;
+      }
     }
-  });
-  //return undefined;
+  } catch (err) {
+    logger.error("Error initializing agent config:", err.message);
+    agentStatusDict = {};
+  }
 }
 
-function deleteAgent(name)
-{
-  logger.info(`Deleting Agent [${name}]`)
+function deleteAgent(name) {
+  logger.info(`Deleting Agent [${name}]`);
   delete agentStatusDict[name];
-  updateConfig();
+  return debouncedUpdateConfig();
 }
 
-
-function registerAgent(name,description,command,imageurl,commsType,display){
+function registerAgent(name, description, command, imageurl, commsType, display) {
   logger.info(`Registering Agent [${name}] Display [${description}]`);
-  updateAgentStatus(name,"online",description,command,undefined,undefined,undefined,commsType,display);
+  
+  // Create the agent if it doesn't exist
+  let agent = getAgent(name);
+  if (agent === undefined) {
+    agent = {
+      name: name,
+      status: 'online',
+      description: description,
+      command: command,
+      commsType: commsType,
+      display: display,
+      lastStatusReport: new Date().toISOString(),
+      isOnline: 'true',
+    };
+    agentStatusDict[name] = agent;
+    // Persist the new agent to config
+    debouncedUpdateConfig().catch(err => {
+      logger.error(`Failed to persist new agent [${name}]:`, err.message);
+    });
+  } else {
+    // Agent exists, update it using the existing function
+    updateAgentStatus(name, "online", description, command, undefined, undefined, undefined, commsType, display);
+  }
 }
 
-function getDict()
-{
+function getDict() {
   return agentStatusDict;
 }
 
-function addToAgentStatusDict(agentJson) {
-
-  // Parse the JSON string
-  var jsonData = JSON.parse(agentJson);
-  //logger.message("Received: " + agentJson)
-  //logger.message("Received: " + jsonData)
-  logger.warn("Adding AGENT Status: " + agentJson);
-  return addObjToAgentStatusDict(jsonData);
+async function addToAgentStatusDict(agentJson) {
+  try {
+    // Parse the JSON string
+    var jsonData = JSON.parse(agentJson);
+    logger.warn("Adding AGENT Status: " + agentJson);
+    return await addObjToAgentStatusDict(jsonData);
+  } catch (error) {
+    logger.error('Error parsing JSON:', error);
+    throw new AppError(`Failed to parse agent JSON: ${error.message}`, 400);
+  }
 }
 
-function addObjToAgentStatusDict(agentObj) {
+async function addObjToAgentStatusDict(agentObj) {
   try {
-    logger.info("Processing agent [" + agentObj.name + "] status [" +  agentObj.status + "]");  
-    if(agentObj.status=="online")agentObj.isOnline="true";
-    if(agentObj.status=="offline")agentObj.isOnline="false";
-    if(agentObj.isOnline===undefined || agentObj.isOnline===null || agentObj.isOnline.length===0)agentObj.isOnline="UNKNOWN"
+    logger.info("Processing agent [" + agentObj.name + "] status [" + agentObj.status + "]");
+    if (agentObj.status == "online") agentObj.isOnline = "true";
+    if (agentObj.status == "offline") agentObj.isOnline = "false";
+    if (agentObj.isOnline === undefined || agentObj.isOnline === null || agentObj.isOnline.length === 0) agentObj.isOnline = "UNKNOWN"
     agentStatusDict[agentObj.name] = agentObj;
-    updateConfig();
-  } 
-  catch (error) {
-    logger.error('Error parsing JSON:',error);
+    return await debouncedUpdateConfig();
+  } catch (error) {
+    logger.error('Error processing agent object:', error);
+    throw new AppError(`Failed to process agent object: ${error.message}`, 500);
   }
 }
 
@@ -127,7 +184,9 @@ function updateAgentStatus(inAgentName,status,description,command,jobName,dateTi
       break
   }*/
   agentHistory.addStatus(agent.name,date,status,agent.jobName);
-  addObjToAgentStatusDict(agent);
+  addObjToAgentStatusDict(agent).catch(err => {
+    logger.error(`Failed to update agent config after status update for [${agent.name}]:`, err.message);
+  });
   //updateConfig();
 }  
 
@@ -163,34 +222,40 @@ function createAgentObject(name, server, description, command, status, lastStatu
   return agent;
 }
 
-function updateConfig() {
-  const tempFilePath = `${filePath}.tmp`; // Temporary file
-  const backupFilePath = `${filePath}.backup`; // Backup file
-  var agents = [];
-  logger.info("Updating Agent Configuration File");
-
-  for (const [key, value] of Object.entries(agentStatusDict)) {
-    agents.push(value);
-  }
-
-  const updatedConfig = JSON.stringify(agentStatusDict, null, 2); // Convert object to JSON string with indentation
-
+async function updateConfig() {
   try {
-    // Create a backup of the existing file before overwriting
-    if (fs.existsSync(filePath)) {
-      fs.copyFileSync(filePath, backupFilePath);  // Create a backup
-      logger.debug('Backup created successfully.');
+    logger.debug("Writing Agent Configuration to database");
+    
+    // Store the entire agentStatusDict to the database
+    await db.putData(DB_KEY, agentStatusDict);
+    logger.debug('Agent config stored to database successfully');
+  } catch (err) {
+    logger.error('Error updating agent config:', err.message);
+    throw new AppError(`Failed to update agent config: ${err.message}`, 500);
+  }
+}
+
+/**
+ * Debounced config write - batches multiple writes within CONFIG_WRITE_DELAY ms
+ * @returns {Promise} Resolves when write completes
+ */
+function debouncedUpdateConfig() {
+  return new Promise((resolve, reject) => {
+    // Clear any pending write timer
+    if (configWriteTimer) {
+      clearTimeout(configWriteTimer);
     }
 
-    // Write to a temporary file first
-    fs.writeFileSync(tempFilePath, updatedConfig, 'utf8');
-
-    // Rename the temporary file to the original file path atomically
-    fs.renameSync(tempFilePath, filePath);
-    logger.debug('Config file updated successfully.');
-  } catch (err) {
-    logger.error('Error updating the config file:', err);
-  }
+    // Set new timer to write after delay
+    configWriteTimer = setTimeout(async () => {
+      try {
+        await updateConfig();
+        resolve();
+      } catch (err) {
+        reject(err);
+      }
+    }, CONFIG_WRITE_DELAY);
+  });
 }
 
 module.exports = { init, getDict, addToAgentStatusDict,addObjToAgentStatusDict, getAgent,searchAgent, registerAgent, deleteAgent, updateAgentStatus,reset};

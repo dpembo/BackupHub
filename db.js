@@ -8,207 +8,307 @@ function initializeDB(dbPath) {
     inDbPath = dbPath;
 }
 
-// Function to store data in the database
-function putData(key, value, callback) {
-  logger.info(( `DB Storing in [${key}] value [${value}]`));
-  db.put(key, value, (err) => {
-    if (err) {
-      callback(err);
-    } else {
-      callback(null, 'Data stored successfully.');
-    }
-  });
-}
+// ============================================================================
+// PRIMARY PROMISE-BASED API (use these in new code)
+// ============================================================================
 
-// Modify putData to return a Promise
-function putDataPromise(key, value) {
-  return new Promise((resolve, reject) => {
-    logger.info(`DB Storing in [${key}] value [${value}]`);
-    db.put(key, value, (err) => {
-      if (err) {
-        reject(err);
-      } else {
-        resolve('Data stored successfully.');
-      }
-    });
-  });
-}
-
-// Promise-based getData
-function getData(key, callback) {
-  logger.debug("In getData");
-  logger.debug(`Attempting to get key [${key}]`);
-  db.get(key, (err, value) => {
-    logger.debug(`db.get callback invoked for key [${key}]`);
-    if (err) {
-      callback(err);
-    } else {
-      logger.debug(`Found item [${key}] value [${value}]`);
-      callback(null, value);
-    }
-  });
-}
-
-
-async function getDataPromise(key) {
-  logger.debug("In getDataPromise");
+/**
+ * Get data from the database
+ * @param {string} key - The key to retrieve
+ * @returns {Promise} The value stored at the key
+ * @throws {Error} If key not found
+ */
+async function getData(key) {
+  logger.debug(`Fetching data from DB [${inDbPath}] with key [${key}]`);
   try {
-    logger.debug(`Attempting to get key [${key}]`);
     const value = await db.get(key);
-    logger.debug(`Found item [${key}] value [${value}]`);
-    if(value==undefined){
-      throw new Error('NotFoundError: Item with key [' + key + '] not found');
+    if(value === undefined || value === null) {
+      throw new Error(`NotFoundError: Item with key [${key}] not found`);
     }
+    logger.debug(`Found item [${key}]`);
     return value;
   } catch (err) {
-    logger.error(`Error fetching key [${key}]: ${err.message}`);
+    // NotFoundError is expected behavior, log at debug level
+    if (err.message && err.message.includes('NotFoundError')) {
+      logger.debug(`Key not found [${key}] (expected if data hasn't been created yet)`);
+    } else {
+      logger.error(`Error fetching key [${key}]: ${err.message}`);
+    }
     throw err;
   }
 }
 
-// Function to delete data from the database
-function deleteData(key, callback) {
-  db.del(key, (err) => {
-    if (err) {
-      callback(err);
-    } else {
-      callback(null, 'Data deleted successfully.');
-    }
-  });
+/**
+ * Put data to the database
+ * @param {string} key - The key to store
+ * @param {*} value - The value to store
+ * @returns {Promise} Resolves when data is stored
+ */
+async function putData(key, value) {
+  logger.info(`DB Storing in [${key}] value [${value}]`);
+  try {
+    const result = await db.put(key, value);
+    return result;
+  } catch (err) {
+    logger.error(`Error storing key [${key}]: ${err.message}`);
+    throw err;
+  }
 }
 
-function callback(a,b) {
-    recordHolder = b;
+/**
+ * Delete data from the database
+ * @param {string} key - The key to delete
+ * @returns {Promise} Resolves when data is deleted
+ */
+async function deleteData(key) {
+  logger.debug(`Deleting key [${key}] from DB`);
+  try {
+    const result = await db.del(key);
+    return result;
+  } catch (err) {
+    logger.error(`Error deleting key [${key}]: ${err.message}`);
+    throw err;
+  }
 }
 
-// Function to search for data based on a specific value
-function searchData(searchValue, callback) {
+// ============================================================================
+// UTILITY FUNCTIONS (Promise-based)
+// ============================================================================
+
+/**
+ * Get multiple values from the database
+ * @param {string[]} keys - Array of keys to retrieve
+ * @returns {Promise} Array of {key, value} objects
+ */
+async function getManyData(keys) {
   const results = [];
-
-  db.createReadStream()
-    .on('data', (data) => {
-      if (data.value === searchValue) {
-        results.push(data);
-      }
-    })
-    .on('end', () => {
-      callback(null, results);
-    })
-    .on('error', (err) => {
-      callback(err);
-    });
-}
-
-// Function to list all keys in the LevelDB database
-function listKeys(callback) {
-  const keys = [];
-
-  db.createKeyStream()
-    .on('data', (key) => {
-      keys.push(key);
-    })
-    .on('end', () => {
-      callback(null, keys);
-    })
-    .on('error', (err) => {
-      callback(err);
-    });
-}
-
-// Function to get many values based on an array of keys
-function getMany(keys, callback) {
-  const results = [];
-  let count = 0;
-
-  keys.forEach((key) => {
-    db.get(key, (err, value) => {
-      count++;
-      if (!err) {
+  try {
+    for (const key of keys) {
+      try {
+        const value = await db.get(key);
         results.push({ key, value });
+      } catch (err) {
+        logger.debug(`Key [${key}] not found, skipping`);
       }
+    }
+    return results;
+  } catch (err) {
+    logger.error(`Error in getManyData: ${err.message}`);
+    throw err;
+  }
+}
 
-      if (count === keys.length) {
-        callback(null, results);
-      }
+/**
+ * Search for data based on a specific value
+ * @param {*} searchValue - The value to search for
+ * @returns {Promise} Array of matching entries
+ */
+async function searchData(searchValue) {
+  return new Promise((resolve, reject) => {
+    const results = [];
+    db.createReadStream()
+      .on('data', (data) => {
+        if (data.value === searchValue) {
+          results.push(data);
+        }
+      })
+      .on('end', () => {
+        resolve(results);
+      })
+      .on('error', (err) => {
+        reject(err);
+      });
+  });
+}
+
+/**
+ * List all keys in the database
+ * @returns {Promise} Array of keys
+ */
+async function listKeys() {
+  return new Promise((resolve, reject) => {
+    const keys = [];
+    db.createKeyStream()
+      .on('data', (key) => {
+        keys.push(key);
+      })
+      .on('end', () => {
+        resolve(keys);
+      })
+      .on('error', (err) => {
+        reject(err);
+      });
+  });
+}
+
+/**
+ * Perform batch operations
+ * @param {Array} operations - Array of batch operations
+ * @returns {Promise} Resolves when batch is complete
+ */
+async function batchData(operations) {
+  return new Promise((resolve, reject) => {
+    db.batch(operations, (err) => {
+      if (err) reject(err);
+      else resolve('Batch operation successful.');
     });
   });
 }
 
-// Function to perform batch operations
-function batch(operations, callback) {
-  db.batch(operations, (err) => {
-    if (err) {
-      callback(err);
-    } else {
-      callback(null, 'Batch operation successful.');
-    }
+/**
+ * Clear the entire database
+ * @returns {Promise} Resolves when database is cleared
+ */
+async function clearData() {
+  return new Promise((resolve, reject) => {
+    db.clear(undefined, (err) => {
+      if (err) reject(err);
+      else resolve('Database cleared.');
+    });
   });
 }
 
-// Function to perform chained batch operations
+// ============================================================================
+// ADVANCED FUNCTIONS (return LevelDB iterators)
+// ============================================================================
+
 function chainedBatch() {
   return db.batch();
 }
 
-// Function to create an iterator for iterating over all entries in the database
 function iterator(options) {
   return db.iterator(options);
 }
 
-// Function to create an iterator for iterating over keys in the database
 function keyIterator() {
   return db.createKeyStream();
 }
 
-// Function to create an iterator for iterating over values in the database
 function valueIterator() {
   return db.createValueStream();
 }
 
-// Function to clear the database
-function clear(callback) {
-    db.clear(undefined,callback)
-}
-
-// Function to create a sublevel
 function sublevel(sublevelName) {
   return db.sublevel(sublevelName);
 }
 
-async function simpleGetData(key){
-    logger.debug(`Fetching data from DB [${inDbPath}] with key [${key}]`)
-    const value = await db.get(key)
-    if(value===undefined||value===null){
-      logger.error('NotFoundError: Item with key [' + key + '] not found');
-      throw new Error('NotFoundError: Item with key [' + key + '] not found');
-    }
-    else return value;
+// ============================================================================
+// BACKWARDS COMPATIBILITY WRAPPERS (deprecated - use Promise-based functions above)
+// ============================================================================
+
+/**
+ * @deprecated Use getData() instead
+ */
+function getDataLegacy(key, callback) {
+  getData(key)
+    .then(value => callback(null, value))
+    .catch(err => callback(err));
 }
 
-async function simplePutData(key,value){
-  logger.debug(`Putting data info  DB with key [${key}]`);
-  const retvalue = await db.put(key, value)
-  return retvalue;
+/**
+ * @deprecated Use putData() instead
+ */
+function putDataLegacy(key, value, callback) {
+  putData(key, value)
+    .then(result => callback(null, result))
+    .catch(err => callback(err));
+}
+
+/**
+ * @deprecated Use deleteData() instead
+ */
+function deleteDataLegacy(key, callback) {
+  deleteData(key)
+    .then(result => callback(null, result))
+    .catch(err => callback(err));
+}
+
+/**
+ * @deprecated Use getManyData() instead
+ */
+function getManyLegacy(keys, callback) {
+  getManyData(keys)
+    .then(results => callback(null, results))
+    .catch(err => callback(err));
+}
+
+/**
+ * @deprecated Use batchData() instead
+ */
+function batchLegacy(operations, callback) {
+  batchData(operations)
+    .then(result => callback(null, result))
+    .catch(err => callback(err));
+}
+
+/**
+ * @deprecated Use listKeys() instead
+ */
+function listKeysLegacy(callback) {
+  listKeys()
+    .then(keys => callback(null, keys))
+    .catch(err => callback(err));
+}
+
+/**
+ * @deprecated Use searchData() instead
+ */
+function searchDataLegacy(searchValue, callback) {
+  searchData(searchValue)
+    .then(results => callback(null, results))
+    .catch(err => callback(err));
+}
+
+/**
+ * @deprecated Use clearData() instead
+ */
+function clearLegacy(callback) {
+  clearData()
+    .then(result => callback(null, result))
+    .catch(err => callback(err));
+}
+
+// Legacy placeholder for backwards compat
+function callbackLegacy(a, b) {
+    recordHolder = b;
 }
 
 module.exports = {
+  // Primary Promise-based API (recommended)
   initializeDB,
-  putData,
-  putDataPromise,
   getData,
-  getDataPromise,
+  putData,
   deleteData,
+  getManyData,
   searchData,
   listKeys,
-  getMany,
-  batch,
+  batchData,
+  clearData,
+  
+  // Advanced functions
   chainedBatch,
   iterator,
   keyIterator,
   valueIterator,
-  clear,
   sublevel,
-  callback,
-  simpleGetData,
-  simplePutData,
+  
+  // Backwards compatibility wrappers (deprecated - will be removed in future versions)
+  getDataPromise: getData,        // Old name -> new function
+  putDataPromise: putData,        // Old name -> new function
+  getDataLegacy,                   // Old callback API
+  putDataLegacy,                   // Old callback API
+  deleteDataLegacy,                // Old callback API
+  getManyLegacy,                   // Old callback API
+  batchLegacy,                     // Old callback API
+  listKeysLegacy,                  // Old callback API
+  searchDataLegacy,                // Old callback API
+  clearLegacy,                     // Old callback API
+  
+  // Legacy aliases for old code (will be removed)
+  simpleGetData: getData,          // Old name -> new function
+  simplePutData: putData,          // Old name -> new function
+  getMany: getManyData,            // Old name -> new function
+  batch: batchData,                // Old name -> new function
+  clear: clearData,                // Old name -> new function
+  callback: callbackLegacy,        // Old name -> new function
 };

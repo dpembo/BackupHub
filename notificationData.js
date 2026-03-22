@@ -28,7 +28,7 @@ function getCount(){
 async function getData() {
     try {
         //logger.debug("getData>>Getting notification item: " + DBKEY);
-        var obj = await db.simpleGetData(DBKEY);
+        var obj = await db.getData(DBKEY);
         if (obj !== undefined && obj !== null) notificationItems = obj;
         //logger.debug("getData>>** Notification Data **: \n " + JSON.stringify(obj));
         logger.debug("NotificationData Size:" + getCount());
@@ -59,30 +59,26 @@ function add(item) {
     webSocketBrowser.emitNotification('notification', `Count updated`);
 }
 
-function updateDb() {
+async function updateDb() {
     logger.info("Updating notification Records");
-    //this.saveHistory();
-    db.putData(DBKEY, notificationItems, (err, result) => {
-        if (err) {
-            logger.error(`unable to put notification items [${DBKEY}] to DB`, err);
-        } else {
-            logger.debug(`Notification Data items created successfully`);
-        }
-    });
+    try {
+        await db.putData(DBKEY, notificationItems);
+        logger.debug(`Notification Data items updated successfully`);
+    } catch (err) {
+        logger.error(`unable to put notification items [${DBKEY}] to DB`, err);
+    }
 }
 
-function updateDbPromise() {
+async function updateDbPromise() {
     logger.info("Updating notification Records");
-    //this.saveHistory();
-    db.putDataPromise(DBKEY, notificationItems, (err, result) => {
-        if (err) {
-            logger.error(`unable to put notification items [${DBKEY}] to DB`, err);
-            return "ERROR";
-        } else {
-            logger.debug(`Notification Data items created successfully`);
-            return "OK"
-        }
-    });
+    try {
+        await db.putData(DBKEY, notificationItems);
+        logger.debug(`Notification Data items updated successfully`);
+        return "OK";
+    } catch (err) {
+        logger.error(`unable to put notification items [${DBKEY}] to DB`, err);
+        return "ERROR";
+    }
 }
 
 function createNotificationItem(runDate, type, title, description,url) {
@@ -110,10 +106,7 @@ function getItem(index) {
 
 async function deleteItem(index){
     removeItem(notificationItems,null,index);
-    //var res = updateDb()(;
-    var res = updateDbPromise();
-    //if(res.startsWith("error:")==true)throw error(res);
-    //console.log("Repsonse is: " + res);
+    var res = await updateDbPromise();
     return res;
 }
 
@@ -128,7 +121,7 @@ function removeItem(array, itemToRemove, index, ) {
 
 async function deleteAll(){
     notificationItems=[];
-    var res = updateDbPromise();
+    var res = await updateDbPromise();
     return res;
 }
 

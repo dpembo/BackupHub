@@ -49,7 +49,7 @@ function processMessage(topic, message,protocol) {
         logger.debug("PONG RECEIVED: " + obj.status);
         logger.debug("AGENT STATUS: " + agents.getAgent(obj.name).status);
         logger.debug("--------------------------------------");
-        agentStats.add(obj.name,obj.data);
+        agentStats.set(obj.name,obj.data);
         logger.debug("--------------------------------------");
         if (agents.getAgent(obj.name).status != "running") {
           agents.updateAgentStatus(obj.name, "online", "Ping response returned",null,null,null,message,protocol);
@@ -63,15 +63,15 @@ function processMessage(topic, message,protocol) {
       }
   
       //Log submission received
-      if (topic = "backup/agent/status" && obj.status == "log_submission" ) {
+      if (obj.status == "log_submission") {
         logger.info("Received Log event");
         //add log to db
         //console.log("Received log event");
-        updateLogRecord(obj);
+        updateLogRecord(obj).catch(err => logger.error('Failed to update log record:', err.message));
       }
   
       //ETA Submission received
-      if (topic = "backup/agent/status" && obj.status == "eta_submission" ) {
+      if (obj.status == "eta_submission") {
         var runTime = obj.eta;
         var runningItm = running.getItemByName(obj.jobName);
         var startTime = runningItm.startTime;
@@ -96,12 +96,17 @@ function processMessage(topic, message,protocol) {
         updateStatusRecords(obj, startTime);
         running.removeItem(obj.jobName);
         agents.updateAgentStatus(obj.name, "online", `Job [${obj.name}] completed`,null,null,null,message,protocol,null);
+        
+        // Emit schedule update to notify frontend that job completed
+        emitScheduleUpdate(obj.jobName);
       }
     }
     else {
       //Register an unknown agent
       if (topic == "backup/agent/status" && obj.status == "register") {
-        agents.addObjToAgentStatusDict(obj);
+        agents.addObjToAgentStatusDict(obj).catch(err => {
+          logger.error(`Failed to register unknown agent [${obj.name}]:`, err.message);
+        });
         webSocketBrowser.emitNotification('register', `${message.toString()}`);
       }
   
@@ -142,6 +147,8 @@ function processMessage(topic, message,protocol) {
             logger.debug(`No Log record found - creating with key [${key}]`);
             resp = await db.simplePutData(key,obj.data);
             logger.debug(`Data created successfully for Key [${key}], Response [${resp}], Data \n${obj.data}`);
+            // Emit websocket event for schedule log update
+            emitScheduleLogUpdate(obj.jobName, obj.data);
         }
         catch (insertErr){
           logger.error(`Unknown Issue creating new entry for key [${key}] to DB`);
@@ -161,8 +168,10 @@ function processMessage(topic, message,protocol) {
       data+=obj.data;
       try{
         logger.debug(``)
-        resp = db.simplePutData(key,data);
+        resp = await db.simplePutData(key,data);
         logger.debug(`Data upadated successfully Key [${key}], Response [${resp}], Data \n${data}`);
+        // Emit websocket event for schedule log update
+        emitScheduleLogUpdate(obj.jobName, data);
       }
       catch (error){
         logger.error(`unable to add [${key}] to DB`);
@@ -171,6 +180,94 @@ function processMessage(topic, message,protocol) {
       }
     }
 
+  }
+
+  function emitScheduleLogUpdate(jobName, logData) {
+    try {
+      var scheduleIndex = scheduler.getScheduleIndex(jobName);
+      logger.debug(`[emitScheduleLogUpdate] jobName: ${jobName}, scheduleIndex: ${scheduleIndex}`);
+      
+      if (scheduleIndex !== undefined && scheduleIndex !== null && scheduleIndex >= 0) {
+        // Use lazy loading to get the socket.io instance at runtime, avoiding initialization order issues
+        var wsBrowserTransport = require('./communications/wsBrowserTransport.js');
+        var io = wsBrowserTransport.getIO();
+        
+        if (io) {
+          logger.debug(`[emitScheduleLogUpdate] Emitting scheduleLog:${scheduleIndex}`);
+          io.emit(`scheduleLog:${scheduleIndex}`, { log: logData });
+        } else {
+          logger.warn(`[emitScheduleLogUpdate] Socket.io instance not available yet`);
+        }
+      } else {
+        logger.warn(`[emitScheduleLogUpdate] Invalid scheduleIndex: ${scheduleIndex} for jobName: ${jobName}`);
+      }
+    } catch (error) {
+      logger.debug(`[emitScheduleLogUpdate] Error emitting schedule log update: ${error.message}`);
+    }
+  }
+
+  async function emitScheduleUpdate(jobName) {
+    try {
+      var scheduleIndex = scheduler.getScheduleIndex(jobName);
+      logger.debug(`[emitScheduleUpdate] jobName: ${jobName}, scheduleIndex: ${scheduleIndex}`);
+      
+      if (scheduleIndex !== undefined && scheduleIndex !== null && scheduleIndex >= 0) {
+        // Gather schedule data to emit
+        var schedule = scheduler.getSchedules(scheduleIndex);
+        var agentData = agents.getAgent(schedule.agent);
+        
+        // Get stats and log from database
+        var key1 = schedule.agent + "_" + schedule.jobName + "_" + "stats";
+        var key2 = schedule.agent + "_" + schedule.jobName + "_" + "log";
+        
+        var stats = null;
+        var log = null;
+        try {
+          stats = await db.simpleGetData(key1);
+        } catch(err) {
+          logger.warn(`[emitScheduleUpdate] Unable to find stats data for ${key1}`);
+        }
+        
+        try {
+          log = await db.simpleGetData(key2);
+        } catch(err) {
+          logger.warn(`[emitScheduleUpdate] Unable to find log data for ${key2}`);
+        }
+        
+        // Get history data
+        var histLastRun = hist.getLastRun(schedule.jobName);
+        var histAvgRuntime = hist.getAverageRuntime(schedule.jobName);
+        
+        // Build response data matching scheduleInfo.ejs expectations
+        var data = {
+          agent: agentData,
+          schedule: schedule,
+          index: scheduleIndex,
+          stats: stats,
+          log: log,
+          hist: {
+            histLastRun: histLastRun,
+            histAvgRuntime: histAvgRuntime,
+            histAvgRuntimeSecs: dateTimeUtils.displaySecs(histAvgRuntime)
+          }
+        };
+        
+        // Emit the update
+        var wsBrowserTransport = require('./communications/wsBrowserTransport.js');
+        var io = wsBrowserTransport.getIO();
+        
+        if (io) {
+          logger.debug(`[emitScheduleUpdate] Emitting scheduleUpdate:${scheduleIndex}`);
+          io.emit(`scheduleUpdate:${scheduleIndex}`, data);
+        } else {
+          logger.warn(`[emitScheduleUpdate] Socket.io instance not available yet`);
+        }
+      } else {
+        logger.warn(`[emitScheduleUpdate] Invalid scheduleIndex: ${scheduleIndex} for jobName: ${jobName}`);
+      }
+    } catch (error) {
+      logger.error(`[emitScheduleUpdate] Error emitting schedule update: ${error.message}`);
+    }
   }
 
   async function updateStatusRecords(obj,startDate){

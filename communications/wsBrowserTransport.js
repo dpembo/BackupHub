@@ -39,6 +39,20 @@ function emitNotification(event, message) {
     io.emit(event, message);
 }
 
+// Emit a schedule-specific event to all connected clients
+function emitScheduleEvent(scheduleIndex, eventType, data) {
+    if (!io) {
+        logger.warn(`Socket.io not initialized, cannot emit schedule event`);
+        return;
+    }
+    const eventName = `${eventType}:${scheduleIndex}`;
+    logger.debug(`Emitting schedule event [${eventName}] with data: ${JSON.stringify(data).substring(0, 100)}`);
+    io.emit(eventName, data);
+}
+
+function getIO() {
+    return io;
+}
 
 
-module.exports = { init, emitNotification };
+module.exports = { init, emitNotification, emitScheduleEvent, getIO };

@@ -34,11 +34,11 @@ function displayFormatDate(inDate, future, targetTimeZone, format,addDelta) {
 
   //logger.debug(addDelta);
   if(addDelta!==undefined && addDelta==false){
-    //logger.debug("Retuning only date: " + formattedDate);
+    //logger.debug("Returning only date: " + formattedDate);
     return `${formattedDate}`;
   }
   else{ 
-    logger.debug("delta not set - Reutning date and delta");
+    //logger.debug("Returning date and delta");
     return `${formattedDate} (${formattedDelta})`;
   }
 }
@@ -82,5 +82,5 @@ function displaySecs(secs) {
 
 
 module.exports = {
-  convertToTimezone,applyTz,displayFormatDate
+  convertToTimezone,applyTz,displayFormatDate,displaySecs
 };

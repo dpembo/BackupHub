@@ -1,0 +1,3 @@
+# Async/Await Standardization - Implementation Guide
+
+...existing content from ASYNC_STANDARDIZATION.md...
