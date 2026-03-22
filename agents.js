@@ -3,7 +3,9 @@ const fs = require('fs');
 const fsPromises = require('fs').promises;
 const path = require('path');
 //const { ignore } = require('nodemon/lib/rules');
+const db = require('./db.js');
 const filePath = './data/agent-config.json';
+const DB_KEY = 'AGENTS_CONFIG';
 //const agentConfig = loadConfigJson(filePath);
 var agentStatusDict = {};
 const { handleError, AppError } = require('./utils/errorHandler.js');
@@ -19,14 +21,68 @@ function reset() {
   }
 }
 
-async function init() {
+/**
+ * Migrate agent config from JSON file to database
+ * Checks if the JSON file exists, and if so, migrates all agents to the database
+ * and deletes the file after successful migration
+ */
+async function migrateAgentConfigToDatabase() {
   try {
-    logger.info("Loading and Initializing Agent Configuration File");
+    // Check if the JSON file exists
+    if (!fs.existsSync(filePath)) {
+      logger.info("Agent config JSON file not found - no migration needed");
+      return false;
+    }
+
+    logger.info("Found agent config JSON file, starting migration to database...");
+    
+    // Read the JSON file
     const data = await fsPromises.readFile(filePath, 'utf8');
     const jsonData = JSON.parse(data);
-    agentStatusDict = jsonData;
-    reset();
-    logger.info(`Loaded ${Object.keys(agentStatusDict).length} agents from configuration`);
+    const agentCount = Object.keys(jsonData).length;
+
+    if (agentCount === 0) {
+      logger.info("Agent config file is empty, deleting file");
+      await fsPromises.unlink(filePath);
+      return false;
+    }
+
+    // Migrate all agents to database
+    await db.putData(DB_KEY, jsonData);
+    logger.info(`Successfully migrated ${agentCount} agents to database`);
+
+    // Delete the JSON file after successful migration
+    await fsPromises.unlink(filePath);
+    logger.info("Agent config JSON file deleted after successful migration");
+    
+    return true;
+  } catch (err) {
+    logger.error(`Error during agent config migration: ${err.message}`);
+    throw new AppError(`Failed to migrate agent config: ${err.message}`, 500);
+  }
+}
+
+async function init() {
+  try {
+    logger.info("Initializing Agent Configuration");
+    
+    // Attempt automatic migration from JSON file to database
+    const migrated = await migrateAgentConfigToDatabase();
+
+    // Load agents from database
+    try {
+      const data = await db.getData(DB_KEY);
+      agentStatusDict = data || {};
+      reset();
+      logger.info(`Loaded ${Object.keys(agentStatusDict).length} agents from database${migrated ? ' (after migration)' : ''}`);
+    } catch (err) {
+      if (err.message && err.message.includes('NotFoundError')) {
+        logger.info("No agent config found in database, starting with empty config");
+        agentStatusDict = {};
+      } else {
+        throw err;
+      }
+    }
   } catch (err) {
     logger.error("Error initializing agent config:", err.message);
     agentStatusDict = {};
@@ -167,41 +223,14 @@ function createAgentObject(name, server, description, command, status, lastStatu
 }
 
 async function updateConfig() {
-  // Use unique temp file to prevent race conditions with concurrent writes
-  const uniqueSuffix = `${Date.now()}.${Math.random().toString(36).substr(2, 9)}`;
-  const tempFilePath = `${filePath}.${uniqueSuffix}.tmp`;
-  const backupFilePath = `${filePath}.backup`;
-  const dataDir = path.dirname(filePath);
-  
   try {
-    logger.debug("Writing Agent Configuration File to disk");
-
-    // Ensure data directory exists
-    if (!fs.existsSync(dataDir)) {
-      await fsPromises.mkdir(dataDir, { recursive: true });
-      logger.debug(`Created directory: ${dataDir}`);
-    }
-
-    const updatedConfig = JSON.stringify(agentStatusDict, null, 2);
-
-    // Create a backup of the existing file before overwriting (using sync for backup)
-    if (fs.existsSync(filePath)) {
-      try {
-        fs.copyFileSync(filePath, backupFilePath);
-        logger.debug('Backup created successfully.');
-      } catch (err) {
-        logger.warn(`Could not create backup: ${err.message}`);
-      }
-    }
-
-    // Write to a temporary file first (unique to prevent race conditions)
-    await fsPromises.writeFile(tempFilePath, updatedConfig, 'utf8');
-
-    // Rename the temporary file to the original file path atomically
-    await fsPromises.rename(tempFilePath, filePath);
-    logger.info('Agent config file updated successfully.');
+    logger.debug("Writing Agent Configuration to database");
+    
+    // Store the entire agentStatusDict to the database
+    await db.putData(DB_KEY, agentStatusDict);
+    logger.debug('Agent config stored to database successfully');
   } catch (err) {
-    logger.error('Error updating the agent config file:', err.message);
+    logger.error('Error updating agent config:', err.message);
     throw new AppError(`Failed to update agent config: ${err.message}`, 500);
   }
 }

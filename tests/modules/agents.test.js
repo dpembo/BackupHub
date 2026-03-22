@@ -1,19 +1,23 @@
 // Mock setup for agents module tests
+jest.mock('../../db.js', () => ({
+  getData: jest.fn(),
+  putData: jest.fn(),
+  deleteData: jest.fn(),
+}));
+
 jest.mock('fs', () => {
   const actualFs = jest.requireActual('fs');
   return {
     ...actualFs,
     existsSync: jest.fn().mockReturnValue(false),
-    copyFileSync: jest.fn(),
     promises: {
       readFile: jest.fn(),
-      writeFile: jest.fn(),
-      mkdir: jest.fn(),
-      rename: jest.fn(),
+      unlink: jest.fn(),
     },
   };
 });
 
+const db = require('../../db.js');
 const fs = require('fs');
 
 describe('Agents Module', () => {
@@ -35,28 +39,30 @@ describe('Agents Module', () => {
       addStatus: jest.fn().mockResolvedValue(undefined),
     };
 
-    // Mock file system with all required methods
-    fs.promises.readFile = jest.fn().mockResolvedValue(
-      JSON.stringify({
-        'agent-1': {
-          name: 'agent-1',
-          status: 'offline',
-          description: 'Test Agent 1',
-        },
-        'agent-2': {
-          name: 'agent-2',
-          status: 'online',
-          description: 'Test Agent 2',
-        },
-      })
-    );
-    fs.promises.writeFile = jest.fn().mockResolvedValue(undefined);
-    fs.promises.mkdir = jest.fn().mockResolvedValue(undefined);
-    fs.promises.rename = jest.fn().mockResolvedValue(undefined);
-    fs.existsSync = jest.fn().mockReturnValue(false);
-    fs.copyFileSync = jest.fn();
+    // Default behavior: no JSON file to migrate, agents in database
+    fs.existsSync.mockReturnValue(false);
+    
+    const mockAgents = {
+      'agent-1': {
+        name: 'agent-1',
+        status: 'offline',
+        description: 'Test Agent 1',
+      },
+      'agent-2': {
+        name: 'agent-2',
+        status: 'online',
+        description: 'Test Agent 2',
+      },
+    };
+    
+    db.getData.mockResolvedValue(mockAgents);
+    db.putData.mockResolvedValue(undefined);
+    db.deleteData.mockResolvedValue(undefined);
 
-    agents = require('../../agents.js');
+    // Only require agents once
+    if (!agents) {
+      agents = require('../../agents.js');
+    }
   });
 
   afterEach(() => {
@@ -65,16 +71,18 @@ describe('Agents Module', () => {
   });
 
   describe('init()', () => {
-    it('should initialize agents from config file', async () => {
+    it('should initialize agents from database', async () => {
       await agents.init();
-      expect(fs.promises.readFile).toHaveBeenCalled();
-      expect(logger.info).toHaveBeenCalled();
+      expect(db.getData).toHaveBeenCalledWith('AGENTS_CONFIG');
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Loaded'));
     });
 
-    it('should handle missing config file gracefully', async () => {
-      fs.promises.readFile.mockRejectedValue(new Error('ENOENT'));
+    it('should handle missing database entry gracefully', async () => {
+      db.getData.mockRejectedValue(new Error('NotFoundError: Key not found'));
       await agents.init();
-      expect(logger.error).toHaveBeenCalled();
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.stringContaining('No agent config found')
+      );
     });
 
     it('should reset all agents to offline', async () => {
@@ -83,6 +91,31 @@ describe('Agents Module', () => {
       Object.values(dict).forEach((agent) => {
         expect(agent.status).toBe('offline');
       });
+    });
+
+    it('should migrate agents from JSON file if it exists', async () => {
+      const mockJsonAgents = {
+        'agent-3': {
+          name: 'agent-3',
+          status: 'online',
+          description: 'Migrated Agent',
+        },
+      };
+      
+      fs.existsSync.mockReturnValue(true);
+      fs.promises.readFile.mockResolvedValue(JSON.stringify(mockJsonAgents));
+      fs.promises.unlink.mockResolvedValue(undefined);
+      
+      db.getData.mockRejectedValueOnce(new Error('NotFoundError: Key not found'));
+      db.putData.mockResolvedValueOnce(undefined);
+      
+      await agents.init();
+      
+      expect(db.putData).toHaveBeenCalledWith('AGENTS_CONFIG', mockJsonAgents);
+      expect(fs.promises.unlink).toHaveBeenCalled();
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.stringContaining('migration')
+      );
     });
   });
 
@@ -111,6 +144,13 @@ describe('Agents Module', () => {
       const agent = agents.getAgent('new-agent');
       expect(agent).toBeTruthy();
       expect(agent.status).toBe('online');
+      
+      // Wait for debounced write
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      expect(db.putData).toHaveBeenCalledWith('AGENTS_CONFIG', expect.objectContaining({
+        'new-agent': expect.any(Object),
+      }));
     });
 
     it('should update existing agent', async () => {
@@ -149,6 +189,15 @@ describe('Agents Module', () => {
       const agent = agents.getAgent('agent-1');
       expect(agent.lastStatusReport).toBeDefined();
     });
+
+    it('should persist to database', async () => {
+      agents.updateAgentStatus('agent-1', 'online');
+      
+      // Wait for debounced write
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      expect(db.putData).toHaveBeenCalledWith('AGENTS_CONFIG', expect.any(Object));
+    });
   });
 
   describe('deleteAgent()', () => {
@@ -162,9 +211,15 @@ describe('Agents Module', () => {
       expect(agent).toBeUndefined();
     });
 
-    it('should persist deletion to config', async () => {
+    it('should persist deletion to database', async () => {
       await agents.deleteAgent('agent-1');
-      expect(fs.promises.writeFile).toHaveBeenCalled();
+      
+      // Wait for debounced write
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      expect(db.putData).toHaveBeenCalledWith('AGENTS_CONFIG', expect.not.objectContaining({
+        'agent-1': expect.any(Object),
+      }));
     });
   });
 

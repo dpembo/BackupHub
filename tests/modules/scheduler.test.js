@@ -1,5 +1,12 @@
 // Mock setup for scheduler module tests
 
+// Mock db module before importing scheduler
+jest.mock('../../db.js', () => ({
+  getData: jest.fn(),
+  putData: jest.fn(),
+  deleteData: jest.fn(),
+}));
+
 // Mock dateTimeUtils module before importing scheduler
 jest.mock('../../utils/dateTimeUtils.js', () => ({
   displayFormatDate: jest.fn().mockReturnValue('2026-03-21T12:00:00.000'),
@@ -13,19 +20,21 @@ jest.mock('fs', () => {
     readFile: jest.fn(),
     writeFile: jest.fn(),
     mkdir: jest.fn(),
+    unlink: jest.fn(),
   };
   return {
     ...actualFs,
+    existsSync: jest.fn().mockReturnValue(false),
     promises: mockPromises,
   };
 });
 
 const dateTimeUtils = require('../../utils/dateTimeUtils.js');
 const fs = require('fs');
+const db = require('../../db.js');
 
 describe('Scheduler Module', () => {
   let scheduler;
-  let mockDb;
   let mockAgents;
   let mockHistory;
 
@@ -69,12 +78,6 @@ describe('Scheduler Module', () => {
       sendNotification: jest.fn(),
     };
 
-    // Mock db as a global object
-    mockDb = {
-      getData: jest.fn().mockResolvedValue([]),
-      putData: jest.fn().mockResolvedValue(true),
-    };
-
     // Mock agents as a global object
     mockAgents = {
       getAgent: jest.fn().mockReturnValue({
@@ -99,7 +102,7 @@ describe('Scheduler Module', () => {
     // Mock fs.promises
     fs.promises.readFile = jest.fn().mockImplementation((filePath) => {
       if (filePath === './data/schedules.json') {
-        // Return mock schedules for the scheduler
+        // Return mock schedules for migration (if file exists)
         return Promise.resolve(JSON.stringify([
           {
             jobName: 'test-job',
@@ -117,8 +120,24 @@ describe('Scheduler Module', () => {
     });
     fs.promises.writeFile = jest.fn().mockResolvedValue(undefined);
     fs.promises.mkdir = jest.fn().mockResolvedValue(undefined);
+    fs.promises.unlink = jest.fn().mockResolvedValue(undefined);
 
-    global.db = mockDb;
+    // Set up the actual mocked db with sample schedules
+    const sampleSchedules = [
+      {
+        jobName: 'test-job',
+        agent: 'test-agent',
+        command: 'test.sh',
+        scheduleType: 'daily',
+        scheduleTime: '12:00',
+        dayOfWeek: '*',
+        dayInMonth: '*',
+      },
+    ];
+    
+    db.getData.mockResolvedValue(sampleSchedules);
+    db.putData.mockResolvedValue(true);
+
     global.agents = mockAgents;
     global.hist = mockHistory;
     global.moment = require('moment-timezone');
@@ -134,7 +153,6 @@ describe('Scheduler Module', () => {
     delete global.thresholdJobs;
     delete global.nodeschedule;
     delete global.notifier;
-    delete global.db;
     delete global.agents;
     delete global.hist;
     delete global.moment;
@@ -142,8 +160,17 @@ describe('Scheduler Module', () => {
 
   describe('init()', () => {
     it('should initialize scheduler', async () => {
-      fs.promises.mkdir = jest.fn().mockResolvedValue(undefined);
-      fs.promises.writeFile = jest.fn().mockResolvedValue(undefined);
+      db.getData.mockResolvedValue([
+        {
+          jobName: 'test-job',
+          agent: 'test-agent',
+          command: 'test.sh',
+          scheduleType: 'daily',
+          scheduleTime: '12:00',
+          dayOfWeek: '*',
+          dayInMonth: '*',
+        },
+      ]);
 
       await scheduler.init();
       expect(logger.info).toHaveBeenCalled();
@@ -167,6 +194,18 @@ describe('Scheduler Module', () => {
 
   describe('getSchedules()', () => {
     beforeEach(async () => {
+      // Set up mock data before init
+      db.getData.mockResolvedValue([
+        {
+          jobName: 'test-job',
+          agent: 'test-agent',
+          command: 'test.sh',
+          scheduleType: 'daily',
+          scheduleTime: '12:00',
+          dayOfWeek: '*',
+          dayInMonth: '*',
+        },
+      ]);
       // Initialize scheduler to load schedules
       await scheduler.init();
     });
@@ -189,6 +228,18 @@ describe('Scheduler Module', () => {
 
   describe('manualJobRun()', () => {
     beforeEach(async () => {
+      // Set up mock data before init
+      db.getData.mockResolvedValue([
+        {
+          jobName: 'test-job',
+          agent: 'test-agent',
+          command: 'test.sh',
+          scheduleType: 'daily',
+          scheduleTime: '12:00',
+          dayOfWeek: '*',
+          dayInMonth: '*',
+        },
+      ]);
       // Initialize scheduler to load schedules
       await scheduler.init();
     });

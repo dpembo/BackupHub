@@ -9,7 +9,7 @@ COPY . .
 RUN apt-get update && apt-get install -y curl
 RUN apt-get install -y rsync
 
-RUN npm install
+RUN npm ci --omit=dev
 EXPOSE 49991
 
 # Health check to call the internal REST API for liveness details

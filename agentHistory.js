@@ -223,5 +223,31 @@ async function deleteOldStatus(id, date) {
 }
 
 
+/**
+ * Export all raw entries from the agent history database
+ * @returns {Promise<Array>} Array of { key, value } objects
+ */
+async function exportAll() {
+    const entries = [];
+    for await (const [key, value] of db.iterator()) {
+        entries.push({ key, value });
+    }
+    return entries;
+}
+
+/**
+ * Import raw entries back into the agent history database
+ * Clears existing data first
+ * @param {Array} entries - Array of { key, value } objects
+ * @returns {Promise<void>}
+ */
+async function importAll(entries) {
+    await db.clear();
+    const ops = entries.map(({ key, value }) => ({ type: 'put', key, value }));
+    if (ops.length > 0) {
+        await db.batch(ops);
+    }
+}
+
 // Export the functions
-module.exports = { initializeDB, addStatus, getStatus, getDateFilteredStatus }
+module.exports = { initializeDB, addStatus, getStatus, getDateFilteredStatus, exportAll, importAll }

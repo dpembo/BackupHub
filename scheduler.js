@@ -1,4 +1,6 @@
 const scheduleFile = "./data/schedules.json";
+const db = require('./db.js');
+const DB_KEY = 'SCHEDULES_CONFIG';
 var schedules = [];
 
 var mqttClient;
@@ -51,33 +53,82 @@ function publishExecute(agent_id, command, commandParams, jobName, isManual) {
   agentComms.sendCommand(agent_id, mqttTransport.getCommandTopic(), command, commandParams, jobName, undefined, isManual);
 }
 
-// Read schedules from the JSON file
+/**
+ * Migrate schedules from JSON file to database
+ * Checks if the JSON file exists, and if so, migrates all schedules to the database
+ * and deletes the file after successful migration
+ */
+async function migrateSchedulesToDatabase() {
+  try {
+    // Check if the JSON file exists
+    if (!fsSync.existsSync(scheduleFile)) {
+      logger.info("Schedules JSON file not found - no migration needed");
+      return false;
+    }
+
+    logger.info("Found schedules JSON file, starting migration to database...");
+    
+    // Read the JSON file
+    const data = await fs.readFile(scheduleFile, 'utf8');
+    const jsonData = JSON.parse(data);
+    const scheduleCount = Array.isArray(jsonData) ? jsonData.length : 0;
+
+    if (scheduleCount === 0) {
+      logger.info("Schedules file is empty, deleting file");
+      await fs.unlink(scheduleFile);
+      return false;
+    }
+
+    // Migrate all schedules to database
+    await db.putData(DB_KEY, jsonData);
+    logger.info(`Successfully migrated ${scheduleCount} schedules to database`);
+
+    // Delete the JSON file after successful migration
+    await fs.unlink(scheduleFile);
+    logger.info("Schedules JSON file deleted after successful migration");
+    
+    return true;
+  } catch (err) {
+    logger.error(`Error during schedules migration: ${err.message}`);
+    throw new AppError(`Failed to migrate schedules: ${err.message}`, 500);
+  }
+}
+
+// Read schedules from the database
 async function readSchedules() {
   try {
-    logger.info("Loading Scheduler Data from: " + scheduleFile);
-    const data = await fs.readFile(scheduleFile, 'utf8');
-    schedules = JSON.parse(data);
-    logger.debug(`Loaded ${schedules.length} schedules`);
+    logger.info("Loading Scheduler Data from database");
+    
+    // Attempt automatic migration from JSON file to database
+    const migrated = await migrateSchedulesToDatabase();
+
+    // Load schedules from database
+    try {
+      const data = await db.getData(DB_KEY);
+      schedules = Array.isArray(data) ? data : [];
+      logger.info(`Loaded ${schedules.length} schedules from database${migrated ? ' (after migration)' : ''}`);
+    } catch (err) {
+      if (err.message && err.message.includes('NotFoundError')) {
+        logger.info("No schedules found in database, starting with empty config");
+        schedules = [];
+      } else {
+        throw err;
+      }
+    }
   } catch (err) {
     logger.error('Error reading schedules:', err.message);
     schedules = [];
   }
 }
 
-// Write schedules to the JSON file
+// Write schedules to the database
 async function writeSchedules() {
   try {
-    logger.info("Writing Schedules to disk");
+    logger.debug("Writing Schedules to database");
     
-    // Ensure data directory exists
-    const dataDir = path.dirname(scheduleFile);
-    if (!fsSync.existsSync(dataDir)) {
-      await fs.mkdir(dataDir, { recursive: true });
-      logger.debug(`Created directory: ${dataDir}`);
-    }
-    
-    await fs.writeFile(scheduleFile, JSON.stringify(schedules, null, 2), 'utf8');
-    logger.debug('Schedules saved successfully');
+    // Store the schedules array to the database
+    await db.putData(DB_KEY, schedules);
+    logger.debug('Schedules stored to database successfully');
     await scheduleJobs();
   } catch (err) {
     logger.error('Error writing schedules:', err.message);

@@ -53,6 +53,7 @@ var lusca = require('lusca');
 var querystring = require('querystring');
 var https = require('https');
 var bodyParser = require('body-parser');
+const multer = require('multer');
 
 const User = require('./models/user');
 const { asyncHandler, errorHandlerMiddleware, AppError } = require('./utils/errorHandler.js');
@@ -76,6 +77,7 @@ fs = require('fs');
 
 nodemailer = require('nodemailer');
 notifier = require ("./notify.js");
+const backupManager = require('./backupManager.js');
 
 serverConfig = confighandler.initServerConfig({});
 serverConfig = confighandler.loadConfigJson("./data/server-config.json");
@@ -898,6 +900,71 @@ app.get('/settings.html',User.isAuthenticated, async (req, res) => {
   res.render('settings.ejs', { serverConfig, user, csrf: req.csrfToken() });
 });
 
+// Backup Management Routes
+// Configure multer for in-memory file uploads
+const upload = multer({ 
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 500 * 1024 * 1024 } // 500MB max
+});
+
+app.get('/api/backup/items', User.isAuthenticated, (req, res) => {
+  try {
+    const items = backupManager.getBackupItems();
+    res.json(items);
+  } catch (err) {
+    logger.error('Error getting backup items:', err);
+    res.status(500).json({ error: 'Failed to get backup items' });
+  }
+});
+
+app.post('/api/backup/create', User.isAuthenticated, asyncHandler(async (req, res) => {
+  try {
+    const options = req.body;
+    logger.info('Creating backup with options:', options);
+
+    // Create backup
+    const backupBuffer = await backupManager.createBackup(options);
+
+    // Generate filename with timestamp
+    const timestamp = new Date().toISOString().split('T')[0].replace(/-/g, '');
+    const filename = `backuphub-backup-${timestamp}.zip`;
+
+    // Send file to client
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', backupBuffer.length);
+    res.send(backupBuffer);
+
+    logger.info(`Backup downloaded: ${filename}`);
+  } catch (err) {
+    logger.error('Backup creation error:', err);
+    res.status(err.statusCode || 500).json({ error: err.message || 'Backup failed' });
+  }
+}));
+
+app.post('/api/backup/restore', User.isAuthenticated, upload.single('backupFile'), asyncHandler(async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No backup file provided' });
+    }
+
+    logger.info('Starting backup restore from uploaded file');
+
+    // Restore backup from upload
+    const results = await backupManager.restoreBackup(req.file.buffer);
+
+    logger.info('Backup restore completed:', results);
+    res.json({
+      success: true,
+      itemsRestored: results.itemsRestored,
+      warnings: results.warnings,
+      recommendations: results.recommendations,
+    });
+  } catch (err) {
+    logger.error('Backup restore error:', err);
+    res.status(err.statusCode || 500).json({ error: err.message || 'Restore failed' });
+  }
+}));
 
 app.delete('/rest/notifications', User.isAuthenticated, (req, res) => {
   logger.info("Delete all notifications");

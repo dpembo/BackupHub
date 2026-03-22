@@ -111,12 +111,145 @@ function noValue(inValue){
         });
         return spanTexts;
       }
+
+      // Backup/Restore Functions
+      async function loadBackupItems() {
+        try {
+          const response = await fetch('/api/backup/items');
+          const items = await response.json();
+          
+          const container = document.getElementById('backupItems');
+          container.innerHTML = '';
+          
+          Object.entries(items).forEach(([key, item]) => {
+            const checkbox = document.createElement('div');
+            checkbox.className = 'col s12 m6';
+            checkbox.innerHTML = `
+              <div style="margin-bottom: 15px;">
+                <label>
+                  <input type="checkbox" id="backup_${key}" class="backup-checkbox" value="${key}" checked>
+                  <span><strong>${item.name}</strong></span>
+                </label>
+                <p style="margin-left: 30px; font-size: 13px; color: #666;">${item.description}</p>
+              </div>
+            `;
+            container.appendChild(checkbox);
+          });
+        } catch (error) {
+          console.error('Error loading backup items:', error);
+          M.toast({html: 'Error loading backup options', displayLength: 5000});
+        }
+      }
+
+      async function createBackup() {
+        try {
+          // Gather selected items
+          const options = {};
+          const checkboxes = document.querySelectorAll('.backup-checkbox:checked');
+          
+          if (checkboxes.length === 0) {
+            M.toast({html: 'Please select at least one item to backup', displayLength: 5000});
+            return;
+          }
+          
+          checkboxes.forEach(checkbox => {
+            options[checkbox.value] = true;
+          });
+          
+          // Create backup
+          const response = await fetch('/api/backup/create', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(options)
+          });
+          
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Backup creation failed');
+          }
+          
+          // Download the file
+          const blob = await response.blob();
+          const filename = `backuphub-backup-${new Date().toISOString().split('T')[0].replace(/-/g, '')}.zip`;
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          window.URL.revokeObjectURL(url);
+          document.body.removeChild(a);
+          
+          M.toast({html: 'Backup downloaded successfully', displayLength: 5000});
+        } catch (error) {
+          console.error('Backup error:', error);
+          M.toast({html: 'Backup failed: ' + error.message, displayLength: 5000});
+        }
+      }
+
+      async function restoreBackup(file) {
+        try {
+          // Confirm with user
+          if (!confirm('WARNING: This will overwrite your current settings and data. Server restart will be required. Continue?')) {
+            return;
+          }
+          
+          const formData = new FormData();
+          formData.append('backupFile', file);
+          
+          const response = await fetch('/api/backup/restore', {
+            method: 'POST',
+            body: formData
+          });
+          
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Restore failed');
+          }
+          
+          const results = await response.json();
+          
+          // Display results
+          const messageDiv = document.getElementById('restoreMessage');
+          let html = '<div class="green lighten-4" style="padding: 15px; border-radius: 4px;">';
+          html += '<strong>✓ Restore Successful</strong><br><br>';
+          html += '<strong>Items Restored:</strong><ul>';
+          results.itemsRestored.forEach(item => {
+            html += `<li>${item}</li>`;
+          });
+          html += '</ul>';
+          
+          if (results.warnings && results.warnings.length > 0) {
+            html += '<strong>Warnings:</strong><ul style="color: #e65100;">';
+            results.warnings.forEach(warn => {
+              html += `<li>${warn}</li>`;
+            });
+            html += '</ul>';
+          }
+          
+          html += '<strong>Recommendations:</strong><ul style="color: #1565c0;">';
+          results.recommendations.forEach(rec => {
+            html += `<li>${rec}</li>`;
+          });
+          html += '</ul>';
+          html += '</div>';
+          
+          messageDiv.innerHTML = html;
+          messageDiv.style.display = 'block';
+          
+          M.toast({html: 'Restore successful. Please restart the server.', displayLength: 7000});
+        } catch (error) {
+          console.error('Restore error:', error);
+          M.toast({html: 'Restore failed: ' + error.message, displayLength: 5000});
+        }
+      }
       </script>
 
       <style>
-        .tab{min-width: 130px;}
-
-        
+        .tab { min-width: 100px; }
+        .tabs .tab a { padding: 0 12px; font-size: 12px; }
       </style>
   </head>
 
@@ -135,10 +268,11 @@ function noValue(inValue){
                   <li class="tab col s1"><a class="active" href="#server">Server</a></li>
                   <li class="tab orange-text col s1"><a href="#websocket">WebSocket</a></li>
                   <li class="tab orange-text col s1"><a href="#mqtt">MQTT</a></li>
-                  <li class="tab col s2"><a href="#notifications">Notifications</a></li>
-                  <li class="tab col s2"><a href="#threshold">Threshold Jobs</a></li>
-                  <li class="tab col s2"><a href="#icons">Job Icons</a></li>
-                  <li class="tab col s2"><a href="#templates">Templates</a></li>
+                  <li class="tab col s1"><a href="#notifications">Alerts</a></li>
+                  <li class="tab col s1"><a href="#threshold">Thresholds</a></li>
+                  <li class="tab col s1"><a href="#icons">Icons</a></li>
+                  <li class="tab col s1"><a href="#templates">Templates</a></li>
+                  <li class="tab col s1"><a href="#backup">Backup</a></li>
                   <!--<li class="tab col s3 disabled"><a href="#test3">Disabled Tab</a></li>-->
                 </ul>
               </div>
@@ -475,10 +609,56 @@ function noValue(inValue){
                       <label class="active" style="position:relative;left:30px;">Refresh Templates Cache</label>
                     </div>
                   </div>
-                  
-
-
+                </div>
               </div>
+              
+              <div id="backup" class="col s12">
+                <div class="container">
+                  <h6 class="header blue-text" style="margin-bottom: 16px;">Backup &amp; Restore</h6>
+
+                  <ul class="collapsible" id="backupAccordion">
+
+                    <!-- Backup Section (open by default) -->
+                    <li class="active">
+                      <div class="collapsible-header"><i class="material-icons">cloud_download</i>Create Backup</div>
+                      <div class="collapsible-body">
+                        <p>Select what to include in your backup and download a zip file.</p>
+                        <div id="backupItems" style="margin: 10px 0 20px 10px;">
+                          <!-- Backup items will be dynamically loaded here -->
+                        </div>
+                        <button type="button" class="btn waves-effect waves-light blue" id="createBackupBtn">Download Backup</button>
+                      </div>
+                    </li>
+
+                    <!-- Restore Section (collapsed by default) -->
+                    <li>
+                      <div class="collapsible-header"><i class="material-icons">cloud_upload</i>Restore from Backup</div>
+                      <div class="collapsible-body">
+                        <p>Upload a previously saved backup zip file to restore settings and data.</p>
+                        <div class="yellow lighten-4" style="padding: 15px; border-radius: 4px; margin: 0 0 16px 0;">
+                          <strong>&#9888;&#65039; Warning:</strong> Restoring a backup will overwrite your current settings and data.
+                          <strong>The server will need to be restarted</strong> for changes to take effect.
+                        </div>
+                        <div class="row">
+                          <div class="file-field input-field col s6">
+                            <div class="btn blue">
+                              <span>Choose File</span>
+                              <input type="file" id="backupFile" accept=".zip" />
+                            </div>
+                            <div class="file-path-wrapper">
+                              <input class="file-path validate" type="text" placeholder="Select backup zip file" />
+                            </div>
+                          </div>
+                        </div>
+                        <button type="button" class="btn waves-effect waves-light orange" id="restoreBackupBtn">Restore Backup</button>
+                        <div id="restoreMessage" style="margin-top: 20px; display: none;"></div>
+                      </div>
+                    </li>
+
+                  </ul>
+                </div>
+              </div>
+
               <!--<div id="test4" class="col s12">Test 4</div>-->
             </div>
 
@@ -505,6 +685,35 @@ function noValue(inValue){
       <script>
 
         $(document).ready(function(){
+
+            // Initialize backup accordion
+            M.Collapsible.init(document.getElementById('backupAccordion'));
+
+            // Initialize backup items
+            loadBackupItems();
+
+            $('#createBackupBtn').on('click', function(e) {
+              e.preventDefault();
+              createBackup();
+            });
+
+            $('#restoreBackupBtn').on('click', function(e) {
+              e.preventDefault();
+              const fileInput = document.getElementById('backupFile');
+              const file = fileInput.files[0];
+              
+              if (!file) {
+                M.toast({html: 'Please select a backup file', displayLength: 5000});
+                return;
+              }
+              
+              if (!file.name.endsWith('.zip')) {
+                M.toast({html: 'Please select a valid backup zip file', displayLength: 5000});
+                return;
+              }
+              
+              restoreBackup(file);
+            });
 
             $('#saveChanges').on('click', function(e) {
               e.preventDefault();

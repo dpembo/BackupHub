@@ -20,6 +20,6 @@ ENV TZ="UTC"
 WORKDIR /usr/src/app
 COPY package*.json ./
 COPY . .
-RUN npm install
+RUN npm ci --omit=dev
 EXPOSE 8082 49981
 CMD ["node","server.js"]
