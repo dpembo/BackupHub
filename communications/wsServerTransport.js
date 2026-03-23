@@ -47,6 +47,10 @@ async function init() {
         const connectionId = queryParams.name || 'anonymous';
         const agentId = connectionId.split('~')[0];
 
+        // Capture agent's remote address for server restart notifications
+        const remoteAddress = request.socket.remoteAddress || request.connection.remoteAddress || 'unknown';
+        const agentHost = remoteAddress.includes('::ffff:') ? remoteAddress.substring(7) : remoteAddress;
+        
         // Handle existing connection for this agent
         if (agentToConnection.has(agentId)) {
             const oldConnectionId = agentToConnection.get(agentId);
@@ -86,10 +90,11 @@ async function init() {
             }
         }
 
-        // Update status
+        // Update status and store agent address
         agentStatus.set(agentId, { disconnectTime: null, timer: null });
         agents.updateAgentStatus(agentId, "online", "", null, null, null, "");
-        logger.info(`New client connected Agent: ${agentId}, connection ${connectionId}, Total clients: ${wsClients.size}`);
+        agents.updateAgentAddress(agentId, agentHost);
+        logger.info(`New client connected Agent: ${agentId}, connection ${connectionId}, host: ${agentHost}, Total clients: ${wsClients.size}`);
 
         ws.on('message', (message) => {
             try {

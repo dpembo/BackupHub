@@ -2195,6 +2195,94 @@ function markOffline()
 // ============================================================================
 app.use(errorHandlerMiddleware);
 
+// ============================================================================
+// SERVER RESTART NOTIFICATION
+// ============================================================================
+/**
+ * Notify all agents that the server has restarted
+ * This allows agents to reset their connection backoff and reconnect immediately
+ */
+async function notifyAgentsOfRestart() {
+  try {
+    const agentDict = agents.getDict();
+    const http = require('http');
+    
+    if (!agentDict || Object.keys(agentDict).length === 0) {
+      logger.info('No agents registered, skipping restart notifications');
+      return;
+    }
+    
+    const notificationPromises = [];
+    const AGENT_HTTP_PORT = 49991;
+    const REQUEST_TIMEOUT = 3000; // 3 seconds timeout per request
+    
+    for (const [agentName, agent] of Object.entries(agentDict)) {
+      // Skip if agent doesn't have an address
+      if (!agent.address) {
+        logger.debug(`Agent [${agentName}] has no address, skipping restart notification`);
+        continue;
+      }
+      
+      const promise = new Promise((resolve) => {
+        const postData = JSON.stringify({
+          timestamp: new Date().toISOString()
+        });
+        
+        const options = {
+          hostname: agent.address,
+          port: AGENT_HTTP_PORT,
+          path: '/api/server-restart',
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(postData)
+          },
+          timeout: REQUEST_TIMEOUT
+        };
+        
+        const req = http.request(options, (res) => {
+          let data = '';
+          res.on('data', (chunk) => {
+            data += chunk;
+          });
+          res.on('end', () => {
+            if (res.statusCode === 200) {
+              logger.info(`Server restart notification sent to agent [${agentName}] at [${agent.address}:${AGENT_HTTP_PORT}]`);
+            } else {
+              logger.warn(`Server restart notification to agent [${agentName}] returned status code ${res.statusCode}`);
+            }
+            resolve();
+          });
+        });
+        
+        req.on('timeout', () => {
+          req.destroy();
+          logger.warn(`Server restart notification to agent [${agentName}] at [${agent.address}:${AGENT_HTTP_PORT}] timed out`);
+          resolve();
+        });
+        
+        req.on('error', (error) => {
+          logger.warn(`Failed to notify agent [${agentName}] at [${agent.address}:${AGENT_HTTP_PORT}] of server restart: ${error.message}`);
+          resolve();
+        });
+        
+        req.write(postData);
+        req.end();
+      });
+      
+      notificationPromises.push(promise);
+    }
+    
+    // Wait for all notifications to complete (or timeout)
+    if (notificationPromises.length > 0) {
+      await Promise.all(notificationPromises);
+      logger.info(`Sent restart notifications to ${notificationPromises.length} agent(s)`);
+    }
+  } catch (error) {
+    logger.error(`Error notifying agents of server restart: ${error.message}`);
+  }
+}
+
 //______________________________________________________________________________________________________
 
 var server = app.listen(port, async function () {
@@ -2217,6 +2305,9 @@ var server = app.listen(port, async function () {
     logger.debug('Initiatilizing notification data completed.');
     
     await running.init();
+    
+    // Notify all agents that the server has restarted
+    await notifyAgentsOfRestart();
   } catch (error) {
     logger.error('Error during server startup initialization:', error.message);
   }
