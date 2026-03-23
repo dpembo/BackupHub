@@ -1072,6 +1072,51 @@ app.get('/debug/off', async (req, res) => {
   res.json({ DEBUG_MODE: false, message: 'Debug mode disabled. Token valid for next 10 minutes' });
 });
 
+// Anonymous endpoint to handle server restart notifications
+app.post('/api/server-restart', async (req, res) => {
+  try {
+    debug(DEBUG_LEVEL.INFO, 'Server restart notification received, resetting connection backoff');
+    
+    // Reset backoff for both MQTT and WebSocket handlers
+    if (useMQTT && mqttClient && mqttClient.retryManager) {
+      mqttClient.retryManager.reset();
+      if (!mqttClient.isConnected) {
+        debug(DEBUG_LEVEL.INFO, 'Triggering MQTT reconnection after server restart');
+        mqttClient.connect().then(() => {
+          publishStatusUpdate('register', 'Agent Online - Awaiting provision');
+        }).catch((err) => {
+          debug(DEBUG_LEVEL.WARN, `MQTT reconnection failed: ${err.message}`);
+          mqttClient.retryConnection();
+        });
+      }
+    } else if (!useMQTT && wsClient && wsClient.retryManager) {
+      wsClient.retryManager.reset();
+      if (!wsClient.isConnected) {
+        debug(DEBUG_LEVEL.INFO, 'Triggering WebSocket reconnection after server restart');
+        wsClient.connect().then(() => {
+          publishStatusUpdate('register', 'Agent Online - Awaiting provision');
+        }).catch((err) => {
+          debug(DEBUG_LEVEL.WARN, `WebSocket reconnection failed: ${err.message}`);
+          wsClient.triggerReconnect();
+        });
+      }
+    }
+    
+    res.json({ 
+      status: 'success', 
+      message: 'Server restart notification received, connection backoff reset',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    debug(DEBUG_LEVEL.ERROR, `Error processing server restart notification: ${error.message}`);
+    res.status(500).json({ 
+      status: 'error', 
+      message: 'Failed to process server restart notification',
+      error: error.message
+    });
+  }
+});
+
 const server = app.listen(PORT, () => {
   debug(DEBUG_LEVEL.TRACE, `Express server listening on port ${PORT}`);
   status = AGENT_STATUS.IDLE;

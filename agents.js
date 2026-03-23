@@ -258,4 +258,26 @@ function debouncedUpdateConfig() {
   });
 }
 
-module.exports = { init, getDict, addToAgentStatusDict,addObjToAgentStatusDict, getAgent,searchAgent, registerAgent, deleteAgent, updateAgentStatus,reset};
+/**
+ * Update an agent's network address (IP or hostname)
+ * Used for server restart notifications
+ */
+function updateAgentAddress(agentName, address) {
+  try {
+    const agent = getAgent(agentName);
+    if (agent === undefined) {
+      logger.warn(`Cannot update address for unknown agent [${agentName}]`);
+      return;
+    }
+    agent.address = address;
+    logger.debug(`Updated agent [${agentName}] address to [${address}]`);
+    // Persist the update
+    debouncedUpdateConfig().catch(err => {
+      logger.error(`Failed to persist address update for agent [${agentName}]:`, err.message);
+    });
+  } catch (err) {
+    logger.error(`Error updating agent address for [${agentName}]:`, err.message);
+  }
+}
+
+module.exports = { init, getDict, addToAgentStatusDict,addObjToAgentStatusDict, getAgent,searchAgent, registerAgent, deleteAgent, updateAgentStatus, updateAgentAddress, reset};
