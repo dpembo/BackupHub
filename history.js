@@ -74,7 +74,7 @@ function searchItemWithName(searchTerm)
     return null;
 }
 
-function createHistoryItem(jobName, runDate, returnCode, runTime, log, isManual) {
+function createHistoryItem(jobName, runDate, returnCode, runTime, log, isManual, executionId = null) {
     logger.debug("Creating history item [" + jobName + "]");
     if(isManual===undefined)isManual=false;
     var item = {};
@@ -84,6 +84,9 @@ function createHistoryItem(jobName, runDate, returnCode, runTime, log, isManual)
     item.runTime = runTime;
     item.log = log;
     item.manual = isManual;
+    if (executionId) {
+      item.executionId = executionId;  // NEW: Orchestration execution ID for grouping
+    }
     logger.debug("History Item:\n" + JSON.stringify(item));
     return item;
 }
@@ -279,4 +282,82 @@ function getTodaysRun(){
     return result;
 }
 
-module.exports = { init, add, getItems, getItemsUsingTZ, getItem, searchItemWithName, createHistoryItem,getChartDataSet,getAverageRuntime, getLastRun,getSuccessPercentage, getTodaysRun };
+/**
+ * Group orchestration node executions under their parent orchestration job
+ * Returns a mixed array of regular history items and grouped orchestration items
+ */
+function getItemsGroupedByOrchestration() {
+    const items = getItemsUsingTZ();
+    const grouped = [];
+    const orchestrationMap = new Map(); // Map of "${jobId}#${executionId}" -> {parent, nodes}
+    const regularItems = [];
+
+    // Separate orchestration nodes from regular items
+    for (const item of items) {
+        // Pattern: "Orchestration [jobId] Node [nodeId]"
+        const orchestrationMatch = item.jobName.match(/^Orchestration \[([^\]]+)\] Node \[([^\]]+)\]$/);
+        
+        if (orchestrationMatch) {
+            const jobId = orchestrationMatch[1];
+            const nodeId = orchestrationMatch[2];
+            const executionId = item.executionId || 'unknown'; // Use executionId if available, fallback to 'unknown'
+            
+            // Use composite key to distinguish multiple executions of the same job
+            const mapKey = `${jobId}#${executionId}`;
+            
+            if (!orchestrationMap.has(mapKey)) {
+                orchestrationMap.set(mapKey, {
+                    parent: {
+                        jobName: `Orchestration [${jobId}]`,
+                        jobId: jobId,
+                        executionId: item.executionId,
+                        runDate: item.runDate,
+                        isOrchestration: true,
+                        icon: 'hub',
+                        color: '#2196F3',
+                        children: []
+                    },
+                    nodeMap: new Map()
+                });
+            }
+            
+            const orchData = orchestrationMap.get(mapKey);
+            orchData.nodeMap.set(nodeId, item);
+        } else {
+            regularItems.push(item);
+        }
+    }
+
+    // Merge and sort: newest first
+    // Orchestration items should group by latest execution date
+    const orchestrationItems = Array.from(orchestrationMap.values()).map(data => {
+        const nodeItems = Array.from(data.nodeMap.values());
+        data.parent.children = nodeItems;
+        
+        // Update parent runDate to be the latest among its children
+        if (nodeItems.length > 0) {
+            const latestNode = nodeItems.reduce((latest, current) => 
+                new Date(current.runDate) > new Date(latest.runDate) ? current : latest
+            );
+            data.parent.runDate = latestNode.runDate;
+            
+            // Update parent status based on children
+            const hasFailure = nodeItems.some(n => n.returnCode !== 0);
+            data.parent.returnCode = hasFailure ? 1 : 0;
+        }
+        
+        return data.parent;
+    });
+
+    // Interleave orchestration and regular items, sorted by date (newest first)
+    const allItems = [...regularItems, ...orchestrationItems];
+    allItems.sort((a, b) => {
+        const dateA = new Date(a.runDate);
+        const dateB = new Date(b.runDate);
+        return dateB - dateA; // Newest first
+    });
+
+    return allItems;
+}
+
+module.exports = { init, add, getItems, getItemsUsingTZ, getItem, searchItemWithName, createHistoryItem,getChartDataSet,getAverageRuntime, getLastRun,getSuccessPercentage, getTodaysRun, getItemsGroupedByOrchestration };

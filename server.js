@@ -94,6 +94,8 @@ agentHistory = require ("./agentHistory.js");
 db = require("./db.js");
 nodeschedule = require('node-schedule');
 scheduler = require ("./scheduler.js");
+orchestration = require("./orchestration.js");
+orchestrationEngine = require("./orchestrationEngine.js");
 //const moment = require('moment-timezone');
 
 agentComms = require ("./communications/agentCommunication.js");
@@ -427,6 +429,7 @@ app.use(session({
 }));
 
 app.use(bodyParser.urlencoded({ extended: false }));
+app.use(bodyParser.json());
 
 // Generate CSRF tokens for all requests but don't validate
 app.use((req, res, next) => {
@@ -1149,7 +1152,7 @@ app.get('/historyList/data',User.isAuthenticated, (req, res) => {
   if(req.query.format !==undefined && req.query.format!=null)format = req.query.format;
 
   logger.info(`Format is ${format}`);
-  var historyList = hist.getItemsUsingTZ();
+  var historyList = hist.getItemsGroupedByOrchestration();
   var runningList = running.getItems();
   var schedules = scheduler.getSchedules();
 
@@ -1159,21 +1162,33 @@ app.get('/historyList/data',User.isAuthenticated, (req, res) => {
   logger.debug("----");
   logger.debug(schedules);
   logger.debug("----");*/
-  for(var x=0;x<historyList.length;x++)
-  {
-    var workJob = historyList[x].jobName;
+  
+  // Apply icons and colors from schedules
+  function applyScheduleStyle(item) {
+    var workJob = item.jobName;
     for(var y=0;y<schedules.length;y++){
       if(workJob == schedules[y].jobName){
-        historyList[x].icon=schedules[y].icon;
-        historyList[x].color=schedules[y].color;
+        item.icon=schedules[y].icon;
+        item.color=schedules[y].color;
         break;
       }
     }
-    if(!historyList[x].icon ||  historyList[x].icon.trim()===''){
-      historyList[x].icon="remove_circle";
-      historyList[x].color="#AAAAAA";
+    if(!item.icon ||  item.icon.trim()===''){
+      item.icon = item.isOrchestration ? "hub" : "remove_circle";
+      item.color = item.isOrchestration ? "#2196F3" : "#AAAAAA";
     }
+  }
+  
+  for(var x=0;x<historyList.length;x++)
+  {
+    applyScheduleStyle(historyList[x]);
     
+    // Also apply styles to child nodes if this is an orchestration item
+    if (historyList[x].children) {
+      for (var c = 0; c < historyList[x].children.length; c++) {
+        applyScheduleStyle(historyList[x].children[c]);
+      }
+    }
   }
 
   var refresh = req.query["refresh"];
@@ -1184,6 +1199,8 @@ app.get('/historyList/data',User.isAuthenticated, (req, res) => {
   logger.info("GetHistoryListData: " + sort + " " + order);
   let sortedData;
 
+  // Note: getItemsGroupedByOrchestration already returns data sorted by date (newest first)
+  // Adjusting sort logic for grouped data
   if (sort === 'jobName') {
     sortedData = [...historyList].sort((a, b) => {
       if (order === 'asc') {
@@ -1207,8 +1224,8 @@ app.get('/historyList/data',User.isAuthenticated, (req, res) => {
       return order === 'asc' ? a.returnCode - b.returnCode : b.returnCode - a.returnCode;
     });
   } else {
-    // Handle sorting by default (jobName) if the provided sort parameter is invalid
-    sortedData = [...historyList].sort((a, b) => a.jobName.localeCompare(b.jobName));
+    // Default sort already by newest first
+    sortedData = [...historyList];
   }
  
   //var index=req.query.index;
@@ -2191,6 +2208,202 @@ function markOffline()
 }
 
 // ============================================================================
+// ORCHESTRATION JOBS - REST API ENDPOINTS
+// ============================================================================
+
+/**
+ * Get list of all orchestration jobs
+ */
+app.get('/rest/orchestration/jobs', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const jobs = await orchestration.getAllJobs();
+  res.json(jobs);
+}));
+
+/**
+ * Get a specific orchestration job
+ */
+app.get('/rest/orchestration/jobs/:jobId', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const job = await orchestration.getJob(req.params.jobId);
+  res.json(job);
+}));
+
+/**
+ * Create or update an orchestration job
+ */
+app.post('/rest/orchestration/jobs', validateCsrf, User.isAuthenticated, asyncHandler(async (req, res) => {
+  const { jobId, name, description, nodes, edges } = req.body;
+  
+  if (!jobId || !name) {
+    return res.status(400).json({ error: 'Job ID and name are required' });
+  }
+  
+  const job = await orchestration.saveJob(jobId, {
+    name,
+    description,
+    nodes,
+    edges
+  });
+  
+  res.json({ success: true, job });
+}));
+
+/**
+ * Update an existing orchestration job
+ */
+app.put('/rest/orchestration/jobs/:jobId', validateCsrf, User.isAuthenticated, asyncHandler(async (req, res) => {
+  const { name, description, nodes, edges } = req.body;
+  const { jobId } = req.params;
+  
+  const job = await orchestration.saveJob(jobId, {
+    name,
+    description,
+    nodes,
+    edges
+  });
+  
+  res.json({ success: true, job });
+}));
+
+/**
+ * Delete an orchestration job
+ */
+app.delete('/rest/orchestration/jobs/:jobId', validateCsrf, User.isAuthenticated, asyncHandler(async (req, res) => {
+  const { jobId } = req.params;
+  
+  await orchestration.deleteJob(jobId);
+  res.json({ success: true, message: `Orchestration job [${jobId}] deleted` });
+}));
+
+/**
+ * Execute an orchestration job
+ */
+app.post('/rest/orchestration/jobs/:jobId/execute', validateCsrf, User.isAuthenticated, asyncHandler(async (req, res) => {
+  const { jobId } = req.params;
+  
+  logger.info(`Executing orchestration job [${jobId}]`);
+  
+  const executionLog = await orchestration.executeJob(jobId);
+  await orchestration.saveExecutionResult(executionLog);
+  
+  res.json({ 
+    success: true, 
+    execution: executionLog 
+  });
+}));
+
+/**
+ * Get execution history for a job
+ */
+app.get('/rest/orchestration/jobs/:jobId/executions', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const { jobId } = req.params;
+  
+  const executions = await orchestration.getExecutionHistory(jobId);
+  res.json(executions);
+}));
+
+/**
+ * Get list of available scripts for the palette
+ */
+app.get('/rest/orchestration/scripts', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const scripts = await orchestration.getAvailableScripts();
+  res.json(scripts);
+}));
+
+/**
+ * Get list of available agents for orchestration execution
+ */
+app.get('/rest/orchestration/agents', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const agentDict = agents.getDict();
+  const agentList = Object.entries(agentDict).map(([name, agent]) => ({
+    id: name,
+    name: name,
+    description: agent.description || '',
+    status: agent.status || 'offline',
+    address: agent.address || '',
+    version: agent.version || ''
+  }));
+  res.json(agentList);
+}));
+
+/**
+ * Orchestration UI pages
+ */
+app.get('/orchestrationList.html', User.isAuthenticated, asyncHandler(async (req, res) => {
+  res.render('orchestrationList', { csrfToken: req.csrfToken() });
+}));
+
+app.get('/orchestrationBuilder.html', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const jobId = req.query.id; // undefined for new jobs, or specific ID for editing
+  res.render('orchestrationBuilder', { 
+    csrfToken: req.csrfToken(),
+    jobId: jobId || ''
+  });
+}));
+
+/**
+ * Orchestration Monitor/Detail Routes
+ */
+app.get('/orchestration/monitor.html', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const jobId = req.query.jobId;
+  const executionIndex = req.query.executionIndex || 'latest';
+  
+  if (!jobId) {
+    return res.status(400).send('Job ID is required');
+  }
+  
+  res.render('orchestrationMonitor', { 
+    csrfToken: req.csrfToken(),
+    jobId: jobId,
+    executionIndex: executionIndex
+  });
+}));
+
+app.get('/orchestration/execution/details', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const orchestrationMonitor = require('./orchestrationMonitor.js');
+  const jobId = req.query.jobId;
+  let executionIndex = req.query.executionIndex || 'latest';
+  const executionId = req.query.executionId;
+  
+  if (!jobId) {
+    return res.status(400).json({ error: 'Job ID is required' });
+  }
+  
+  // If executionId is provided, resolve it to an index
+  if (executionId && executionIndex === 'latest') {
+    const index = await orchestrationEngine.getExecutionIndexById(jobId, executionId);
+    if (index >= 0) {
+      executionIndex = index;
+    }
+  }
+  
+  const details = await orchestrationMonitor.getExecutionDetails(jobId, executionIndex);
+  res.json(details);
+}));
+
+app.get('/orchestration/node/output', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const orchestrationMonitor = require('./orchestrationMonitor.js');
+  const jobId = req.query.jobId;
+  const nodeId = req.query.nodeId;
+  let executionIndex = req.query.executionIndex || 'latest';
+  const executionId = req.query.executionId;
+  
+  if (!jobId || !nodeId) {
+    return res.status(400).json({ error: 'Job ID and Node ID are required' });
+  }
+  
+  // If executionId is provided, resolve it to an index
+  if (executionId && executionIndex === 'latest') {
+    const index = await orchestrationEngine.getExecutionIndexById(jobId, executionId);
+    if (index >= 0) {
+      executionIndex = index;
+    }
+  }
+  
+  const output = await orchestrationMonitor.getNodeOutput(jobId, nodeId, executionIndex);
+  res.json(output);
+}));
+
+// ============================================================================
 // ERROR HANDLING MIDDLEWARE (must be registered last)
 // ============================================================================
 app.use(errorHandlerMiddleware);
@@ -2298,6 +2511,19 @@ var server = app.listen(port, async function () {
 
     await scheduler.init();
     logger.info('Scheduler initialized successfully');
+    
+    await orchestration.init();
+    logger.info('Orchestration module initialized successfully');
+    
+    // Migrate to versioned format if needed
+    try {
+      const migratedCount = await orchestration.migrateToVersionedFormat();
+      if (migratedCount > 0) {
+        logger.info(`Migrated ${migratedCount} orchestrations to versioned format`);
+      }
+    } catch (err) {
+      logger.error('Error during orchestration versioning migration:', err.message);
+    }
     
     hist.init();
     //debug.Info("initiatilizing notification data");

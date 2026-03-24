@@ -144,6 +144,110 @@ function displaySecs(secs) {
           <% if(deleted)logclass="deletedIcons";%>
 
           <!--<%=groupId%>-<%=groupValue%>-->
+          
+          <!-- ORCHESTRATION PARENT ITEM -->
+          <% if (historyList[i].isOrchestration) { %>
+            <% 
+              // Create composite ID for execution tracking
+              const execId = historyList[i].executionId || 'unknown';
+              const compositeId = historyList[i].jobId + '#' + execId;
+              // Safe version for CSS class names (# is invalid in class names)
+              const safeCompositeId = (historyList[i].jobId + '-' + execId).replace(/[^a-zA-Z0-9-_]/g, '-');
+            %>
+            <tr class="toggle-row group-<%=groupId%> orch-parent" style="display:none;" data-orch-id="<%=compositeId%>" data-safe-id="<%=safeCompositeId%>">
+              <td>
+                <span class="material-icons vertMid" style="color:<%=historyList[i].color%>;font-size:24pt;cursor:pointer;" id="orch-expand-<%=safeCompositeId%>" onclick="event.stopPropagation(); toggleOrchestrationGroup('<%=safeCompositeId%>')">expand_more</span>
+              </td>
+              <td>
+                <strong><%=historyList[i].jobName%></strong>
+                <br/>
+                <span style="font-size: 0.85em; color: var(--text-muted);"><%=historyList[i].children ? historyList[i].children.length : 0%> nodes executed</span>
+              </td>
+              <td>
+                <span title="Orchestration Execution" class="material-icons">hub</span>
+              </td>
+              <% 
+                  var dateNow = new Date().getTime();
+                  var dateStart = new Date(historyList[i].runDate).getTime();
+                  var diff = dateNow - dateStart;
+                  diff = diff / 1000;
+                  var diffDisp = displaySecs(diff);
+
+                  var dispDate = historyList[i].runDate;
+                  try{
+                    dispDate = historyList[i].runDate.replace('T',' ');
+                    dispDate = dispDate.substring(0,dispDate.lastIndexOf("."));
+                  } catch (err){
+                    //ignore
+                  }
+              %>
+              <td><%=dispDate%> (<%=(diffDisp)%>)</td>
+              <td>-</td>
+              <td>-</td>
+              <td>
+                <% if(parseInt(historyList[i].returnCode)==0){%>
+                  <span title="Success" class="successIcons material-icons">check_circle</span>
+                <% } else {%>
+                  <span title="Failure" class="errorIcons material-icons">flag_circle</span>
+                <% } %>
+              </td>
+              <td>
+                <a href="/orchestration/monitor.html?jobId=<%=encodeURIComponent(historyList[i].jobId)%><% if(historyList[i].executionId) { %>&executionId=<%=encodeURIComponent(historyList[i].executionId)%><% } %>" title="View Orchestration Details" target="_blank">
+                  <span class="material-icons tableIconButton">open_in_new</span>
+                </a>
+              </td>
+            </tr>
+
+            <!-- ORCHESTRATION CHILD NODES -->
+            <% if (historyList[i].children && historyList[i].children.length > 0) { %>
+              <% historyList[i].children.forEach(function(childNode, childIdx) { %>
+                <tr class="toggle-row group-<%=groupId%> orch-child-<%=safeCompositeId%> <% if(parseInt(childNode.returnCode)!=0){%>errorHighlight<%}%>" style="display:none; padding-left: 40px;">
+                  <td style="padding-left: 40px;">
+                    <span class="material-icons vertMid" style="color:<%=childNode.color%>;font-size:16pt"><%=childNode.icon%></span>
+                  </td>
+                  <td>
+                    <span style="font-size: 0.9em; color: var(--text-muted);">↳ </span><%=childNode.jobName%>
+                  </td>
+                  <td>
+                    <% var runType="schedule"; var runDesc="Node Execution";%>
+                    <span title="<%=runDesc%>" class="material-icons"><%=runType%></span>
+                  </td>
+                  <% 
+                      var dateNow = new Date().getTime();
+                      var dateStart = new Date(childNode.runDate).getTime();
+                      var diff = dateNow - dateStart;
+                      diff = diff / 1000;
+                      var diffDisp = displaySecs(diff);
+
+                      var dispDate = childNode.runDate;
+                      try{
+                        dispDate = childNode.runDate.replace('T',' ');
+                        dispDate = dispDate.substring(0,dispDate.lastIndexOf("."));
+                      } catch (err){
+                        //ignore
+                      }
+                  %>
+                  <td><%=dispDate%> (<%=(diffDisp)%>)</td>
+                  <td><%=displaySecs(childNode.runTime)%></td>
+                  <td>-</td>
+                  <td>
+                    <% if(parseInt(childNode.returnCode)==0){%>
+                      <span title="Success - Exit code <%=childNode.returnCode%>" class="successIcons material-icons">check_circle</span>
+                    <% } else {%>
+                      <span title="Error - Exit code: <%=childNode.returnCode%>" class="errorIcons material-icons">flag_circle</span>
+                    <% } %>
+                  </td>
+                  <td>
+                    <pre style="display:none" id="logdetail-orch-<%=i%>-<%=childIdx%>"><%=childNode.log%></pre>
+                    <a href="#modal-orch-<%=i%>-<%=childIdx%>" onclick="openModal('<%=childNode.icon%>','<%=childNode.color%>','<%=childNode.jobName%>','logdetail-orch-<%=i%>-<%=childIdx%>')" title="View Node Output Log">
+                      <span class="material-icons tableIconButton vertTop">description</span>
+                    </a>
+                  </td>
+                </tr>
+              <% }); %>
+            <% } %>
+          <% } else { %>
+          <!-- REGULAR JOB ITEM (non-orchestration) -->
           <tr class="toggle-row group-<%=groupId%> <%if(deleted){%>deleted<%}%>" style="display:none;" <% if(parseInt(historyList[i].returnCode)!=0){%>class="errorHighlight"<%}%>>
             <td><span class="material-icons vertMid" style="color:<%=historyList[i].color%>;font-size:24pt"><%=historyList[i].icon%></span></td>
             <td>
@@ -236,6 +340,7 @@ function displaySecs(secs) {
               <% } %>
             </td>
           </tr>
+          <% } %>
         <% }%>
         
 

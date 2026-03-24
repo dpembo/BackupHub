@@ -1,7 +1,7 @@
 const status_topic = 'backup/agent/status';
 const command_topic = 'backup/agent/command';
 
-function processMessage(topic, message,protocol) {
+async function processMessage(topic, message,protocol) {
     logger.debug(`Received message on Protocol: '${protocol}' with topic '${topic}': ${message.toString()}`);
     var obj = JSON.parse(message);
     var agentKnown = agents.getAgent(obj.name);
@@ -74,7 +74,7 @@ function processMessage(topic, message,protocol) {
       if (obj.status == "eta_submission") {
         var runTime = obj.eta;
         var runningItm = running.getItemByName(obj.jobName);
-        var startTime = runningItm.startTime;
+        var startTime = runningItm ? runningItm.startTime : null;
         logger.info("Received ETA event");
         //add log to db
         if (obj.returnCode !== null && obj.returnCode == "0") {
@@ -93,12 +93,53 @@ function processMessage(topic, message,protocol) {
           if(serverConfig.server.jobFailEnabled=="true")notifier.sendNotification(obj.jobName + "- job failed", JSON.stringify(obj), "WARNING", "/history.html");
         }
         logger.debug("Adding History record for: " + JSON.stringify(obj));
+        
+        // Signal orchestration engine if this is an orchestration job
+        if (obj.jobName && obj.jobName.includes('Orchestration [')) {
+          try {
+            logger.debug(`[ORCHESTRATION] Received eta_submission for orchestration job [${obj.jobName}]`);
+            const orchestrationEngine = require('./orchestrationEngine.js');
+            
+            // Fetch the log from database using the same key structure as updateLogRecord
+            let logOutput = '';
+            try {
+              const logKey = `${obj.name}_${obj.jobName}_log`;
+              logger.debug(`[ORCHESTRATION] Fetching log with key: [${logKey}]`);
+              const logData = await db.simpleGetData(logKey);
+              logOutput = logData || '';
+              logger.debug(`[ORCHESTRATION] Fetched log (${logOutput.length} bytes) for job [${obj.jobName}]`);
+              logger.debug(`[ORCHESTRATION] Log content first 100 chars: ${logOutput.substring(0, 100)}`);
+              
+              // Clear the log from the database to prevent mixing with future runs if same job ID is reused
+              try {
+                await db.simpleDeleteData(logKey);
+                logger.debug(`[ORCHESTRATION] Cleared log data for key [${logKey}]`);
+              } catch (deleteErr) {
+                logger.debug(`[ORCHESTRATION] Could not clear log (non-critical): ${deleteErr.message}`);
+              }
+            } catch (logErr) {
+              logger.debug(`[ORCHESTRATION] No log data found for job [${obj.jobName}]: ${logErr.message}`);
+            }
+            
+            orchestrationEngine.signalScriptCompletion(obj.jobName, {
+              exitCode: parseInt(obj.returnCode || 0),
+              stdout: logOutput,
+              stderr: ''
+            });
+            logger.debug(`[ORCHESTRATION] Signaled orchestration completion for job [${obj.jobName}]`);
+          } catch (err) {
+            logger.error(`[ORCHESTRATION] Failed to signal orchestration completion: ${err.message}`);
+          }
+        }
+        
         updateStatusRecords(obj, startTime);
         running.removeItem(obj.jobName);
         agents.updateAgentStatus(obj.name, "online", `Job [${obj.name}] completed`,null,null,null,message,protocol,null);
         
-        // Emit schedule update to notify frontend that job completed
-        emitScheduleUpdate(obj.jobName);
+        // Emit schedule update to notify frontend that job completed (skip for orchestration jobs)
+        if (!obj.jobName || !obj.jobName.includes('Orchestration [')) {
+          emitScheduleUpdate(obj.jobName);
+        }
       }
     }
     else {
@@ -147,8 +188,10 @@ function processMessage(topic, message,protocol) {
             logger.debug(`No Log record found - creating with key [${key}]`);
             resp = await db.simplePutData(key,obj.data);
             logger.debug(`Data created successfully for Key [${key}], Response [${resp}], Data \n${obj.data}`);
-            // Emit websocket event for schedule log update
-            emitScheduleLogUpdate(obj.jobName, obj.data);
+            // Emit websocket event for schedule log update (skip for orchestration jobs)
+            if (!obj.jobName || !obj.jobName.includes('Orchestration [')) {
+              emitScheduleLogUpdate(obj.jobName, obj.data);
+            }
         }
         catch (insertErr){
           logger.error(`Unknown Issue creating new entry for key [${key}] to DB`);
@@ -170,8 +213,10 @@ function processMessage(topic, message,protocol) {
         logger.debug(``)
         resp = await db.simplePutData(key,data);
         logger.debug(`Data upadated successfully Key [${key}], Response [${resp}], Data \n${data}`);
-        // Emit websocket event for schedule log update
-        emitScheduleLogUpdate(obj.jobName, data);
+        // Emit websocket event for schedule log update (skip for orchestration jobs)
+        if (!obj.jobName || !obj.jobName.includes('Orchestration [')) {
+          emitScheduleLogUpdate(obj.jobName, data);
+        }
       }
       catch (error){
         logger.error(`unable to add [${key}] to DB`);
@@ -352,10 +397,19 @@ function processMessage(topic, message,protocol) {
     var key2 = getDbKey(obj,"log");
     var stats = null;
     var log = null;
+    
+    // Extract executionId for orchestration nodes
+    let executionId = null;
+    const orchestrationMatch = obj.jobName.match(/^Orchestration\s+\[(.+?)\]\s+Node/);
+    if (orchestrationMatch && orchestrationEngine) {
+      const jobId = orchestrationMatch[1];
+      executionId = orchestrationEngine.activeOrchestrationExecutions[jobId] || null;
+    }
+    
     try {
         stats = await db.simpleGetData(key1);
         log = await db.simpleGetData(key2);
-        var histObj = hist.createHistoryItem(obj.jobName,startDate,stats.current.returnCode,stats.current.eta,log,obj.manual);
+        var histObj = hist.createHistoryItem(obj.jobName,startDate,stats.current.returnCode,stats.current.eta,log,obj.manual,executionId);
         logger.debug("Adding History obj: " + JSON.stringify(histObj));
         hist.add(histObj);
     }
@@ -363,7 +417,7 @@ function processMessage(topic, message,protocol) {
         logger.debug("Unable to find stats/log data");
         logger.debug(JSON.stringify(err));
         logger.debug("Creating a blank history item");
-        var histObj = hist.createHistoryItem(obj.jobName,new Date(),9999,0,"");
+        var histObj = hist.createHistoryItem(obj.jobName,new Date(),9999,0,"",false,executionId);
         logger.debug("Adding blank History obj: " + JSON.stringify(histObj));
         hist.add(histObj);
 

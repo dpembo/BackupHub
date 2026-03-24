@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0"/>
+  <title>Orchestration Monitor</title>
+  
+  <%- include('./partials/_head'); %>
+  <style>
+    .orchestration-container {
+      display: grid;
+      grid-template-columns: 1fr 400px;
+      gap: 20px;
+      min-height: calc(100vh - 300px);
+    }
+
+    @media (max-width: 1200px) {
+      .orchestration-container {
+        grid-template-columns: 1fr;
+      }
+      .details-section {
+        min-height: 400px;
+      }
+    }
+
+    .diagram-section {
+      background: transparent;
+      border-radius: 8px;
+      padding: 0;
+      overflow-y: auto;
+    }
+
+    .details-section {
+      background: var(--surface-color);
+      border-radius: 8px;
+      padding: 20px;
+      overflow-y: auto;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .mermaid-wrapper {
+      display: flex;
+      justify-content: center;
+      min-height: 400px;
+    }
+
+    .mermaid-wrapper svg {
+      max-width: 100%;
+      height: auto;
+    }
+
+    .detail-header {
+      border-bottom: 2px solid var(--primary-color);
+      margin-bottom: 15px;
+      padding-bottom: 10px;
+    }
+
+    .detail-header h3 {
+      margin: 0;
+      color: var(--text-primary);
+    }
+
+    .detail-body {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+
+    .detail-item {
+      background: var(--surface-color);
+      padding: 10px;
+      border-radius: 4px;
+      border-left: 3px solid var(--primary-color);
+    }
+
+    .detail-label {
+      font-weight: 500;
+      color: var(--text-muted);
+      font-size: 0.85em;
+      text-transform: uppercase;
+    }
+
+    .detail-value {
+      color: var(--text-primary);
+      margin-top: 5px;
+      word-break: break-word;
+    }
+
+    .status-badge {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 0.8em;
+      font-weight: 500;
+      margin-top: 5px;
+    }
+
+    .status-executed {
+      background: #c8e6c9;
+      color: #1b5e20;
+    }
+
+    .status-failed {
+      background: #ffcdd2;
+      color: #b71c1c;
+    }
+
+    .status-not-executed {
+      background: #e0e0e0;
+      color: #424242;
+    }
+
+    .log-container {
+      background: var(--bg-code);
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      padding: 10px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.85em;
+      max-height: 300px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+
+    .orchestration-info {
+      background: var(--surface-color);
+      padding: 12px;
+      border-radius: 4px;
+      border-left: 4px solid var(--primary-color);
+    }
+
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      font-size: 0.9em;
+    }
+
+    .info-row:last-child {
+      margin-bottom: 0;
+    }
+
+    .info-label {
+      font-weight: 500;
+      color: var(--text-muted);
+    }
+
+    .info-value {
+      color: var(--text-primary);
+      text-align: right;
+      flex: 1;
+      margin-left: 10px;
+    }
+
+    .no-node-selected {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: var(--text-muted);
+      text-align: center;
+      padding: 20px;
+    }
+
+    .error-message {
+      background: #ffebee;
+      border-left: 4px solid #e53935;
+      color: #b71c1c;
+      padding: 10px;
+      border-radius: 4px;
+      font-size: 0.9em;
+      margin-bottom: 10px;
+    }
+
+    .exit-code {
+      font-weight: 500;
+      padding: 8px;
+      border-radius: 4px;
+      text-align: center;
+      font-family: monospace;
+      margin-top: 5px;
+    }
+
+    .exit-code-success {
+      background: #c8e6c9;
+      color: #1b5e20;
+    }
+
+    .exit-code-failure {
+      background: #ffcdd2;
+      color: #b71c1c;
+    }
+
+    .nodes-list {
+      padding: 15px;
+    }
+
+    .nodes-list h4 {
+      margin-top: 0;
+      margin-bottom: 15px;
+      color: var(--text-primary);
+      border-bottom: 2px solid var(--primary-color);
+      padding-bottom: 10px;
+    }
+
+    .nodes-table {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .node-item {
+      background: var(--surface-color);
+      border: 1px solid var(--border-color);
+      border-left: 4px solid var(--primary-color);
+      padding: 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .node-item:hover {
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      transform: translateX(2px);
+    }
+
+    .node-item.selected {
+      border-left-color: #ff9800;
+      background: var(--selected-bg);
+    }
+
+    .node-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 5px;
+    }
+
+    .node-index {
+      font-weight: bold;
+      color: var(--text-muted);
+      min-width: 30px;
+    }
+
+    .node-name {
+      flex: 1;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+
+    .node-status {
+      font-size: 0.85em;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+
+    .node-error {
+      margin-top: 8px;
+      padding: 8px;
+      background: #ffebee;
+      border-left: 2px solid #e53935;
+      border-radius: 2px;
+      color: #c62828;
+    }
+  </style>
+</head>
+
+<body>
+  <%- include('./partials/_header'); %>
+
+  <div class="section no-pad-bot" id="index-banner">
+    <div class="container">   
+      <h5 class="header orange-text">
+        Orchestration Monitor: <span id="jobTitle" style="color: var(--primary-color); font-size: 0.8em;">Loading...</span>
+      </h5>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="orchestration-container" id="orchestrationContainer">
+      <!-- Diagram Section -->
+      <div class="diagram-section">
+        <h6>Execution Flow</h6>
+        <div class="mermaid-wrapper" id="diagramContainer">
+          <p style="text-align: center; color: var(--text-muted);">Loading orchestration diagram...</p>
+        </div>
+      </div>
+
+      <!-- Details Section -->
+      <div class="details-section">
+        <div id="detailsContent" class="no-node-selected">
+          <div>
+            <i class="material-icons" style="font-size: 3em; color: var(--text-muted);">info</i>
+            <p>Click on a node to view details</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <%- include('./partials/_footer'); %>
+  <%- include('./partials/_scripts'); %>
+  <script src="/js/mermaid/mermaid.min.js"></script>
+
+  <script>
+    // Initialize Mermaid for DAG rendering
+    if (typeof mermaid !== 'undefined') {
+      mermaid.initialize({ 
+        startOnLoad: true, 
+        theme: document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'default',
+        flowchart: { useMaxWidth: true }
+      });
+    }
+
+    // Mermaid setup - will use dynamic rendering
+    let executionData = null;
+    let selectedNode = null;
+
+    // Get job ID and execution index from URL parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    const jobId = urlParams.get('jobId');
+    const executionIndex = urlParams.get('executionIndex') || 'latest';
+    const executionId = urlParams.get('executionId');
+
+    if (!jobId) {
+      M.toast({ html: 'No orchestration job specified', classes: 'error' });
+    } else {
+      loadExecutionDetails();
+    }
+
+    async function loadExecutionDetails() {
+      try {
+        let url = `/orchestration/execution/details?jobId=${encodeURIComponent(jobId)}&executionIndex=${encodeURIComponent(executionIndex)}`;
+        if (executionId) {
+          url += `&executionId=${encodeURIComponent(executionId)}`;
+        }
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        executionData = await response.json();
+        
+        document.getElementById('jobTitle').textContent = executionData.jobName;
+        
+        renderDiagram();
+        renderOrchestrationInfo();
+        
+      } catch (error) {
+        M.toast({ html: 'Error loading execution details: ' + error.message, classes: 'error' });
+        logger.error('Error loading execution details:', error);
+      }
+    }
+
+    function renderDiagram() {
+      const nodes = executionData.nodes;
+      const edges = executionData.edges || [];
+
+      if (!nodes || nodes.length === 0) {
+        document.getElementById('diagramContainer').innerHTML = '<p>No nodes in this orchestration</p>';
+        return;
+      }
+
+      // Canvas configuration (same as orchestrationBuilder)
+      const CANVAS = {
+        width: document.getElementById('diagramContainer').offsetWidth || 900,
+        height: 600,
+        nodeWidth: 180,
+        nodeHeight: 70,
+        portRadius: 6
+      };
+
+      // Create SVG canvas
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('width', CANVAS.width);
+      svg.setAttribute('height', CANVAS.height);
+      svg.setAttribute('viewBox', `0 0 ${CANVAS.width} ${CANVAS.height}`);
+      svg.setAttribute('style', 'border: 1px solid var(--border-color); background: var(--surface-color); border-radius: 4px;');
+
+      // Create layers
+      const edgeLayer = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      edgeLayer.setAttribute('id', 'edge-layer');
+      svg.appendChild(edgeLayer);
+
+      const nodeLayer = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      nodeLayer.setAttribute('id', 'node-layer');
+      svg.appendChild(nodeLayer);
+
+      // Add arrowhead marker definition
+      const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+      const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+      marker.setAttribute('id', 'arrowhead-green');
+      marker.setAttribute('markerWidth', '10');
+      marker.setAttribute('markerHeight', '10');
+      marker.setAttribute('refX', '9');
+      marker.setAttribute('refY', '3');
+      marker.setAttribute('orient', 'auto');
+      const polyGreen = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+      polyGreen.setAttribute('points', '0 0, 10 3, 0 6');
+      polyGreen.setAttribute('fill', '#4caf50');
+      marker.appendChild(polyGreen);
+      defs.appendChild(marker);
+
+      const markerRed = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+      markerRed.setAttribute('id', 'arrowhead-red');
+      markerRed.setAttribute('markerWidth', '10');
+      markerRed.setAttribute('markerHeight', '10');
+      markerRed.setAttribute('refX', '9');
+      markerRed.setAttribute('refY', '3');
+      markerRed.setAttribute('orient', 'auto');
+      const polyRed = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+      polyRed.setAttribute('points', '0 0, 10 3, 0 6');
+      polyRed.setAttribute('fill', '#f44336');
+      markerRed.appendChild(polyRed);
+      defs.appendChild(markerRed);
+
+      const markerGrey = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+      markerGrey.setAttribute('id', 'arrowhead-grey');
+      markerGrey.setAttribute('markerWidth', '10');
+      markerGrey.setAttribute('markerHeight', '10');
+      markerGrey.setAttribute('refX', '9');
+      markerGrey.setAttribute('refY', '3');
+      markerGrey.setAttribute('orient', 'auto');
+      const polyGrey = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+      polyGrey.setAttribute('points', '0 0, 10 3, 0 6');
+      polyGrey.setAttribute('fill', '#999999');
+      markerGrey.appendChild(polyGrey);
+      defs.appendChild(markerGrey);
+      const markerBlue = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+      markerBlue.setAttribute('id', 'arrowhead-blue');
+      markerBlue.setAttribute('markerWidth', '10');
+      markerBlue.setAttribute('markerHeight', '10');
+      markerBlue.setAttribute('refX', '9');
+      markerBlue.setAttribute('refY', '3');
+      markerBlue.setAttribute('orient', 'auto');
+      const polyBlue = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+      polyBlue.setAttribute('points', '0 0, 10 3, 0 6');
+      polyBlue.setAttribute('fill', '#2196f3');
+      markerBlue.appendChild(polyBlue);
+      defs.appendChild(markerBlue);
+      svg.insertBefore(defs, edgeLayer);
+
+      // Render edges first (background)
+      edges.forEach(edge => {
+        renderMonitorEdge(edgeLayer, edge, nodes, CANVAS, executionData);
+      });
+
+      // Render nodes (foreground)
+      nodes.forEach((node) => {
+        renderMonitorNode(nodeLayer, node, CANVAS);
+      });
+
+      // Replace container content
+      document.getElementById('diagramContainer').innerHTML = '';
+      document.getElementById('diagramContainer').appendChild(svg);
+
+      // Add click handlers
+      nodes.forEach(node => {
+        const nodeElement = nodeLayer.querySelector(`[data-node-id="${node.id}"]`);
+        if (nodeElement) {
+          nodeElement.style.cursor = 'pointer';
+          nodeElement.addEventListener('click', () => selectNode(node.id));
+        }
+      });
+    }
+
+    function renderMonitorNode(layer, node, CANVAS) {
+      // Determine status and colors
+      let borderColor = '#e0e0e0'; // Default - not executed
+      let statusIcon = '';
+
+      // Check if node has an error or non-zero exit code
+      const hasError = node.hasError || (node.exitCode !== undefined && node.exitCode !== null && node.exitCode !== 0);
+      
+      // end-failure nodes should be red when executed
+      const isFailureNode = node.type === 'end-failure' && node.executed;
+
+      if (isFailureNode || hasError) {
+        borderColor = '#f44336'; // Red - error or non-zero exit code
+        statusIcon = '❌';
+      } else if (node.executed) {
+        borderColor = '#4caf50'; // Green - success
+        statusIcon = '✅';
+      }
+
+      // Create node group
+      const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      g.setAttribute('data-node-id', node.id);
+      g.setAttribute('class', 'workflow-node');
+
+      // Rectangle background
+      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      rect.setAttribute('x', node.x - CANVAS.nodeWidth / 2);
+      rect.setAttribute('y', node.y - CANVAS.nodeHeight / 2);
+      rect.setAttribute('width', CANVAS.nodeWidth);
+      rect.setAttribute('height', CANVAS.nodeHeight);
+      rect.setAttribute('fill', '#ffffff');
+      rect.setAttribute('stroke', borderColor);
+      rect.setAttribute('stroke-width', '2');
+      rect.setAttribute('rx', '4');
+      g.appendChild(rect);
+
+      // Status icon
+      if (statusIcon) {
+        const iconText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        iconText.setAttribute('x', node.x - CANVAS.nodeWidth / 2 + 12);
+        iconText.setAttribute('y', node.y);
+        iconText.setAttribute('font-size', '18');
+        iconText.setAttribute('fill', borderColor);
+        iconText.setAttribute('dominant-baseline', 'middle');
+        iconText.setAttribute('text-anchor', 'middle');
+        iconText.textContent = statusIcon;
+        g.appendChild(iconText);
+      }
+
+      // Node label
+      const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      text.setAttribute('x', node.x - CANVAS.nodeWidth / 2 + 40);
+      text.setAttribute('y', node.y);
+      text.setAttribute('font-size', '12');
+      text.setAttribute('font-weight', '500');
+      text.setAttribute('fill', 'var(--text-primary)');
+      text.setAttribute('text-anchor', 'start');
+      text.setAttribute('dominant-baseline', 'middle');
+      text.textContent = node.label.substring(0, 20);
+      g.appendChild(text);
+
+      // Exit code if applicable
+      if (node.exitCode !== undefined && node.exitCode !== null) {
+        const exitText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        exitText.setAttribute('x', node.x - CANVAS.nodeWidth / 2 + 40);
+        exitText.setAttribute('y', node.y + 12);
+        exitText.setAttribute('font-size', '10');
+        exitText.setAttribute('fill', 'var(--text-muted)');
+        exitText.setAttribute('dominant-baseline', 'middle');
+        exitText.setAttribute('text-anchor', 'start');
+        exitText.textContent = `Exit: ${node.exitCode}`;
+        g.appendChild(exitText);
+      }
+
+      layer.appendChild(g);
+    }
+
+    function renderMonitorEdge(layer, edge, nodes, CANVAS, executionData) {
+      const fromNode = nodes.find(n => n.id === edge.from);
+      const toNode = nodes.find(n => n.id === edge.to);
+
+      if (!fromNode || !toNode) return;
+
+      // Determine edge status color
+      let edgeColor = '#999999'; // Default - unused (grey)
+      let arrowMarker = 'url(#arrowhead-grey)';
+
+      // Check if this edge was traversed
+      if (edge.executed) {
+        edgeColor = '#2196f3'; // Blue - traversed path
+        arrowMarker = 'url(#arrowhead-blue)';
+      }
+
+      // Calculate port positions
+      const fromX = fromNode.x;
+      const fromY = fromNode.y + CANVAS.nodeHeight / 2;
+      const toX = toNode.x;
+      const toY = toNode.y - CANVAS.nodeHeight / 2;
+
+      // Create bezier curve
+      const midY = (fromY + toY) / 2;
+      const pathData = `M ${fromX} ${fromY} C ${fromX} ${midY}, ${toX} ${midY}, ${toX} ${toY}`;
+
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', pathData);
+      path.setAttribute('stroke', edgeColor);
+      path.setAttribute('stroke-width', '2');
+      path.setAttribute('fill', 'none');
+      path.setAttribute('marker-end', arrowMarker);
+      layer.appendChild(path);
+
+      // Add edge label
+      if (edge.label) {
+        const labelText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        labelText.setAttribute('x', (fromX + toX) / 2 + 10);
+        labelText.setAttribute('y', midY - 5);
+        labelText.setAttribute('font-size', '11');
+        labelText.setAttribute('fill', edgeColor);
+        labelText.setAttribute('font-weight', '500');
+        labelText.textContent = edge.label;
+        layer.appendChild(labelText);
+      }
+    }
+
+    function renderOrchestrationInfo() {
+      const exec = executionData.execution;
+      const startDate = new Date(exec.startTime);
+      const endDate = exec.endTime ? new Date(exec.endTime) : null;
+      const duration = exec.duration ? Math.round(exec.duration / 1000) : 0;
+
+      let statusColor = 'info';
+      if (exec.finalStatus === 'success') statusColor = 'success';
+      else if (exec.finalStatus === 'failure') statusColor = 'error';
+      else if (exec.status === 'running') statusColor = 'warning';
+
+      const html = `
+        <div class="detail-header">
+          <h3>Orchestration Status</h3>
+        </div>
+        <div class="orchestration-info">
+          <div class="info-row">
+            <span class="info-label">Status:</span>
+            <span class="info-value">
+              <span class="status-badge status-${exec.finalStatus === 'success' ? 'executed' : (exec.finalStatus === 'failure' ? 'failed' : 'not-executed')}">
+                ${exec.finalStatus.toUpperCase()}
+              </span>
+            </span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Started:</span>
+            <span class="info-value">${startDate.toLocaleString()}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Duration:</span>
+            <span class="info-value">${duration}s</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Nodes Executed:</span>
+            <span class="info-value">${executionData.visitedNodes.length} / ${executionData.nodes.length}</span>
+          </div>
+        </div>
+      `;
+
+      document.getElementById('detailsContent').innerHTML = html;
+    }
+
+    // Make nodeClicked accessible globally for Mermaid
+    window.nodeClicked = function(nodeId) {
+      selectNode(nodeId);
+    };
+
+    function selectNode(nodeId) {
+      selectedNode = nodeId;
+      const node = executionData.nodes.find(n => n.id === nodeId);
+
+      if (!node) return;
+
+      let statusClass = 'not-executed';
+      let statusText = 'Not Executed';
+      if (node.hasError) {
+        statusClass = 'failed';
+        statusText = 'Failed';
+      } else if (node.executed) {
+        statusClass = 'executed';
+        statusText = 'Executed';
+      }
+
+      const nodeOutput = executionData.nodeScriptOutputs[nodeId];
+      const exitCode = node.exitCode;
+
+      let logHtml = '<p style="color: var(--text-muted); margin: 0;">No output captured</p>';
+      if (nodeOutput && nodeOutput.stdout) {
+        logHtml = `<div class="log-container">${escapeHtml(nodeOutput.stdout)}</div>`;
+      }
+
+      let exitCodeHtml = '';
+      if (exitCode !== null && exitCode !== undefined) {
+        const exitClass = exitCode === 0 ? 'exit-code-success' : 'exit-code-failure';
+        exitCodeHtml = `<div class="exit-code ${exitClass}">Exit Code: ${exitCode}</div>`;
+      }
+
+      let errorHtml = '';
+      if (node.hasError) {
+        errorHtml = `<div class="error-message"><strong>Error:</strong> ${node.errorMessage}</div>`;
+      }
+
+      const html = `
+        <div class="detail-header">
+          <h3>${node.label}</h3>
+          <span class="status-badge status-${statusClass}">${statusText}</span>
+        </div>
+        <div class="detail-body">
+          ${errorHtml}
+          ${exitCodeHtml}
+          <div class="detail-item">
+            <div class="detail-label">Node Type</div>
+            <div class="detail-value">${node.type}</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Output Log</div>
+            ${logHtml}
+          </div>
+        </div>
+      `;
+
+      document.getElementById('detailsContent').innerHTML = html;
+    }
+
+    function escapeHtml(text) {
+      const map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+      };
+      return text.replace(/[&<>"']/g, m => map[m]);
+    }
+  </script>
+</body>
+
+</html>
