@@ -1146,13 +1146,13 @@ app.get('/runList/data',User.isAuthenticated, (req, res) => {
 });
 
 
-app.get('/historyList/data',User.isAuthenticated, (req, res) => {
+app.get('/historyList/data',User.isAuthenticated, async (req, res) => {
 
   var format = "json"
   if(req.query.format !==undefined && req.query.format!=null)format = req.query.format;
 
   logger.info(`Format is ${format}`);
-  var historyList = hist.getItemsGroupedByOrchestration();
+  var historyList = await hist.getItemsGroupedByOrchestration();
   var runningList = running.getItems();
   var schedules = scheduler.getSchedules();
 
@@ -1250,6 +1250,23 @@ app.get('/historyList/data',User.isAuthenticated, (req, res) => {
     res.send(data)
   }
 });
+
+app.delete('/rest/history/clear', validateCsrf, User.isAuthenticated, asyncHandler(async (req, res) => {
+  logger.info('Clearing all history items');
+  try {
+    await hist.clearHistory();
+    res.json({ 
+      success: true, 
+      message: 'History cleared successfully' 
+    });
+  } catch (err) {
+    logger.error('Error clearing history: ' + err.message);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to clear history: ' + err.message 
+    });
+  }
+}));
 
 app.get('/history.html',User.isAuthenticated, (req, res) => {
 

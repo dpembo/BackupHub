@@ -10,14 +10,21 @@
   <style>
     .orchestration-container {
       display: grid;
-      grid-template-columns: 1fr 400px;
-      gap: 20px;
-      min-height: calc(100vh - 300px);
+      grid-template-columns: 1fr;
+      gap: 0;
+      height: calc(100vh - 220px);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .orchestration-container.details-open {
+      /* Details panel slides in absolutely */
     }
 
     @media (max-width: 1200px) {
       .orchestration-container {
         grid-template-columns: 1fr;
+        height: auto;
       }
       .details-section {
         min-height: 400px;
@@ -28,63 +35,178 @@
       background: transparent;
       border-radius: 8px;
       padding: 0;
-      overflow-y: auto;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      position: relative;
+    }
+
+    .diagram-section h6 {
+      margin: 0;
+      padding: 15px 20px;
+      border-bottom: 1px solid var(--border-color);
+      flex-shrink: 0;
     }
 
     .details-section {
       background: var(--surface-color);
       border-radius: 8px;
-      padding: 20px;
+      padding: 15px 10px;
       overflow-y: auto;
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      box-shadow: -2px 0 8px rgba(0, 0, 0, 0.15);
+      width: 50%;
+      position: absolute;
+      right: 0;
+      top: 0;
+      bottom: 0;
+      transform: translateX(100%);
+      opacity: 0;
+      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      pointer-events: none;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .details-section.visible {
+      transform: translateX(0);
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .details-close-btn {
+      position: absolute;
+      top: 15px;
+      right: 15px;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      font-size: 24px;
+      color: var(--text-primary);
+      padding: 5px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+    }
+
+    .details-close-btn:hover {
+      color: var(--error-color, #d32f2f);
+      transform: scale(1.2);
+    }
+
+    #detailsContent {
+      margin-top: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      height: auto;
+      width: 100%;
     }
 
     .mermaid-wrapper {
       display: flex;
       justify-content: center;
-      min-height: 400px;
+      align-items: flex-start;
+      flex: 1;
+      overflow: auto;
+      padding: 20px;
     }
 
     .mermaid-wrapper svg {
-      max-width: 100%;
+      min-width: fit-content;
       height: auto;
     }
 
     .detail-header {
-      border-bottom: 2px solid var(--primary-color);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
       margin-bottom: 15px;
-      padding-bottom: 10px;
+      padding-bottom: 12px;
+      border-bottom: 2px solid var(--primary-color);
+      width: 100%;
+      text-align: left;
     }
 
     .detail-header h3 {
       margin: 0;
       color: var(--text-primary);
+      font-size: 1.1em;
+      font-weight: 600;
+    }
+
+    .node-status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.85em;
+      font-weight: 500;
+    }
+
+    .node-status-icon {
+      font-size: 1.4em;
+      display: flex;
+      align-items: center;
+    }
+
+    .node-status-icon.executed {
+      color: #2e7d32;
+    }
+
+    .node-status-icon.failed {
+      color: #d32f2f;
+    }
+
+    .node-status-icon.not-executed {
+      color: #9e9e9e;
     }
 
     .detail-body {
       display: flex;
       flex-direction: column;
-      gap: 15px;
+      gap: 8px;
+      height: auto;
+      width: 100%;
     }
 
     .detail-item {
-      background: var(--surface-color);
-      padding: 10px;
-      border-radius: 4px;
-      border-left: 3px solid var(--primary-color);
+      background: transparent;
+      padding: 6px 0;
+      border-radius: 0;
+      border-left: none;
+      border-bottom: 1px solid var(--border-color);
+      display: grid;
+      grid-template-columns: 80px 1fr;
+      gap: 12px;
+      align-items: start;
+      justify-items: start;
+      width: 100%;
+    }
+
+    .detail-item:last-child {
+      border-bottom: none;
     }
 
     .detail-label {
       font-weight: 500;
       color: var(--text-muted);
-      font-size: 0.85em;
+      font-size: 0.7em;
       text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 0;
+      padding-top: 2px;
+      white-space: nowrap;
+      text-align: left;
     }
 
     .detail-value {
       color: var(--text-primary);
-      margin-top: 5px;
       word-break: break-word;
+      font-size: 0.95em;
+      width: 100%;
+      text-align: left;
     }
 
     .status-badge {
@@ -93,7 +215,6 @@
       border-radius: 4px;
       font-size: 0.8em;
       font-weight: 500;
-      margin-top: 5px;
     }
 
     .status-executed {
@@ -112,16 +233,24 @@
     }
 
     .log-container {
-      background: var(--bg-code);
-      border: 1px solid var(--border-color);
-      border-radius: 4px;
-      padding: 10px;
-      font-family: 'Courier New', monospace;
-      font-size: 0.85em;
-      max-height: 300px;
-      overflow-y: auto;
-      white-space: pre-wrap;
-      word-wrap: break-word;
+      display: none;
+    }
+
+    .log-container::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .log-container::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .log-container::-webkit-scrollbar-thumb {
+      background: var(--border-color);
+      border-radius: 3px;
+    }
+
+    .log-container::-webkit-scrollbar-thumb:hover {
+      background: var(--text-muted);
     }
 
     .orchestration-info {
@@ -264,6 +393,57 @@
       border-radius: 2px;
       color: #c62828;
     }
+
+    #zoom-controls {
+      position: absolute;
+      bottom: 20px;
+      right: 20px;
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      display: flex;
+      gap: 5px;
+      padding: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      z-index: 100;
+      transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      transform: translateX(0);
+    }
+
+    #zoom-controls.slide-left {
+      transform: translateX(-55vw);
+    }
+
+    #zoom-controls button {
+      width: 32px;
+      height: 32px;
+      border: 1px solid #ddd;
+      background: white;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: bold;
+      color: #333;
+      transition: all 0.2s ease;
+    }
+
+    #zoom-controls button:hover {
+      background: #f5f5f5;
+      border-color: #999;
+    }
+
+    #zoom-controls button:active {
+      background: #e8e8e8;
+    }
+
+    #zoom-level {
+      min-width: 50px;
+      text-align: center;
+      line-height: 32px;
+      font-size: 12px;
+      color: #666;
+      font-weight: 500;
+    }
   </style>
 </head>
 
@@ -286,10 +466,19 @@
         <div class="mermaid-wrapper" id="diagramContainer">
           <p style="text-align: center; color: var(--text-muted);">Loading orchestration diagram...</p>
         </div>
+        
+        <!-- Zoom Controls -->
+        <div id="zoom-controls">
+          <button id="zoom-out" title="Zoom Out">−</button>
+          <div id="zoom-level">100%</div>
+          <button id="zoom-in" title="Zoom In">+</button>
+          <button id="zoom-reset" title="Reset Zoom">↻</button>
+        </div>
       </div>
 
       <!-- Details Section -->
       <div class="details-section">
+        <button class="details-close-btn" id="detailsClose" title="Close">&times;</button>
         <div id="detailsContent" class="no-node-selected">
           <div>
             <i class="material-icons" style="font-size: 3em; color: var(--text-muted);">info</i>
@@ -642,55 +831,214 @@
 
       if (!node) return;
 
-      let statusClass = 'not-executed';
-      let statusText = 'Not Executed';
-      if (node.hasError) {
-        statusClass = 'failed';
-        statusText = 'Failed';
-      } else if (node.executed) {
-        statusClass = 'executed';
-        statusText = 'Executed';
+      // Remove previous selection highlight
+      document.querySelectorAll('[data-node-id]').forEach(el => {
+        el.style.outline = 'none';
+      });
+
+      // Highlight selected node with blue outline
+      const selectedNodeEl = document.querySelector(`[data-node-id="${nodeId}"]`);
+      if (selectedNodeEl) {
+        selectedNodeEl.style.outline = '3px solid #1976d2';
+        selectedNodeEl.style.outlineOffset = '2px';
       }
 
+      let statusClass = 'not-executed';
+      let statusText = 'Not Executed';
+      let statusIcon = '○';
+      let statusColor = '#9e9e9e';
+
       const nodeOutput = executionData.nodeScriptOutputs[nodeId];
-      const exitCode = node.exitCode;
+      const exitCode = nodeOutput?.exitCode !== undefined ? nodeOutput.exitCode : node.exitCode;
+      const nodeExecution = executionData.execution;
+      
+      // Re-evaluate status based on actual exit code from nodeOutput
+      const actualHasError = node.hasError || (exitCode !== undefined && exitCode !== 0);
+      const actualIsFailureNode = node.type === 'end-failure' && node.executed;
+      
+      // Start and condition nodes are always successful
+      if (node.type === 'start' || node.type === 'condition') {
+        statusClass = 'executed';
+        statusText = 'Success';
+        statusIcon = '✓';
+        statusColor = '#2e7d32';
+      } else if (!node.executed) {
+        statusClass = 'not-executed';
+        statusText = 'Not Executed';
+        statusIcon = '○';
+        statusColor = '#9e9e9e';
+      } else if (actualIsFailureNode || actualHasError) {
+        statusClass = 'failed';
+        statusText = 'Failed';
+        statusIcon = '✕';
+        statusColor = '#d32f2f';
+      } else {
+        statusClass = 'executed';
+        statusText = 'Success';
+        statusIcon = '✓';
+        statusColor = '#2e7d32';
+      }
 
       let logHtml = '<p style="color: var(--text-muted); margin: 0;">No output captured</p>';
       if (nodeOutput && nodeOutput.stdout) {
-        logHtml = `<div class="log-container">${escapeHtml(nodeOutput.stdout)}</div>`;
+        logHtml = `<textarea readonly rows="10" style="font-family: 'Courier New', monospace; width: 100%; height: auto;">${escapeHtml(nodeOutput.stdout)}</textarea>`;
       }
 
-      let exitCodeHtml = '';
-      if (exitCode !== null && exitCode !== undefined) {
-        const exitClass = exitCode === 0 ? 'exit-code-success' : 'exit-code-failure';
-        exitCodeHtml = `<div class="exit-code ${exitClass}">Exit Code: ${exitCode}</div>`;
+      // Format start time
+      let startTimeHtml = 'N/A';
+      if (node.startTime) {
+        const startDate = new Date(node.startTime);
+        startTimeHtml = startDate.toLocaleString();
       }
+
+      // Calculate time taken
+      let timeTakenHtml = 'N/A';
+      if (node.timeTaken) {
+        timeTakenHtml = formatDuration(node.timeTaken);
+      }
+
+      // Parameters
+      let parametersHtml = 'None';
+      if (node.parameters && Object.keys(node.parameters).length > 0) {
+        parametersHtml = Object.entries(node.parameters)
+          .map(([key, value]) => `<div><strong>${key}:</strong> ${escapeHtml(String(value))}</div>`)
+          .join('');
+      }
+
+      // Agent info
+      const agentHtml = node.agent || 'N/A';
+
+      // Exit code
+      let exitCodeHtml = '';
+      let displayExitCode = (exitCode !== null && exitCode !== undefined) ? exitCode : 0;
+      // For failure nodes, use 9999 as exit code
+      if (node.type === 'end-failure') {
+        displayExitCode = 9999;
+      }
+      const exitClass = displayExitCode === 0 ? 'exit-code-success' : 'exit-code-failure';
+      exitCodeHtml = `<div class="detail-item">
+        <div class="detail-label">Exit Code</div>
+        <div class="detail-value ${exitClass}" style="font-weight: bold;">${displayExitCode}</div>
+      </div>`;
 
       let errorHtml = '';
       if (node.hasError) {
-        errorHtml = `<div class="error-message"><strong>Error:</strong> ${node.errorMessage}</div>`;
+        errorHtml = `<div class="error-message"><strong>Error:</strong> ${escapeHtml(node.errorMessage || 'Unknown error')}</div>`;
       }
 
       const html = `
         <div class="detail-header">
-          <h3>${node.label}</h3>
-          <span class="status-badge status-${statusClass}">${statusText}</span>
+          <h3>${escapeHtml(node.label)}</h3>
         </div>
         <div class="detail-body">
           ${errorHtml}
-          ${exitCodeHtml}
           <div class="detail-item">
-            <div class="detail-label">Node Type</div>
-            <div class="detail-value">${node.type}</div>
+            <div class="detail-label">Status</div>
+            <div class="detail-value" style="display: flex; align-items: center; gap: 6px;">
+              <span style="font-size: 1.2em; color: ${statusColor};">${statusIcon}</span>
+              <span>${statusText}</span>
+            </div>
           </div>
           <div class="detail-item">
-            <div class="detail-label">Output Log</div>
+            <div class="detail-label">Node Type</div>
+            <div class="detail-value">${escapeHtml(node.type)}</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Start Time</div>
+            <div class="detail-value">${startTimeHtml}</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Time Taken</div>
+            <div class="detail-value">${timeTakenHtml}</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Agent</div>
+            <div class="detail-value">${escapeHtml(agentHtml)}</div>
+          </div>
+          ${exitCodeHtml}
+          <div class="detail-item">
+            <div class="detail-label">Parameters</div>
+            <div class="detail-value">${parametersHtml}</div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 8px;">
+            <div class="detail-label" style="margin-bottom: 0;">Output Log</div>
             ${logHtml}
           </div>
         </div>
       `;
 
       document.getElementById('detailsContent').innerHTML = html;
+      
+      // Setup textarea auto-expand on click
+      const textarea = document.querySelector('.log-container') || document.querySelector('textarea[readonly]');
+      if (textarea) {
+        textarea.addEventListener('click', function() {
+          this.style.height = 'auto';
+          this.style.height = (this.scrollHeight) + 'px';
+        });
+        
+        // Also expand on input in case user interacts with it
+        textarea.addEventListener('input', function() {
+          this.style.height = 'auto';
+          this.style.height = (this.scrollHeight) + 'px';
+        });
+      }
+      
+      // Reset scroll to top immediately after content update
+      const detailsSection = document.querySelector('.details-section');
+      detailsSection.scrollTop = 0;
+      
+      // Show details panel
+      showDetailsPanel();
+    }
+
+    function showDetailsPanel() {
+      const container = document.getElementById('orchestrationContainer');
+      const detailsSection = document.querySelector('.details-section');
+      const zoomControls = document.getElementById('zoom-controls');
+      
+      container.classList.add('details-open');
+      detailsSection.classList.add('visible');
+      zoomControls.classList.add('slide-left');
+    }
+
+    function hideDetailsPanel() {
+      const container = document.getElementById('orchestrationContainer');
+      const detailsSection = document.querySelector('.details-section');
+      const zoomControls = document.getElementById('zoom-controls');
+      
+      // Remove blue outline from previously selected node
+      if (selectedNode) {
+        const selectedNodeEl = document.querySelector(`[data-node-id="${selectedNode}"]`);
+        if (selectedNodeEl) {
+          selectedNodeEl.style.outline = 'none';
+          selectedNodeEl.style.outlineOffset = 'auto';
+        }
+      }
+      
+      container.classList.remove('details-open');
+      detailsSection.classList.remove('visible');
+      zoomControls.classList.remove('slide-left');
+      selectedNode = null;
+    }
+
+    function formatDuration(milliseconds) {
+      if (!milliseconds || milliseconds < 0) return 'N/A';
+      
+      const seconds = Math.floor(milliseconds / 1000);
+      const minutes = Math.floor(seconds / 60);
+      const hours = Math.floor(minutes / 60);
+      const days = Math.floor(hours / 24);
+      
+      if (days > 0) {
+        return `${days}d ${hours % 24}h ${minutes % 60}m ${seconds % 60}s`;
+      } else if (hours > 0) {
+        return `${hours}h ${minutes % 60}m ${seconds % 60}s`;
+      } else if (minutes > 0) {
+        return `${minutes}m ${seconds % 60}s`;
+      } else {
+        return `${seconds}s`;
+      }
     }
 
     function escapeHtml(text) {
@@ -703,6 +1051,63 @@
       };
       return text.replace(/[&<>"']/g, m => map[m]);
     }
+
+    // Zoom controls setup
+    let zoomLevel = 1;
+
+    function setupZoomControls() {
+      document.getElementById('zoom-in').addEventListener('click', function() {
+        zoomLevel = Math.min(zoomLevel + 0.1, 3);
+        applyZoom();
+      });
+      
+      document.getElementById('zoom-out').addEventListener('click', function() {
+        zoomLevel = Math.max(zoomLevel - 0.1, 0.5);
+        applyZoom();
+      });
+      
+      document.getElementById('zoom-reset').addEventListener('click', function() {
+        zoomLevel = 1;
+        applyZoom();
+      });
+
+      // Close button handler
+      document.getElementById('detailsClose').addEventListener('click', function() {
+        hideDetailsPanel();
+      });
+      
+      // Canvas click handler - close details panel when clicking on blank area
+      const wrapper = document.querySelector('.mermaid-wrapper');
+      if (wrapper) {
+        wrapper.addEventListener('click', function(event) {
+          // Only close if clicking on the wrapper itself or empty SVG areas, not on nodes
+          if (event.target === wrapper || 
+              (event.target.tagName === 'svg' && !event.target.closest('[data-node-id]')) ||
+              event.target.tagName === 'rect' && !event.target.closest('[data-node-id]')) {
+            hideDetailsPanel();
+          }
+        });
+      }
+    }
+
+    function applyZoom() {
+      const svg = document.querySelector('.mermaid-wrapper svg');
+      if (svg) {
+        svg.style.transform = `scale(${zoomLevel})`;
+        svg.style.transformOrigin = '0 0';
+        document.getElementById('zoom-level').textContent = Math.round(zoomLevel * 100) + '%';
+      }
+    }
+
+    // Initialize zoom controls after diagram is rendered
+    const originalRenderDiagram = renderDiagram;
+    renderDiagram = function() {
+      originalRenderDiagram.call(this);
+      // Delay setup to ensure SVG is rendered
+      setTimeout(() => {
+        setupZoomControls();
+      }, 100);
+    };
   </script>
 </body>
 

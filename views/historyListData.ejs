@@ -161,7 +161,12 @@ function displaySecs(secs) {
               <td>
                 <strong><%=historyList[i].jobName%></strong>
                 <br/>
-                <span style="font-size: 0.85em; color: var(--text-muted);"><%=historyList[i].children ? historyList[i].children.length : 0%> nodes executed</span>
+                <% if (historyList[i].description) { %>
+                  <span style="font-size: 0.85em; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; max-width: 300px;" title="<%=historyList[i].description%>"><%=historyList[i].description%></span>
+                <% } else { %>
+                  <span style="font-size: 0.85em; color: #999; font-style: italic;">No Description</span>
+                <% } %>
+                <span style="font-size: 0.85em; color: var(--text-muted); display: block; margin-top: 3px;"><%=historyList[i].children ? historyList[i].children.length : 0%> nodes executed</span>
               </td>
               <td>
                 <span title="Orchestration Execution" class="material-icons">hub</span>

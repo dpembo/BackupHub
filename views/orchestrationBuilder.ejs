@@ -37,15 +37,44 @@
     .delete-btn:hover { background: #d32f2f; }
     .save-btn { background: #4caf50; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }
     .save-btn:hover { background: #388e3c; }
+    #orch-name-display { cursor: pointer; padding: 5px 10px; border-radius: 4px; transition: background 0.2s; display: flex; flex-direction: column; gap: 4px; }
+    #orch-name-display:hover { background: rgba(33, 150, 243, 0.1); }
+    #orch-name-text { font-size: 16px; font-weight: 600; }
+    #orch-desc-text { font-size: 13px; color: #666; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 400px; cursor: help; }
+    #orch-name-edit { display: none; }
+    .name-edit-mode #orch-name-display { display: none; }
+    .name-edit-mode #orch-name-edit { display: flex; gap: 8px; align-items: flex-start; flex-direction: column; }
+    #orch-name-input { padding: 5px 8px; border: 2px solid #2196f3; border-radius: 4px; font-size: 14px; font-weight: 500; width: 300px; }
+    #orch-desc-input { padding: 5px 8px; border: 2px solid #2196f3; border-radius: 4px; font-size: 13px; width: 300px; height: 50px; resize: vertical; }
+    #orch-name-input:focus { outline: none; box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.2); }
+    #orch-desc-input:focus { outline: none; box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.2); }
+    .orch-edit-buttons { display: flex; gap: 6px; }
   </style>
   
 </head>
 <body>
   <div id="orchestration-container">
     <div id="orchestration-header">
-      <h3 style="margin: 0; display: flex; align-items: center; gap: 10px;">
+      <h3 style="margin: 0; display: flex; align-items: center; gap: 15px;">
         <i class="material-icons">workspaces_outline</i>
-        Orchestration Builder
+        <div id="orch-name-display" title="Click to edit orchestration name">
+          <span id="orch-name-text">Orchestration Builder</span>
+          <span id="orch-desc-text" title="Orchestration description">No Description</span>
+        </div>
+        <div id="orch-name-edit">
+          <div>
+            <label style="font-size: 11px; color: #999; text-transform: uppercase; display: block; margin-bottom: 4px;">Name</label>
+            <input type="text" id="orch-name-input" placeholder="Orchestration name...">
+          </div>
+          <div>
+            <label style="font-size: 11px; color: #999; text-transform: uppercase; display: block; margin-bottom: 4px;">Description</label>
+            <textarea id="orch-desc-input" placeholder="Optional description..."></textarea>
+          </div>
+          <div class="orch-edit-buttons">
+            <button onclick="saveOrchestrationName()" style="background: #4caf50; color: white; border: none; padding: 6px 14px; border-radius: 3px; cursor: pointer; font-size: 12px;">Save</button>
+            <button onclick="cancelNameEdit()" style="background: #999; color: white; border: none; padding: 6px 14px; border-radius: 3px; cursor: pointer; font-size: 12px;">Cancel</button>
+          </div>
+        </div>
       </h3>
     </div>
     
@@ -174,14 +203,41 @@
         <span><strong id="node-count">0</strong> nodes</span> | <span><strong id="edge-count">0</strong> connections</span>
         <span style="margin-left: 20px; color: #999; font-size: 12px;">💡 Drag from port circles to connect nodes</span>
       </div>
-      <button class="save-btn" onclick="saveOrchestration()">
-        <i class="material-icons" style="font-size: 16px; vertical-align: middle;">save</i>
-        Save Orchestration
-      </button>
+      <div style="display: flex; gap: 10px;">
+        <button class="save-btn" style="background: #2196f3;" onclick="runOrchestration()" title="Execute the orchestration">
+          <i class="material-icons" style="font-size: 16px; vertical-align: middle;">play_arrow</i>
+          Run
+        </button>
+        <button class="save-btn" onclick="saveOrchestration()">
+          <i class="material-icons" style="font-size: 16px; vertical-align: middle;">save</i>
+          Save Orchestration
+        </button>
+      </div>
     </div>
   </div>
   
   <%- include('./partials/_footer'); %>
+  
+  <!-- Orchestration Naming Modal -->
+  <div id="orchestration-naming-modal" class="modal">
+    <div class="modal-content">
+      <h4>Orchestration Name & Description</h4>
+      <p>Provide a descriptive name for this orchestration to help identify it in history logs:</p>
+      <div class="input-field" style="margin-top: 20px;">
+        <input type="text" id="naming-modal-name" placeholder="e.g., Daily Backup Workflow">
+        <label for="naming-modal-name">Orchestration Name *</label>
+        <span class="helper-text" id="naming-helper-text" data-error=""></span>
+      </div>
+      <div class="input-field">
+        <textarea id="naming-modal-desc" placeholder="Optional: Describe what this orchestration does" style="height: 80px; resize: vertical;"></textarea>
+        <label for="naming-modal-desc">Description (Optional)</label>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <a href="#!" class="modal-close waves-effect waves-green btn-flat">Cancel</a>
+      <a href="#!" onclick="confirmOrchestrationName()" id="naming-confirm-button" class="waves-effect waves-green btn-flat" style="color: #4caf50; font-weight: 600;">Save & Continue</a>
+    </div>
+  </div>
   
   <script>
     // SVG-based orchestration builder with labeled exit ports for conditions
@@ -203,6 +259,9 @@
     if (!orchestrationId) orchestrationId = null;
     let availableScripts = [];
     let availableAgents = [];
+    let orchestrationName = '';
+    let orchestrationDescription = '';
+    let pendingSave = false;
     
     // Data structures
     let nodes = {};
@@ -219,6 +278,8 @@
     
     $(document).ready(function() {
       console.log('Orchestra Builder loaded, orchestrationId:', orchestrationId);
+      // Initialize Materialize modal
+      $('.modal').modal();
       initializeSVG();
       loadScripts();
       loadAgents();
@@ -230,6 +291,8 @@
       }
       setupDragAndDrop();
       setupZoomControls();
+      // Setup name display click handler
+      document.getElementById('orch-name-display').addEventListener('click', enterNameEditMode);
     });
     
     function initializeSVG() {
@@ -992,6 +1055,16 @@
             });
           }
           
+          // Load name and description
+          if (orch.name) {
+            orchestrationName = orch.name;
+            document.getElementById('orch-name-text').textContent = orchestrationName;
+          }
+          if (orch.description) {
+            orchestrationDescription = orch.description;
+          }
+          updateDescriptionDisplay();
+          
           // Re-render all nodes to attach event handlers and connections
           renderAllNodes();
           updateStats();
@@ -1005,6 +1078,23 @@
     }
     
     function saveOrchestration() {
+      // If we don't have a name yet, show the naming modal
+      if (!orchestrationName.trim()) {
+        pendingSave = true;
+        document.getElementById('naming-modal-name').value = '';
+        document.getElementById('naming-modal-desc').value = '';
+        document.getElementById('naming-helper-text').innerHTML = '';
+        document.getElementById('naming-modal-name').classList.remove('invalid');
+        var modal = M.Modal.getInstance(document.getElementById('orchestration-naming-modal'));
+        modal.open();
+        return;
+      }
+      
+      // Proceed with save
+      performSave();
+    }
+    
+    function performSave() {
       const nodeArray = Object.values(nodes).map(n => ({
         id: n.id,
         label: n.label,
@@ -1026,8 +1116,8 @@
       
       const orchestration = {
         jobId: orchestrationId || 'new_' + Date.now(),
-        name: 'Orchestration',
-        description: '',
+        name: orchestrationName,
+        description: orchestrationDescription,
         nodes: nodeArray,
         edges: edgeArray
       };
@@ -1049,6 +1139,113 @@
           alert('Error saving orchestration: ' + err.statusText);
         }
       });
+    }
+    
+    function runOrchestration() {
+      // Check if orchestration has been saved
+      if (!orchestrationId) {
+        alert('Please save the orchestration before running it');
+        return;
+      }
+      
+      // Show confirmation and run
+      const confirmRun = confirm(`Execute "${orchestrationName}"?\n\nThe orchestration will start immediately.`);
+      if (!confirmRun) return;
+      
+      // Disable the button during execution
+      const runButton = event.target.closest('button');
+      runButton.disabled = true;
+      runButton.style.opacity = '0.6';
+      
+      $.ajax({
+        url: '/rest/orchestration/jobs/' + encodeURIComponent(orchestrationId) + '/execute',
+        type: 'POST',
+        contentType: 'application/json',
+        success: function(result) {
+          alert('Orchestration execution started!\n\nExecution ID: ' + (result.execution.executionId || 'unknown'));
+          // Optionally redirect to monitor page
+          setTimeout(() => {
+            window.location.href = '/orchestration/monitor.html?jobId=' + encodeURIComponent(orchestrationId);
+          }, 1500);
+        },
+        error: function(err) {
+          alert('Error executing orchestration: ' + (err.responseJSON ? err.responseJSON.error : err.statusText));
+          runButton.disabled = false;
+          runButton.style.opacity = '1';
+        }
+      });
+    }
+    
+    function confirmOrchestrationName() {
+      const nameInput = document.getElementById('naming-modal-name');
+      const name = nameInput.value.trim();
+      const desc = document.getElementById('naming-modal-desc').value.trim();
+      
+      if (!name) {
+        document.getElementById('naming-helper-text').innerHTML = 'Please provide a name for the orchestration';
+        nameInput.classList.add('invalid');
+        return;
+      }
+      
+      orchestrationName = name;
+      orchestrationDescription = desc;
+      
+      // Update header display
+      document.getElementById('orch-name-text').textContent = orchestrationName;
+      updateDescriptionDisplay();
+      
+      // Close modal
+      var modal = M.Modal.getInstance(document.getElementById('orchestration-naming-modal'));
+      modal.close();
+      
+      // If this was triggered by a save action, proceed with save
+      if (pendingSave) {
+        pendingSave = false;
+        performSave();
+      }
+    }
+    
+    function enterNameEditMode() {
+      document.getElementById('orch-name-display').parentElement.classList.add('name-edit-mode');
+      const nameInput = document.getElementById('orch-name-input');
+      const descInput = document.getElementById('orch-desc-input');
+      nameInput.value = orchestrationName;
+      descInput.value = orchestrationDescription;
+      nameInput.focus();
+      nameInput.select();
+    }
+    
+    function saveOrchestrationName() {
+      const nameInput = document.getElementById('orch-name-input');
+      const descInput = document.getElementById('orch-desc-input');
+      const name = nameInput.value.trim();
+      const desc = descInput.value.trim();
+      
+      if (!name) {
+        alert('Please provide a name for the orchestration');
+        return;
+      }
+      
+      orchestrationName = name;
+      orchestrationDescription = desc;
+      
+      // Update display
+      document.getElementById('orch-name-text').textContent = orchestrationName;
+      const descEl = document.getElementById('orch-desc-text');
+      descEl.textContent = orchestrationDescription || 'No Description';
+      descEl.setAttribute('title', orchestrationDescription || 'No Description');
+      
+      document.getElementById('orch-name-display').parentElement.classList.remove('name-edit-mode');
+    }
+    
+    function cancelNameEdit() {
+      document.getElementById('orch-name-display').parentElement.classList.remove('name-edit-mode');
+    }
+    
+    function updateDescriptionDisplay() {
+      const descEl = document.getElementById('orch-desc-text');
+      descEl.textContent = orchestrationDescription || 'No Description';
+      descEl.setAttribute('title', orchestrationDescription || 'No Description');
     }
     
     function updateStats() {

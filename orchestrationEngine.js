@@ -349,8 +349,12 @@ async function executeJob(jobId) {
     logger.error(`Orchestration [${jobId}] execution failed: ${err.message}`);
     return executionLog;
   } finally {
-    // Clean up execution tracking to prevent memory leaks
-    delete activeOrchestrationExecutions[jobId];
+    // Clean up execution tracking - but delay for 30 seconds to allow pending messages to be processed
+    // Some agent messages may still be in the queue after orchestration completes
+    setTimeout(() => {
+      delete activeOrchestrationExecutions[jobId];
+      logger.debug(`Cleared execution tracking for orchestration [${jobId}]`);
+    }, 30000);
   }
 }
 

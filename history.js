@@ -285,12 +285,29 @@ function getTodaysRun(){
 /**
  * Group orchestration node executions under their parent orchestration job
  * Returns a mixed array of regular history items and grouped orchestration items
+ * Fetches orchestration names from the database for display
  */
-function getItemsGroupedByOrchestration() {
+async function getItemsGroupedByOrchestration() {
     const items = getItemsUsingTZ();
     const grouped = [];
     const orchestrationMap = new Map(); // Map of "${jobId}#${executionId}" -> {parent, nodes}
     const regularItems = [];
+
+    // Fetch all orchestrations to get their names and descriptions
+    let orchestrationNames = {};
+    let orchestrationDescriptions = {};
+    try {
+        const allOrchestrations = await db.getData('ORCHESTRATION_JOBS');
+        if (allOrchestrations) {
+            for (const [jobId, jobData] of Object.entries(allOrchestrations)) {
+                orchestrationNames[jobId] = jobData.name || `Orchestration [${jobId}]`;
+                orchestrationDescriptions[jobId] = jobData.description || '';
+            }
+        }
+    } catch (err) {
+        logger.debug('Unable to fetch orchestration names: ' + err.message);
+        // Continue without names if database fetch fails
+    }
 
     // Separate orchestration nodes from regular items
     for (const item of items) {
@@ -306,9 +323,14 @@ function getItemsGroupedByOrchestration() {
             const mapKey = `${jobId}#${executionId}`;
             
             if (!orchestrationMap.has(mapKey)) {
+                // Get the orchestration display name and description
+                const displayName = orchestrationNames[jobId] || `Orchestration [${jobId}]`;
+                const displayDesc = orchestrationDescriptions[jobId] || '';
+                
                 orchestrationMap.set(mapKey, {
                     parent: {
-                        jobName: `Orchestration [${jobId}]`,
+                        jobName: displayName,
+                        description: displayDesc,
                         jobId: jobId,
                         executionId: item.executionId,
                         runDate: item.runDate,
@@ -360,4 +382,20 @@ function getItemsGroupedByOrchestration() {
     return allItems;
 }
 
-module.exports = { init, add, getItems, getItemsUsingTZ, getItem, searchItemWithName, createHistoryItem,getChartDataSet,getAverageRuntime, getLastRun,getSuccessPercentage, getTodaysRun, getItemsGroupedByOrchestration };
+/**
+ * Clear all history items from the database
+ * @returns {Promise<void>}
+ */
+async function clearHistory() {
+    try {
+        logger.info("Clearing all history items");
+        historyItems = [];
+        await db.putData(DBKEY, historyItems);
+        logger.info("History cleared successfully");
+    } catch (err) {
+        logger.error("Error clearing history: " + err.message);
+        throw err;
+    }
+}
+
+module.exports = { init, add, getItems, getItemsUsingTZ, getItem, searchItemWithName, createHistoryItem,getChartDataSet,getAverageRuntime, getLastRun,getSuccessPercentage, getTodaysRun, getItemsGroupedByOrchestration, clearHistory };
