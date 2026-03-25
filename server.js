@@ -1388,7 +1388,7 @@ app.get('/scriptEditor.html',User.isAuthenticated, (req, res) => {
   });
 });
 
-app.get('/scheduler.html',User.isAuthenticated, (req, res) => {
+app.get('/scheduler.html',User.isAuthenticated, async (req, res) => {
   logger.info("Scheduler.html");
   var index=req.query.index;
   var copyIndex=req.query.copyIndex;
@@ -1417,7 +1417,12 @@ app.get('/scheduler.html',User.isAuthenticated, (req, res) => {
   refreshScripts();
 
   //Get the schedule
-  
+  let orchestrations = {};
+  try {
+    orchestrations = await db.getData('ORCHESTRATION_JOBS') || {};
+  } catch (err) {
+    logger.debug('Unable to fetch orchestrations for scheduler:', err.message);
+  }
 
   res.render('scheduler',{
     scripts: scripts,
@@ -1432,7 +1437,8 @@ app.get('/scheduler.html',User.isAuthenticated, (req, res) => {
     day:day,
     time:time,
     icons:serverConfig.job_icons,
-    internal: internal
+    internal: internal,
+    orchestrations: orchestrations
   });
 });
 
@@ -1523,12 +1529,25 @@ app.get('/scheduleInfo.html',User.isAuthenticated, async(req, res) => {
 
 app.post('/scheduler.html', validateCsrf, User.isAuthenticated, (req, res) => {
   
-  let { jobName, colour,  description, scheduleType, scheduleTime,dayOfWeek,
-    dayInMonth,agentselect, agentcommand,commandparams,index,redir,icon } = req.body;
+  let { jobName, colour, description, scheduleType, scheduleTime, dayOfWeek,
+    dayInMonth, agentselect, agentcommand, commandparams, index, redir, icon, scheduleMode, orchestrationId } = req.body;
     jobName = sanitizeHtml(jobName);
     colour = sanitizeHtml(colour);
-    scheduler.upsertSchedule(index, jobName, colour,  description, scheduleType, scheduleTime,dayOfWeek,
-      dayInMonth,agentselect, agentcommand,commandparams,icon); 
+    
+    // Validate based on schedule mode
+    if (scheduleMode === 'orchestration') {
+      if (!orchestrationId || orchestrationId.length === 0) {
+        return res.status(400).send('Error: Orchestration ID is required for orchestration schedules');
+      }
+    } else {
+      // Classic mode validation
+      if (!agentselect || agentselect.length === 0) {
+        return res.status(400).send('Error: Agent is required for classic schedules');
+      }
+    }
+    
+    scheduler.upsertSchedule(index, jobName, colour, description, scheduleType, scheduleTime, dayOfWeek,
+      dayInMonth, agentselect, agentcommand, commandparams, icon, scheduleMode, orchestrationId); 
 
   if(redir===undefined || redir === null || redir.length<=0)redir="/scheduleList.htm";
   res.redirect(redir);
@@ -1602,8 +1621,8 @@ app.get('/runSchedule.html',User.isAuthenticated, asyncHandler(async (req, res) 
     schedule = scheduler.getSchedule(jobname);
   }
   
-  // Check if agent is online before attempting to run
-  if (schedule) {
+  // Check if agent is online before attempting to run (only for classic mode)
+  if (schedule && schedule.scheduleMode !== 'orchestration') {
     const agent = agents.getAgent(schedule.agent);
     
     if (agent) {

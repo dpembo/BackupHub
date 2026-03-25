@@ -173,16 +173,33 @@
           
           <div id="prop-condition" style="display: none;">
             <div class="properties-section">
-              <label for="prop-condition-type">Condition Type</label>
+              <label for="prop-condition-type">Test Type</label>
               <select id="prop-condition-type">
                 <option value="return_code">Return Code</option>
                 <option value="output_contains">Output Contains</option>
-                <option value="file_exists">File Exists</option>
+                <option value="regex_match">Regex Match</option>
+                <option value="execution_time">Execution Time (seconds)</option>
               </select>
             </div>
             <div class="properties-section">
+              <label for="prop-condition-operator">Operator</label>
+              <select id="prop-condition-operator">
+                <option value="==">== (equals)</option>
+                <option value="!=">!= (not equals)</option>
+                <option value="&gt;">&gt; (greater than)</option>
+                <option value="!&gt;">!&gt; (not greater than)</option>
+                <option value="&gt;=">&gt;= (greater or equal)</option>
+                <option value="!&gt;=">!&gt;= (not greater or equal)</option>
+                <option value="&lt;">&lt; (less than)</option>
+                <option value="!&lt;">!&lt; (not less than)</option>
+                <option value="&lt;=">&lt;= (less or equal)</option>
+                <option value="!&lt;=">!&lt;= (not less or equal)</option>
+              </select>
+              <small style="color: #999; margin-top: 5px; display: block;">For Output Contains, only equals/not equals are used</small>
+            </div>
+            <div class="properties-section">
               <label for="prop-condition-value">Value</label>
-              <input type="text" id="prop-condition-value" placeholder="Enter value...">
+              <input type="text" id="prop-condition-value" placeholder="Enter value..." title="For regex, enter a valid regex pattern. For numeric, enter a number.">
             </div>
           </div>
           
@@ -911,10 +928,14 @@
         };
       } else if (node.type === 'condition') {
         document.getElementById('prop-condition-type').value = node.data.conditionType || 'return_code';
+        document.getElementById('prop-condition-operator').value = node.data.operator || '==';
         document.getElementById('prop-condition-value').value = node.data.conditionValue || '';
         
         document.getElementById('prop-condition-type').onchange = function() {
           node.data.conditionType = this.value;
+        };
+        document.getElementById('prop-condition-operator').onchange = function() {
+          node.data.operator = this.value;
         };
         document.getElementById('prop-condition-value').onchange = function() {
           node.data.conditionValue = this.value;

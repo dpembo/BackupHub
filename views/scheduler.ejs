@@ -355,44 +355,84 @@ function noValue(inValue){
             </div>
           </div>
 
+          <!-- Schedule Mode Selection -->
           <div class="row">
-            <div class="input-field col s12">
-              <select name="agentselect" id="agentselect">
-                <option value="" disabled selected>Agent</option>
-                <% for (const [key, value] of Object.entries(agents)) { %>
-                  <option <%=isSelected(value.name,getSchedule().agent)%> value="<%=value.name%>"><%=value.name%></option>
-                <% } %>
-              </select>
-              <label for="agentselect">Assigned Agent*</label>
-              <span class="helper-text" data-error="Please select an option"></span>
+            <div class="col s12">
+              <h5>Schedule Type</h5>
+              <div style="margin-bottom: 20px;">
+                <label style="margin-right: 30px;">
+                  <input type="radio" id="modeClassic" name="scheduleMode" value="classic" <%=(getSchedule().scheduleMode === 'orchestration' ? '' : 'checked')%> onchange="switchScheduleMode('classic');">
+                  <span>Classic (Script + Agent)</span>
+                </label>
+                <label>
+                  <input type="radio" id="modeOrchestration" name="scheduleMode" value="orchestration" <%=(getSchedule().scheduleMode === 'orchestration' ? 'checked' : '')%> onchange="switchScheduleMode('orchestration');">
+                  <span>Orchestration</span>
+                </label>
+              </div>
             </div>
           </div>
 
-          <div class="row" id="commandRow">
-            <div class="input-field col s7">
-              <select name="agentcommand" onchange="newCommand(this)" id="agentcommand">
-                <option <%=noValue(getSchedule().command)%>value="" disabled selected>Command File</option>
-                <option <%=isSelected("",getSchedule().command)%>value="">Custom - Input custom Command</option>
-                <% for (i=0;i<scripts.length;i++) { %>
-                <option <%=isSelected(scripts[i],getSchedule().command)%> value="<%=scripts[i]%>"><%=scripts[i]%><%=scriptsDesc[i]%></option>
-                <% } %>
-              </select>
-              <label for="agentcommand">Backup Command Script*</label>
-              <span class="helper-text" data-error="Please select an option"></span>
+          <!-- CLASSIC MODE SECTION -->
+          <div id="classicModeSection">
+            <div class="row">
+              <div class="input-field col s12">
+                <select name="agentselect" id="agentselect">
+                  <option value="" disabled selected>Agent</option>
+                  <% for (const [key, value] of Object.entries(agents)) { %>
+                    <option <%=isSelected(value.name,getSchedule().agent)%> value="<%=value.name%>"><%=value.name%></option>
+                  <% } %>
+                </select>
+                <label for="agentselect">Assigned Agent*</label>
+                <span class="helper-text" data-error="Please select an option"></span>
+              </div>
             </div>
-            <div id="scriptInfoDiv" class="col s5">
-              <div><label style="position: relative;top: -3px;">Script Details</label></div>
-              <div class="scriptInfo" id="scriptInfoDetail"></div>
-            </div>
-          </div>
 
-          <div class="row" id="customRow" style="display:display;position: relative;top:-100px">
-            <div class="input-field col s7">
-              <textarea id="commandparams" name="commandparams" class="materialize-textarea"><%=getSchedule().commandParams%></textarea>
-              <label class="active" for="commandparams">Custom Command / Parameters</label>
-              <span class="helper-text" data-error="Please provide a custom command, or select a script above"></span>
+            <div class="row" id="commandRow">
+              <div class="input-field col s7">
+                <select name="agentcommand" onchange="newCommand(this)" id="agentcommand">
+                  <option <%=noValue(getSchedule().command)%>value="" disabled selected>Command File</option>
+                  <option <%=isSelected("",getSchedule().command)%>value="">Custom - Input custom Command</option>
+                  <% for (i=0;i<scripts.length;i++) { %>
+                  <option <%=isSelected(scripts[i],getSchedule().command)%> value="<%=scripts[i]%>"><%=scripts[i]%><%=scriptsDesc[i]%></option>
+                  <% } %>
+                </select>
+                <label for="agentcommand">Backup Command Script*</label>
+                <span class="helper-text" data-error="Please select an option"></span>
+              </div>
+              <div id="scriptInfoDiv" class="col s5">
+                <div><label style="position: relative;top: -3px;">Script Details</label></div>
+                <div class="scriptInfo" id="scriptInfoDetail"></div>
+              </div>
+            </div>
+
+            <div class="row" id="customRow" style="display:display;position: relative;top:-100px">
+              <div class="input-field col s7">
+                <textarea id="commandparams" name="commandparams" class="materialize-textarea"><%=getSchedule().commandParams%></textarea>
+                <label class="active" for="commandparams">Custom Command / Parameters</label>
+                <span class="helper-text" data-error="Please provide a custom command, or select a script above"></span>
+              </div>
             </div>
           </div>
+          <!-- END CLASSIC MODE SECTION -->
+
+          <!-- ORCHESTRATION MODE SECTION -->
+          <div id="orchestrationModeSection" style="display: none;">
+            <div class="row">
+              <div class="input-field col s12">
+                <select name="orchestrationId" id="orchestrationId">
+                  <option value="" disabled selected>Select Orchestration</option>
+                  <% if(typeof orchestrations !== 'undefined' && orchestrations) { %>
+                    <% Object.entries(orchestrations).forEach(([key, orch]) => { %>
+                      <option value="<%=key%>" <%=(getSchedule().orchestrationId === key ? 'selected' : '')%>><%=orch.name%></option>
+                    <% }); %>
+                  <% } %>
+                </select>
+                <label for="orchestrationId">Orchestration*</label>
+                <span class="helper-text" data-error="Please select an orchestration"></span>
+              </div>
+            </div>
+          </div>
+          <!-- END ORCHESTRATION MODE SECTION -->
 
           
           <div class="row" style="position:relative; top: -90px">
@@ -459,6 +499,10 @@ function noValue(inValue){
   document.addEventListener('DOMContentLoaded', function() {
     // Manually initialize text areas if needed
     setPickerColor("<%=savedcolor%>");
+    
+    // Initialize schedule mode display
+    const currentMode = document.querySelector('input[name="scheduleMode"]:checked').value;
+    switchScheduleMode(currentMode);
 });
 
   // Add icons to the select options
@@ -558,6 +602,25 @@ function noValue(inValue){
         //console.log('Select element not found');
     }
   });
+  
+  // Switch between Classic and Orchestration modes
+  function switchScheduleMode(mode) {
+    const classicSection = document.getElementById('classicModeSection');
+    const orchestrationSection = document.getElementById('orchestrationModeSection');
+    
+    if (mode === 'classic') {
+      classicSection.style.display = 'block';
+      orchestrationSection.style.display = 'none';
+      // Reinitialize Materialize selects for classic mode elements
+      M.FormSelect.init(document.querySelectorAll('#classicModeSection select'));
+    } else if (mode === 'orchestration') {
+      classicSection.style.display = 'none';
+      orchestrationSection.style.display = 'block';
+      // Reinitialize Materialize selects for orchestration mode elements
+      M.FormSelect.init(document.querySelectorAll('#orchestrationModeSection select'));
+    }
+  }
+  
   // Submit event handler
   document.getElementById('myForm').addEventListener('submit', function(event) {
 
@@ -571,34 +634,45 @@ function noValue(inValue){
 
     if(document.getElementById('colour').value=="")document.getElementById('colour').value="#000000";
     //alert("resetting");
-    resetValidation(document.getElementById('agentcommand'));
-    //alert("reset");
+    
     let isValid = true;
+    const scheduleMode = document.querySelector('input[name="scheduleMode"]:checked').value;
+    
+    // Common validations
     isValid = validateInput(document.getElementById('jobName')) ? isValid : false;
     isValid = validateInput(document.getElementById('description')) ? isValid : false; 
     isValid = validateInput(document.getElementById('icon_select')) ? isValid : false;
     isValid = validateInput(document.getElementById('scheduleType')) ? isValid : false;
-    isValid = validateInput(document.getElementById('agentselect')) ? isValid : false;
-    //isValid = validateInput(document.getElementById('scheduleTime')) ? isValid : false;
-
-
-   
-    if(document.getElementById('agentcommand').selectedIndex==0){
-      //alert("nothing selected");
-      isValid = validateInput(document.getElementById('agentcommand')) ? isValid : false;
-    }
-    else{
-      //alert("selected so resetting");
+    
+    if (scheduleMode === 'classic') {
+      // Classic mode validations
       resetValidation(document.getElementById('agentcommand'));
-    }
+      isValid = validateInput(document.getElementById('agentselect')) ? isValid : false;
+      
+      if(document.getElementById('agentcommand').selectedIndex==0){
+        //alert("nothing selected");
+        isValid = validateInput(document.getElementById('agentcommand')) ? isValid : false;
+      }
+      else{
+        //alert("selected so resetting");
+        resetValidation(document.getElementById('agentcommand'));
+      }
 
-    if(document.getElementById('agentcommand').selectedIndex==1){
-      isValid = validateInput(document.getElementById('commandparams')) ? isValid : false;
-    }
-    else {
+      if(document.getElementById('agentcommand').selectedIndex==1){
+        isValid = validateInput(document.getElementById('commandparams')) ? isValid : false;
+      }
+      else {
+        resetValidation(document.getElementById('commandparams'));
+      }
+    } else if (scheduleMode === 'orchestration') {
+      // Orchestration mode validations
+      isValid = validateInput(document.getElementById('orchestrationId')) ? isValid : false;
+      
+      // Clear/reset classic mode validations
+      resetValidation(document.getElementById('agentselect'));
+      resetValidation(document.getElementById('agentcommand'));
       resetValidation(document.getElementById('commandparams'));
     }
-
 
     resetValidation(document.getElementById('scheduleTime'));
     resetValidation(document.getElementById('dayOfWeek'));

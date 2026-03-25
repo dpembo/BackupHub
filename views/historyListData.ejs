@@ -169,7 +169,25 @@ function displaySecs(secs) {
                 <span style="font-size: 0.85em; color: var(--text-muted); display: block; margin-top: 3px;"><%=historyList[i].children ? historyList[i].children.length : 0%> nodes executed</span>
               </td>
               <td>
-                <span title="Orchestration Execution" class="material-icons">hub</span>
+                <% var runType="schedule"; var runDesc="Scheduled Execution";%>
+                <% 
+                if(historyList[i].manual!==undefined && historyList[i].manual==true){
+                  runType="play_arrow";runDesc="Manual Execution";
+                }
+                if(historyList[i].manual!==undefined && historyList[i].manual=="manual"){
+                  runType="play_arrow";runDesc="Manual Execution";
+                }
+                if(historyList[i].manual!==undefined && historyList[i].manual=="update"){
+                  runType="system_update_alt";runDesc="Agent Update";
+                }
+                if(historyList[i].manual!==undefined && historyList[i].manual=="threshold-cpu"){
+                  runType="data_thresholding";runDesc="CPU Threshold Exceeded";
+                }
+                if(historyList[i].manual!==undefined && historyList[i].manual=="threshold-disk"){
+                  runType="disc_full";runDesc="Mount Threshold Exceeded";
+                }
+                %>
+                <span title="<%=runDesc%>" class="material-icons"><%=runType%></span>
               </td>
               <% 
                   var dateNow = new Date().getTime();
@@ -214,7 +232,7 @@ function displaySecs(secs) {
                     <span style="font-size: 0.9em; color: var(--text-muted);">↳ </span><%=childNode.jobName%>
                   </td>
                   <td>
-                    <% var runType="schedule"; var runDesc="Node Execution";%>
+                    <% var runType="label_important"; var runDesc="Node Execution";%>
                     <span title="<%=runDesc%>" class="material-icons"><%=runType%></span>
                   </td>
                   <% 

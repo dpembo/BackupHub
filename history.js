@@ -352,6 +352,14 @@ async function getItemsGroupedByOrchestration() {
 
     // Merge and sort: newest first
     // Orchestration items should group by latest execution date
+    // Get orchestration executions to use finalStatus for parent status
+    let orchestrationExecutions = {};
+    try {
+      orchestrationExecutions = await db.getData('ORCHESTRATION_EXECUTIONS');
+    } catch (err) {
+      logger.debug('Unable to fetch orchestration executions for grouping: ' + err.message);
+    }
+
     const orchestrationItems = Array.from(orchestrationMap.values()).map(data => {
         const nodeItems = Array.from(data.nodeMap.values());
         data.parent.children = nodeItems;
@@ -363,9 +371,31 @@ async function getItemsGroupedByOrchestration() {
             );
             data.parent.runDate = latestNode.runDate;
             
-            // Update parent status based on children
-            const hasFailure = nodeItems.some(n => n.returnCode !== 0);
-            data.parent.returnCode = hasFailure ? 1 : 0;
+            // Use finalStatus from ORCHESTRATION_EXECUTIONS if available
+            const jobId = data.parent.jobId;
+            const executionId = data.parent.executionId;
+            let returnCode = 0; // default to success
+            let manual = false; // default to scheduled
+            
+            if (orchestrationExecutions[jobId]) {
+              // Find the execution with matching executionId
+              const execution = orchestrationExecutions[jobId].find(exec => exec.executionId === executionId);
+              if (execution && execution.finalStatus) {
+                // Use finalStatus: 0 for success, 1 for failure/error
+                returnCode = (execution.finalStatus === 'success') ? 0 : 1;
+                // Use manual flag from execution
+                manual = execution.manual || false;
+              } else {
+                // Fallback: calculate from children if execution not found
+                returnCode = nodeItems.some(n => n.returnCode !== 0) ? 1 : 0;
+              }
+            } else {
+              // Fallback: calculate from children if executions not available
+              returnCode = nodeItems.some(n => n.returnCode !== 0) ? 1 : 0;
+            }
+            
+            data.parent.returnCode = returnCode;
+            data.parent.manual = manual;
         }
         
         return data.parent;

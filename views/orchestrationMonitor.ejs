@@ -884,16 +884,27 @@
         logHtml = `<textarea readonly rows="10" style="font-family: 'Courier New', monospace; width: 100%; height: auto;">${escapeHtml(nodeOutput.stdout)}</textarea>`;
       }
 
-      // Format start time
+      // Format start time and duration from nodeMetrics
       let startTimeHtml = 'N/A';
-      if (node.startTime) {
+      let timeTakenHtml = 'N/A';
+      
+      const nodeMetric = executionData.execution?.nodeMetrics?.[nodeId];
+      if (nodeMetric && nodeMetric.startTime) {
+        const startDate = new Date(nodeMetric.startTime);
+        startTimeHtml = startDate.toLocaleString();
+        
+        // Calculate duration in ms and format
+        if (nodeMetric.duration !== undefined) {
+          timeTakenHtml = formatDuration(nodeMetric.duration);
+        }
+      }
+
+      // Fallback to old properties if nodeMetrics not available
+      if (startTimeHtml === 'N/A' && node.startTime) {
         const startDate = new Date(node.startTime);
         startTimeHtml = startDate.toLocaleString();
       }
-
-      // Calculate time taken
-      let timeTakenHtml = 'N/A';
-      if (node.timeTaken) {
+      if (timeTakenHtml === 'N/A' && node.timeTaken) {
         timeTakenHtml = formatDuration(node.timeTaken);
       }
 
@@ -907,6 +918,48 @@
 
       // Agent info
       const agentHtml = node.agent || 'N/A';
+
+      // Condition evaluation details (for condition nodes)
+      let conditionHtml = '';
+      if (node.type === 'condition') {
+        const conditionEval = executionData.conditionEvaluations?.[nodeId];
+        if (conditionEval) {
+          const resultSymbol = conditionEval.result ? '✓' : '✕';
+          const resultColor = conditionEval.result ? '#2e7d32' : '#d32f2f';
+          const resultText = conditionEval.result ? 'True' : 'False';
+          
+          // Format the condition expression for display
+          // Operator might contain ! prefix for negation, format it nicely
+          let operatorDisplay = escapeHtml(conditionEval.operator);
+          const operatorLabels = {
+            '==': 'equals',
+            '!=': 'not equals',
+            '>': 'greater than',
+            '!>': 'not greater than',
+            '>=': 'greater than or equal',
+            '!>=': 'not greater than or equal',
+            '<': 'less than',
+            '!<': 'not less than',
+            '<=': 'less than or equal',
+            '!<=': 'not less than or equal'
+          };
+          operatorDisplay = operatorLabels[conditionEval.operator] || escapeHtml(conditionEval.operator);
+          
+          const conditionDisplay = `${escapeHtml(conditionEval.type)} ${operatorDisplay} ${escapeHtml(String(conditionEval.value))}`;
+          
+          conditionHtml = `<div class="detail-item">
+            <div class="detail-label">Condition Evaluation</div>
+            <div class="detail-value">${conditionDisplay}</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Result</div>
+            <div class="detail-value" style="display: flex; align-items: center; gap: 6px;">
+              <span style="font-size: 1.2em; color: ${resultColor};">${resultSymbol}</span>
+              <span>${resultText}</span>
+            </div>
+          </div>`;
+        }
+      }
 
       // Exit code
       let exitCodeHtml = '';
@@ -943,6 +996,7 @@
             <div class="detail-label">Node Type</div>
             <div class="detail-value">${escapeHtml(node.type)}</div>
           </div>
+          ${conditionHtml}
           <div class="detail-item">
             <div class="detail-label">Start Time</div>
             <div class="detail-value">${startTimeHtml}</div>
@@ -1022,22 +1076,27 @@
       selectedNode = null;
     }
 
-    function formatDuration(milliseconds) {
-      if (!milliseconds || milliseconds < 0) return 'N/A';
+    function formatDuration(seconds) {
+      if (!seconds || seconds < 0) return 'N/A';
       
-      const seconds = Math.floor(milliseconds / 1000);
-      const minutes = Math.floor(seconds / 60);
+      // Input is in seconds, may be decimal
+      const totalSeconds = Math.floor(seconds);
+      const minutes = Math.floor(totalSeconds / 60);
       const hours = Math.floor(minutes / 60);
       const days = Math.floor(hours / 24);
+      const remainingSeconds = totalSeconds % 60;
+      const milliseconds = Math.round((seconds - totalSeconds) * 1000);
       
       if (days > 0) {
-        return `${days}d ${hours % 24}h ${minutes % 60}m ${seconds % 60}s`;
+        return `${days}d ${hours % 24}h ${minutes % 60}m ${remainingSeconds}s`;
       } else if (hours > 0) {
-        return `${hours}h ${minutes % 60}m ${seconds % 60}s`;
+        return `${hours}h ${minutes % 60}m ${remainingSeconds}s`;
       } else if (minutes > 0) {
-        return `${minutes}m ${seconds % 60}s`;
+        return `${minutes}m ${remainingSeconds}s`;
+      } else if (totalSeconds > 0) {
+        return milliseconds > 0 ? `${seconds.toFixed(3)}s` : `${totalSeconds}s`;
       } else {
-        return `${seconds}s`;
+        return milliseconds > 0 ? `${milliseconds}ms` : '0s';
       }
     }
 

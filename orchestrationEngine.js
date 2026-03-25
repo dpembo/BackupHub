@@ -67,11 +67,69 @@ function signalScriptCompletion(jobName, result) {
 }
 
 /**
+ * Evaluate a numeric condition with various operators
+ * @param {number} actual - The actual value to test
+ * @param {string} operator - The operator: '==', '!=', '>', '!>', '>=', '!>=', '<', '!<', '<=', '!<='
+ * @param {number} expected - The expected/threshold value
+ * @returns {boolean} Result of the comparison
+ */
+function evaluateNumericCondition(actual, operator, expected) {
+  const actualNum = parseFloat(actual);
+  const expectedNum = parseFloat(expected);
+  
+  // Check if operator is negated (starts with !)
+  let isNegated = false;
+  let baseOperator = operator;
+  
+  if (operator.startsWith('!') && operator !== '!=') {
+    isNegated = true;
+    baseOperator = operator.substring(1); // Remove the ! prefix
+  }
+  
+  let result = false;
+
+  switch (baseOperator) {
+    case '==':
+      result = actualNum === expectedNum;
+      break;
+    case '!=':
+      result = actualNum !== expectedNum;
+      break;
+    case '=': // Alternative for equals
+      result = actualNum === expectedNum;
+      break;
+    case '>':
+      result = actualNum > expectedNum;
+      break;
+    case '>=':
+      result = actualNum >= expectedNum;
+      break;
+    case '<':
+      result = actualNum < expectedNum;
+      break;
+    case '<=':
+      result = actualNum <= expectedNum;
+      break;
+    default:
+      logger.warn(`Unknown operator: ${operator}, defaulting to ==`);
+      result = actualNum === expectedNum;
+  }
+  
+  // Apply negation if operator was prefixed with !
+  if (isNegated) {
+    result = !result;
+  }
+  
+  return result;
+}
+
+
+/**
  * Execute an orchestration job
  * @param {string} jobId - The orchestration job ID
  * @returns {Promise<Object>} Execution result with logs
  */
-async function executeJob(jobId) {
+async function executeJob(jobId, isManual = false) {
   const crypto = require('crypto');
   const executionId = crypto.randomBytes(8).toString('hex'); // Unique ID for this execution
   const startTime = new Date();
@@ -86,8 +144,10 @@ async function executeJob(jobId) {
     visitedNodes: [],
     scriptOutputs: {},
     conditionEvaluations: {},
+    nodeMetrics: {},  // NEW: Unified timing for all node types
     errors: [],
-    finalStatus: null
+    finalStatus: null,
+    manual: isManual  // Track whether this was a manual execution
   };
 
   try {
@@ -151,6 +211,8 @@ async function executeJob(jobId) {
 
       logger.info(`Executing node [${currentNodeId}] type: ${currentNode.type}`);
 
+      const nodeStartTime = new Date().toISOString();
+
       // Handle different node types
       if (currentNode.type === 'start') {
         // Start node: just move to next
@@ -160,6 +222,13 @@ async function executeJob(jobId) {
         if (!nextEdge) {
           throw new Error(`Start node [${currentNodeId}] has no outgoing connection`);
         }
+
+        const nodeEndTime = new Date().toISOString();
+        executionLog.nodeMetrics[currentNodeId] = {
+          startTime: nodeStartTime,
+          endTime: nodeEndTime,
+          duration: (new Date(nodeEndTime).getTime() - new Date(nodeStartTime).getTime()) / 1000
+        };
 
         currentNodeId = nextEdge.to;
       } else if (currentNode.type === 'execute') {
@@ -217,12 +286,14 @@ async function executeJob(jobId) {
             parameters,
             jobName,
             undefined,
-            false
+            isManual
           );
 
           // Wait for agent response (with 5-minute timeout)
           logger.debug(`[ORCHESTRATION] About to wait for script completion on node [${currentNodeId}]`);
+          const scriptStartTime = new Date().toISOString();
           const result = await waitForScriptCompletion(jobName, 300000);
+          const scriptEndTime = new Date().toISOString();
           logger.debug(`[ORCHESTRATION] Script completion received: exitCode=${result.exitCode}`);
 
           // Update execution log with actual results
@@ -233,7 +304,9 @@ async function executeJob(jobId) {
             status: 'completed',
             exitCode: result.exitCode || 0,
             stdout: result.stdout || '',
-            stderr: result.stderr || ''
+            stderr: result.stderr || '',
+            startTime: scriptStartTime,
+            endTime: scriptEndTime
           };
 
           logger.info(`Script execution completed on agent [${agentId}] with exit code [${result.exitCode}]`);
@@ -246,6 +319,13 @@ async function executeJob(jobId) {
             throw new Error(`Execute node [${currentNodeId}] has no outgoing connection`);
           }
 
+          const nodeEndTime = new Date().toISOString();
+          executionLog.nodeMetrics[currentNodeId] = {
+            startTime: nodeStartTime,
+            endTime: nodeEndTime,
+            duration: (new Date(nodeEndTime).getTime() - new Date(nodeStartTime).getTime()) / 1000
+          };
+
           currentNodeId = nextEdge.to;
         } catch (err) {
           executionLog.errors.push({
@@ -257,19 +337,20 @@ async function executeJob(jobId) {
       } else if (currentNode.type === 'condition') {
         // Condition node: evaluate and route
         const conditionType = currentNode.data.conditionType || 'return_code';
+        const operator = currentNode.data.operator || '==';
         const conditionValue = currentNode.data.conditionValue || '0';
         let result = false;
 
         try {
           if (conditionType === 'return_code') {
-            // Check if the last script's exit code matches
+            // Get last executed script node
             const lastScriptNode = [...executionLog.visitedNodes]
               .reverse()
               .find(id => nodeMap[id].type === 'execute' && executionLog.scriptOutputs[id]);
 
             if (lastScriptNode && executionLog.scriptOutputs[lastScriptNode]) {
-              const exitCode = executionLog.scriptOutputs[lastScriptNode].exitCode;
-              result = exitCode === parseInt(conditionValue);
+              const exitCode = executionLog.scriptOutputs[lastScriptNode].exitCode || 0;
+              result = evaluateNumericCondition(exitCode, operator, parseInt(conditionValue));
             }
           } else if (conditionType === 'output_contains') {
             // Check if last script output contains value
@@ -278,22 +359,63 @@ async function executeJob(jobId) {
               .find(id => nodeMap[id].type === 'execute' && executionLog.scriptOutputs[id]);
 
             if (lastScriptNode && executionLog.scriptOutputs[lastScriptNode]) {
-              const output = executionLog.scriptOutputs[lastScriptNode].stdout;
-              result = output.includes(conditionValue);
+              const output = executionLog.scriptOutputs[lastScriptNode].stdout || '';
+              const contains = output.includes(conditionValue);
+              
+              // Handle equality operators for output_contains
+              if (operator === '!=' || operator === '!=') {
+                result = !contains;
+              } else {
+                result = contains;
+              }
             }
-          } else if (conditionType === 'file_exists') {
-            // Check if file exists
-            const fs = require('fs');
-            result = fs.existsSync(conditionValue);
+          } else if (conditionType === 'regex_match') {
+            // Check if last script output matches regex
+            const lastScriptNode = [...executionLog.visitedNodes]
+              .reverse()
+              .find(id => nodeMap[id].type === 'execute' && executionLog.scriptOutputs[id]);
+
+            if (lastScriptNode && executionLog.scriptOutputs[lastScriptNode]) {
+              try {
+                const output = executionLog.scriptOutputs[lastScriptNode].stdout || '';
+                const regex = new RegExp(conditionValue);
+                const matches = output.match(regex);
+                // For regex, we consider it a match if pattern is found
+                result = matches !== null;
+                
+                // For regex, handle != and other operators
+                if (operator.includes('!=') || operator === '!=') {
+                  result = !result;
+                } else if (operator !== '==' && operator !== '!') {
+                  // If numeric operator specified, count matches
+                  const matchCount = matches ? matches.length : 0;
+                  result = evaluateNumericCondition(matchCount, operator, parseInt(conditionValue));
+                }
+              } catch (regexErr) {
+                throw new Error(`Invalid regex pattern: ${conditionValue} - ${regexErr.message}`);
+              }
+            }
+          } else if (conditionType === 'execution_time') {
+            // Check last script execution time (in seconds)
+            const lastScriptNode = [...executionLog.visitedNodes]
+              .reverse()
+              .find(id => nodeMap[id].type === 'execute' && executionLog.nodeMetrics[id]);
+
+            if (lastScriptNode && executionLog.nodeMetrics[lastScriptNode]) {
+              const nodeMetric = executionLog.nodeMetrics[lastScriptNode];
+              // duration is already in seconds
+              result = evaluateNumericCondition(nodeMetric.duration, operator, parseFloat(conditionValue));
+            }
           }
 
           executionLog.conditionEvaluations[currentNodeId] = {
             type: conditionType,
+            operator: operator,
             value: conditionValue,
             result
           };
 
-          logger.info(`Condition [${currentNodeId}] evaluated: ${result} (${conditionType})`);
+          logger.info(`Condition [${currentNodeId}] evaluated: ${result} (${conditionType} ${operator} ${conditionValue})`);
 
           // Route based on result
           const portName = result ? 'true' : 'false';
@@ -306,6 +428,13 @@ async function executeJob(jobId) {
             );
           }
 
+          const nodeEndTime = new Date().toISOString();
+          executionLog.nodeMetrics[currentNodeId] = {
+            startTime: nodeStartTime,
+            endTime: nodeEndTime,
+            duration: (new Date(nodeEndTime).getTime() - new Date(nodeStartTime).getTime()) / 1000
+          };
+
           currentNodeId = nextEdge.to;
         } catch (err) {
           executionLog.errors.push({
@@ -316,12 +445,24 @@ async function executeJob(jobId) {
         }
       } else if (currentNode.type === 'end-success') {
         // End success node
+        const nodeEndTime = new Date().toISOString();
+        executionLog.nodeMetrics[currentNodeId] = {
+          startTime: nodeStartTime,
+          endTime: nodeEndTime,
+          duration: (new Date(nodeEndTime).getTime() - new Date(nodeStartTime).getTime()) / 1000
+        };
         executionLog.finalStatus = 'success';
         executionLog.status = 'completed';
         logger.info(`Orchestration [${jobId}] completed successfully at node [${currentNodeId}]`);
         break;
       } else if (currentNode.type === 'end-failure') {
         // End failure node
+        const nodeEndTime = new Date().toISOString();
+        executionLog.nodeMetrics[currentNodeId] = {
+          startTime: nodeStartTime,
+          endTime: nodeEndTime,
+          duration: (new Date(nodeEndTime).getTime() - new Date(nodeStartTime).getTime()) / 1000
+        };
         executionLog.finalStatus = 'failure';
         executionLog.status = 'completed';
         logger.info(`Orchestration [${jobId}] completed with failure at node [${currentNodeId}]`);
@@ -333,6 +474,30 @@ async function executeJob(jobId) {
 
     if (iterations >= maxIterations) {
       throw new Error('Execution exceeded maximum iterations (infinite loop detected)');
+    }
+
+    // If finalStatus hasn't been set (no explicit end node was reached),
+    // determine it based on the last executed node
+    if (executionLog.finalStatus === null) {
+      // Find the last execute node that was executed
+      const lastExecuteNode = [...executionLog.visitedNodes]
+        .reverse()
+        .find(id => nodeMap[id].type === 'execute' && executionLog.scriptOutputs[id]);
+
+      if (lastExecuteNode && executionLog.scriptOutputs[lastExecuteNode]) {
+        const exitCode = executionLog.scriptOutputs[lastExecuteNode].exitCode || 0;
+        if (exitCode === 0) {
+          executionLog.finalStatus = 'success';
+          logger.info(`Orchestration [${jobId}] completed: final execute node succeeded (exit code 0)`);
+        } else {
+          executionLog.finalStatus = 'failure';
+          logger.info(`Orchestration [${jobId}] completed: final execute node failed (exit code ${exitCode})`);
+        }
+      } else {
+        // No execute nodes found, treat as success
+        executionLog.finalStatus = 'success';
+        logger.info(`Orchestration [${jobId}] completed: no execute nodes executed, defaulting to success`);
+      }
     }
 
     executionLog.endTime = new Date();
@@ -403,6 +568,9 @@ async function saveExecutionResult(executionLog) {
     }
 
     await db.putData('ORCHESTRATION_EXECUTIONS', executions);
+    
+    // Log the execution for reference
+    logger.info(`Saved orchestration execution [${jobId}] with status [${executionLog.finalStatus}]`);
   } catch (err) {
     logger.error(`Failed to save execution result: ${err.message}`);
   }
