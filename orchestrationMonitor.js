@@ -57,7 +57,8 @@ async function getExecutionDetails(jobId, executionIndex = 'latest') {
         status: execution.status,
         finalStatus: execution.finalStatus || 'unknown',
         duration: execution.endTime ? 
-          new Date(execution.endTime) - new Date(execution.startTime) : null
+          new Date(execution.endTime) - new Date(execution.startTime) : null,
+        nodeMetrics: execution.nodeMetrics || {}
       },
       nodes: formattedNodes,
       edges: formattedEdges,
@@ -102,7 +103,7 @@ async function getNodeOutput(jobId, nodeId, executionIndex = 'latest') {
       status: details.visitedNodes.includes(nodeId) ? 'executed' : 'not_executed',
       log: nodeOutput.stdout || '',
       stderr: nodeOutput.stderr || '',
-      exitCode: nodeOutput.exitCode || null,
+      exitCode: nodeOutput.exitCode ?? null,
       executedAt: nodeOutput.executedAt || null
     };
   } catch (err) {
@@ -152,7 +153,7 @@ function formatNodeDetails(nodes, execution) {
     executed: execution.visitedNodes && execution.visitedNodes.includes(node.id),
     hasError: execution.errors && execution.errors.some(e => e.node === node.id),
     errorMessage: execution.errors && execution.errors.find(e => e.node === node.id)?.message || null,
-    exitCode: execution.scriptOutputs && execution.scriptOutputs[node.id]?.exitCode || null
+    exitCode: execution.scriptOutputs ? (execution.scriptOutputs[node.id]?.exitCode ?? null) : null
   }));
 }
 
@@ -285,5 +286,8 @@ async function listJobsWithStatus(timezone) {
 module.exports = {
   getExecutionDetails,
   getNodeOutput,
-  listJobsWithStatus
+  listJobsWithStatus,
+  getJobDefinitionVersion,
+  formatNodeDetails,
+  formatEdgeDetails
 };

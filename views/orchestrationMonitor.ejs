@@ -17,10 +17,6 @@
       position: relative;
     }
 
-    .orchestration-container.details-open {
-      /* Details panel slides in absolutely */
-    }
-
     @media (max-width: 1200px) {
       .orchestration-container {
         grid-template-columns: 1fr;
@@ -225,6 +221,11 @@
     .status-failed {
       background: #ffcdd2;
       color: #b71c1c;
+    }
+
+    .status-in-progress {
+      background: #ffe0b2;
+      color: #e65100;
     }
 
     .status-not-executed {
@@ -444,6 +445,128 @@
       color: #666;
       font-weight: 500;
     }
+
+    /* In-progress node highlighting with spinning border */
+    .node-in-progress rect {
+      stroke: #ff9800 !important;
+      stroke-width: 3 !important;
+      stroke-dasharray: 20, 8;
+      animation: nodeSpinning 2s linear infinite, nodeBlinking 1s ease-in-out infinite;
+    }
+
+    @keyframes nodeSpinning {
+      0% {
+        stroke-dashoffset: 0;
+      }
+      100% {
+        stroke-dashoffset: 28;  /* 20 + 8 = total dash+gap */
+      }
+    }
+
+    @keyframes nodeBlinking {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+
+    .node-completed rect {
+      stroke: #4caf50 !important;
+      stroke-width: 2 !important;
+      animation: none !important;
+      opacity: 1 !important;
+    }
+
+    .node-failed rect {
+      stroke: #f44336 !important;
+      stroke-width: 2 !important;
+      animation: none !important;
+      opacity: 1 !important;
+    }
+
+    /* Progress bar styling */
+    .execution-progress-section {
+      background: var(--surface-color);
+      border-radius: 8px;
+      padding: 15px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      box-sizing: border-box;
+      max-height: 200px;
+      opacity: 1;
+      transition: max-height 0.3s ease, opacity 0.3s ease, margin-bottom 0.3s ease;
+      overflow: hidden;
+    }
+
+    .execution-progress-section.hidden {
+      max-height: 0 !important;
+      opacity: 0 !important;
+      margin-bottom: 0 !important;
+      padding: 0 !important;
+      visibility: visible !important;
+    }
+
+    .progress-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      font-weight: 500;
+      color: var(--text-primary);
+      font-size: 0.95em;
+    }
+
+    .progress-bar-container {
+      width: 100%;
+      height: 24px;
+      background: var(--border-color);
+      border-radius: 4px;
+      overflow: hidden;
+      margin-bottom: 8px;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #2196f3, #21cbf3);
+      transition: width 0.3s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 30px;
+    }
+
+    .progress-bar-text {
+      color: white;
+      font-size: 0.75em;
+      font-weight: 500;
+      padding: 0 6px;
+    }
+
+    .progress-stats {
+      display: flex;
+      justify-content: space-around;
+      font-size: 0.85em;
+      color: var(--text-muted);
+    }
+
+    .progress-stat {
+      text-align: center;
+    }
+
+    .progress-stat-label {
+      font-weight: 500;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      font-size: 0.7em;
+      letter-spacing: 0.5px;
+    }
+
+    .progress-stat-value {
+      color: var(--text-primary);
+      font-weight: 500;
+      margin-top: 2px;
+    }
   </style>
 </head>
 
@@ -455,6 +578,35 @@
       <h5 class="header orange-text">
         Orchestration Monitor: <span id="jobTitle" style="color: var(--primary-color); font-size: 0.8em;">Loading...</span>
       </h5>
+    </div>
+  </div>
+
+  <div class="container">
+    <!-- Progress Bar Section -->
+    <div class="execution-progress-section hidden" id="progressSection">
+      <div class="progress-header">
+        <span>Execution Progress</span>
+        <span id="progressStatus" style="font-size: 0.9em; color: var(--text-muted);">Starting...</span>
+      </div>
+      <div class="progress-bar-container">
+        <div class="progress-bar-fill" id="progressBar" style="width: 0%;">
+          <span class="progress-bar-text" id="progressBarText">0%</span>
+        </div>
+      </div>
+      <div class="progress-stats">
+        <div class="progress-stat">
+          <div class="progress-stat-label">Runtime</div>
+          <div class="progress-stat-value" id="progressRuntime">0s</div>
+        </div>
+        <div class="progress-stat">
+          <div class="progress-stat-label">ETA</div>
+          <div class="progress-stat-value" id="progressEta">Calculating...</div>
+        </div>
+        <div class="progress-stat">
+          <div class="progress-stat-label">Remaining</div>
+          <div class="progress-stat-value" id="progressRemaining">--</div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -506,6 +658,7 @@
     // Mermaid setup - will use dynamic rendering
     let executionData = null;
     let selectedNode = null;
+    let progressUpdateIntervalId = null;
 
     // Get job ID and execution index from URL parameters
     const urlParams = new URLSearchParams(window.location.search);
@@ -516,7 +669,415 @@
     if (!jobId) {
       M.toast({ html: 'No orchestration job specified', classes: 'error' });
     } else {
+      // Set up websocket listeners FIRST before loading anything
+      // This ensures we don't miss events going forward
+      setupWebsocketListeners();
+      
+      // Then load execution details  
       loadExecutionDetails();
+      
+      // Variable to track the refresh interval
+      let statusRefreshInterval = null;
+      
+      // Periodically refresh execution status from server
+      // Stops automatically when execution completes
+      function startStatusRefresh() {
+        if (statusRefreshInterval) return; // Already running
+        
+        statusRefreshInterval = setInterval(async () => {
+          try {
+            let url = `/orchestration/execution/details?jobId=${encodeURIComponent(jobId)}&executionIndex=${encodeURIComponent(executionIndex)}`;
+            if (executionId) {
+              url += `&executionId=${encodeURIComponent(executionId)}`;
+            }
+            const response = await fetch(url);
+            if (!response.ok) return;
+            const updatedData = await response.json();
+            
+            // Update execution status from server
+            if (updatedData && updatedData.execution) {
+              executionData.nodes = updatedData.nodes || executionData.nodes;
+              executionData.edges = updatedData.edges || executionData.edges;
+              executionData.visitedNodes = updatedData.visitedNodes || executionData.visitedNodes;
+              executionData.nodeScriptOutputs = updatedData.nodeScriptOutputs || executionData.nodeScriptOutputs;
+              executionData.conditionEvaluations = updatedData.conditionEvaluations || executionData.conditionEvaluations;
+              executionData.errors = updatedData.errors || executionData.errors;
+              executionData.execution = updatedData.execution;
+              executionData.isInProgress = updatedData.execution.status === 'running';
+              
+              // Check if execution is done
+              const isDone = updatedData.execution.status === 'completed' || 
+                           updatedData.execution.status === 'failed' || 
+                           (updatedData.execution.finalStatus && updatedData.execution.finalStatus !== 'unknown');
+
+              if (!selectedNode) {
+                renderOrchestrationInfo();
+              }
+              
+              if (isDone) {
+                clearInterval(statusRefreshInterval);
+                statusRefreshInterval = null;
+                updateProgressBar(); // Final update to hide progress bar
+              }
+            }
+          } catch (err) {
+            // Fail silently on refresh errors
+          }
+        }, 2000);
+      }
+      
+      // Start refresh when execution loads
+      window.addEventListener('executionLoaded', startStatusRefresh);
+    }
+
+    // Track in-progress nodes for real-time updates
+    const inProgressNodes = new Set();
+
+    // Helper function to format seconds into readable time string
+    function displaySecs(seconds) {
+      if (!seconds || seconds < 0) return '0s';
+      const totalSeconds = Math.floor(seconds);
+      const hours = Math.floor(totalSeconds / 3600);
+      const minutes = Math.floor((totalSeconds % 3600) / 60);
+      const secs = totalSeconds % 60;
+      
+      if (hours > 0) {
+        return `${hours}h ${minutes}m ${secs}s`;
+      } else if (minutes > 0) {
+        return `${minutes}m ${secs}s`;
+      } else {
+        return `${secs}s`;
+      }
+    }
+
+    // Calculate and update progress bar
+    function updateProgressBar() {
+      if (!executionData || !executionData.execution) {
+        return;
+      }
+
+      const exec = executionData.execution;
+      
+      // Check if execution is still running
+      // It's done if status is 'completed' OR 'failed' OR it has a finalStatus OR it has an endTime
+      const isDone = exec.status === 'completed' || exec.status === 'failed' || (exec.finalStatus && exec.finalStatus !== 'unknown') || exec.endTime;
+      
+      if (isDone) {
+        stopProgressUpdateTimer();
+        const progressSection = document.getElementById('progressSection');
+        progressSection.classList.add('hidden');
+        const progressStatus = document.getElementById('progressStatus');
+        if (exec.finalStatus === 'success') {
+          progressStatus.textContent = 'Success';
+        } else if (exec.finalStatus === 'failure' || exec.finalStatus === 'error') {
+          progressStatus.textContent = 'Failed';
+        }
+        return;
+      }
+
+      // Show progress bar if it's running
+      const progressSection = document.getElementById('progressSection');
+      progressSection.classList.remove('hidden');
+
+      const startDate = new Date(exec.startTime);
+      const nowMs = new Date().getTime();
+      const startMs = startDate.getTime();
+      const elapsedMs = nowMs - startMs;
+      const elapsedSecs = elapsedMs / 1000;
+
+      // Update runtime
+      document.getElementById('progressRuntime').textContent = displaySecs(elapsedSecs);
+      document.getElementById('progressStatus').textContent = 'In Progress';
+
+      // Update progress bar with a gentle animation (0-70% while running)
+      const nodeCount = executionData.nodes ? executionData.nodes.length : 1;
+      const visitedCount = executionData.visitedNodes ? executionData.visitedNodes.length : 0;
+      const estimatedPercent = Math.min(70, (visitedCount / nodeCount) * 100);
+
+      const progressBar = document.getElementById('progressBar');
+      progressBar.style.width = estimatedPercent + '%';
+
+      // Update progress text
+      if (estimatedPercent > 0) {
+        document.getElementById('progressBarText').textContent = Math.round(estimatedPercent) + '%';
+      }
+    }
+
+    // Start updating progress bar every 1 second
+    function startProgressUpdateTimer() {
+      if (progressUpdateIntervalId !== null) return; // Already running
+      progressUpdateIntervalId = setInterval(() => {
+        updateProgressBar();
+      }, 1000);
+    }
+
+    // Stop progress update timer
+    function stopProgressUpdateTimer() {
+      if (progressUpdateIntervalId !== null) {
+        clearInterval(progressUpdateIntervalId);
+        progressUpdateIntervalId = null;
+      }
+    }
+
+    function setupWebsocketListeners() {
+      if (!socket) {
+        console.warn('Socket.io not available');
+        return;
+      }
+
+      socket.onAny((eventName, ...args) => {
+        // Real-time log streaming for orchestration nodes
+        const logPattern = `orchestrationNodeLog:${jobId}:${executionId}:`;
+        if (eventName.startsWith(logPattern)) {
+          const nodeId = eventName.slice(logPattern.length);
+          const { log } = args[0];
+          // Update cached scriptOutputs so future panel opens show current log
+          if (executionData) {
+            if (!executionData.nodeScriptOutputs[nodeId]) {
+              executionData.nodeScriptOutputs[nodeId] = { stdout: '' };
+            }
+            executionData.nodeScriptOutputs[nodeId].stdout = log;
+          }
+          // If this node's panel is currently open, update the log textarea live
+          if (selectedNode === nodeId) {
+            const logArea = document.querySelector('#detailsContent textarea');
+            if (logArea) {
+              const wasAtBottom = logArea.scrollTop + logArea.clientHeight >= logArea.scrollHeight - 5;
+              logArea.value = log;
+              if (wasAtBottom) logArea.scrollTop = logArea.scrollHeight;
+            }
+          }
+        }
+      });
+
+      // Listen for node start event
+      const nodeStartedEvent = `orchestrationNodeStarted:${jobId}:${executionId}`;
+      socket.on(nodeStartedEvent, (data) => {
+        const { nodeId, nodeType, nodeName } = data;
+        
+        // Mark node as in-progress
+        inProgressNodes.add(nodeId);
+        
+        // Clear any previous exit code and mark as executing
+        if (executionData) {
+          const nodeObj = executionData.nodes.find(n => n.id === nodeId);
+          if (nodeObj) {
+            nodeObj.executed = true;
+            nodeObj.exitCode = undefined;  // Clear exit code - node is now executing
+            nodeObj.hasError = false;
+          }
+          if (!executionData.visitedNodes.includes(nodeId)) {
+            executionData.visitedNodes.push(nodeId);
+          }
+        }
+        
+        updateNodeState(nodeId, 'in-progress');
+        if (selectedNode === nodeId) {
+          selectNode(nodeId);
+        }
+      });
+
+      // Listen for node completed event
+      const nodeCompletedEvent = `orchestrationNodeCompleted:${jobId}:${executionId}`;
+      socket.on(nodeCompletedEvent, (data) => {
+        const { nodeId, nodeType, status, exitCode } = data;
+        
+        // Remove from in-progress
+        inProgressNodes.delete(nodeId);
+        
+        // Update node status based on execution result
+        // NOTE: end-failure nodes emit status='failure' with no exitCode (exitCode===undefined)
+        // so we must check status first before falling back to exitCode
+        if (status === 'failure' || (exitCode !== undefined && exitCode !== null && exitCode !== 0)) {
+          updateNodeState(nodeId, 'completed-failure');
+        } else {
+          updateNodeState(nodeId, 'completed-success');
+        }
+        
+        // Update execution data with latest node info
+        if (executionData) {
+          const nodeObj = executionData.nodes.find(n => n.id === nodeId);
+          if (nodeObj) {
+            nodeObj.executed = true;
+            nodeObj.exitCode = exitCode;
+            nodeObj.hasError = status === 'failure' || (exitCode !== undefined && exitCode !== null && exitCode !== 0);
+          }
+          if (!executionData.nodeScriptOutputs[nodeId]) {
+            executionData.nodeScriptOutputs[nodeId] = {};
+          }
+          executionData.nodeScriptOutputs[nodeId].exitCode = exitCode;
+          // Update visited nodes tracking
+          if (!executionData.visitedNodes.includes(nodeId)) {
+            executionData.visitedNodes.push(nodeId);
+          }
+        }
+        
+        // If detail panel is open for this node, re-render it with updated status
+        if (selectedNode === nodeId) {
+          selectNode(nodeId);
+        } else if (!selectedNode) {
+          renderOrchestrationInfo();
+        }
+        
+        // Update progress bar with completed node count
+        updateProgressBar();
+      });
+    }
+
+    function updateNodeState(nodeId, state) {
+      const nodeElement = document.querySelector(`[data-node-id="${nodeId}"]`);
+      if (!nodeElement) {
+        console.warn(`[updateNodeState] Node element not found for ID: ${nodeId}`);
+        return;
+      }
+
+      const rect = nodeElement.querySelector('rect');
+      let iconElement = nodeElement.querySelector('.node-status-icon');
+      let iconText = '';
+      let iconColor = '#9e9e9e';
+
+      // Remove all state classes
+      nodeElement.classList.remove('node-in-progress', 'node-completed', 'node-failed');
+
+      // Apply appropriate class based on state
+      if (state === 'in-progress') {
+        nodeElement.classList.add('node-in-progress');
+        iconText = '◐';
+        iconColor = '#ff9800';
+      } else if (state === 'completed-failure') {
+        nodeElement.classList.add('node-failed');
+        iconText = '❌';
+        iconColor = '#f44336';
+      } else if (state.startsWith('completed')) {
+        nodeElement.classList.add('node-completed');
+        iconText = '✅';
+        iconColor = '#4caf50';
+        
+        // Also update the rect's stroke directly as backup styling
+        if (rect) {
+          const successColor = '#4caf50';
+          const failureColor = state.includes('failure') ? '#f44336' : successColor;
+          rect.setAttribute('stroke', failureColor);
+          rect.setAttribute('stroke-width', '2');
+        }
+      }
+
+      if (iconText && rect) {
+        if (!iconElement) {
+          iconElement = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          iconElement.setAttribute('class', 'node-status-icon');
+          iconElement.setAttribute('font-size', '18');
+          iconElement.setAttribute('dominant-baseline', 'middle');
+          iconElement.setAttribute('text-anchor', 'middle');
+          nodeElement.appendChild(iconElement);
+        }
+        iconElement.setAttribute('x', Number(rect.getAttribute('x')) + 12);
+        iconElement.setAttribute('y', Number(rect.getAttribute('y')) + (Number(rect.getAttribute('height')) / 2));
+        iconElement.setAttribute('fill', iconColor);
+        iconElement.textContent = iconText;
+      } else if (iconElement) {
+        iconElement.remove();
+      }
+    }
+
+    function normalizeExitCode(exitCode) {
+      return exitCode === null || exitCode === undefined ? undefined : exitCode;
+    }
+
+    function getNodeStatusInfo(nodeId) {
+      const node = executionData?.nodes?.find(n => n.id === nodeId);
+      if (!node) {
+        return {
+          state: 'not-executed',
+          text: 'Not Executed',
+          icon: '○',
+          color: '#9e9e9e',
+          exitCode: undefined,
+          executed: false
+        };
+      }
+
+      const nodeOutput = executionData?.nodeScriptOutputs?.[nodeId];
+      const isInProgress = inProgressNodes.has(nodeId);
+      const executed = Boolean(node.executed || executionData?.visitedNodes?.includes(nodeId) || isInProgress);
+      const exitCode = isInProgress
+        ? undefined
+        : normalizeExitCode(nodeOutput?.exitCode ?? node.exitCode);
+
+      if (!executed) {
+        return {
+          state: 'not-executed',
+          text: 'Not Executed',
+          icon: '○',
+          color: '#9e9e9e',
+          exitCode,
+          executed
+        };
+      }
+
+      if (isInProgress) {
+        return {
+          state: 'in-progress',
+          text: 'In Progress',
+          icon: '◐',
+          color: '#f57c00',
+          exitCode: undefined,
+          executed
+        };
+      }
+
+      if (node.type === 'start' || node.type === 'condition' || node.type === 'end-success') {
+        return {
+          state: 'success',
+          text: 'Success',
+          icon: '✓',
+          color: '#2e7d32',
+          exitCode,
+          executed
+        };
+      }
+
+      if (node.type === 'end-failure') {
+        return {
+          state: 'failed',
+          text: 'Failed',
+          icon: '✕',
+          color: '#d32f2f',
+          exitCode,
+          executed
+        };
+      }
+
+      if (exitCode === undefined) {
+        return {
+          state: 'in-progress',
+          text: 'In Progress',
+          icon: '◐',
+          color: '#f57c00',
+          exitCode,
+          executed
+        };
+      }
+
+      if (exitCode === 0) {
+        return {
+          state: 'success',
+          text: 'Success',
+          icon: '✓',
+          color: '#2e7d32',
+          exitCode,
+          executed
+        };
+      }
+
+      return {
+        state: 'failed',
+        text: 'Failed',
+        icon: '✕',
+        color: '#d32f2f',
+        exitCode,
+        executed
+      };
     }
 
     async function loadExecutionDetails() {
@@ -530,11 +1091,26 @@
           throw new Error(`HTTP error! status: ${response.status}`);
         }
         executionData = await response.json();
+        executionData.isInProgress = executionData.execution?.status === 'running';
         
         document.getElementById('jobTitle').textContent = executionData.jobName;
         
+        // Before rendering, mark nodes that have already been visited
+        // This ensures they render green on initial load instead of grey
+        if (executionData.visitedNodes && executionData.visitedNodes.length > 0) {
+          executionData.nodes.forEach(node => {
+            if (executionData.visitedNodes.includes(node.id)) {
+              node.executed = true;
+            }
+          });
+        }
+        
         renderDiagram();
         renderOrchestrationInfo();
+        startProgressUpdateTimer();
+        
+        // Dispatch custom event to signal that execution is loaded
+        window.dispatchEvent(new Event('executionLoaded'));
         
       } catch (error) {
         M.toast({ html: 'Error loading execution details: ' + error.message, classes: 'error' });
@@ -655,28 +1231,33 @@
     }
 
     function renderMonitorNode(layer, node, CANVAS) {
-      // Determine status and colors
-      let borderColor = '#e0e0e0'; // Default - not executed
+      const statusInfo = getNodeStatusInfo(node.id);
+      let borderColor = '#e0e0e0';
       let statusIcon = '';
 
-      // Check if node has an error or non-zero exit code
-      const hasError = node.hasError || (node.exitCode !== undefined && node.exitCode !== null && node.exitCode !== 0);
-      
-      // end-failure nodes should be red when executed
-      const isFailureNode = node.type === 'end-failure' && node.executed;
-
-      if (isFailureNode || hasError) {
-        borderColor = '#f44336'; // Red - error or non-zero exit code
+      if (statusInfo.state === 'in-progress') {
+        borderColor = '#ff9800';
+        statusIcon = '◐';
+      } else if (statusInfo.state === 'failed') {
+        borderColor = '#f44336';
         statusIcon = '❌';
-      } else if (node.executed) {
-        borderColor = '#4caf50'; // Green - success
+      } else if (statusInfo.state === 'success') {
+        borderColor = '#4caf50';
         statusIcon = '✅';
       }
 
       // Create node group
       const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
       g.setAttribute('data-node-id', node.id);
-      g.setAttribute('class', 'workflow-node');
+      const nodeClasses = ['workflow-node'];
+      if (statusInfo.state === 'in-progress') {
+        nodeClasses.push('node-in-progress');
+      } else if (statusInfo.state === 'failed') {
+        nodeClasses.push('node-failed');
+      } else if (statusInfo.state === 'success') {
+        nodeClasses.push('node-completed');
+      }
+      g.setAttribute('class', nodeClasses.join(' '));
 
       // Rectangle background
       const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
@@ -693,6 +1274,7 @@
       // Status icon
       if (statusIcon) {
         const iconText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        iconText.setAttribute('class', 'node-status-icon');
         iconText.setAttribute('x', node.x - CANVAS.nodeWidth / 2 + 12);
         iconText.setAttribute('y', node.y);
         iconText.setAttribute('font-size', '18');
@@ -716,7 +1298,7 @@
       g.appendChild(text);
 
       // Exit code if applicable
-      if (node.exitCode !== undefined && node.exitCode !== null) {
+      if (statusInfo.exitCode !== undefined) {
         const exitText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         exitText.setAttribute('x', node.x - CANVAS.nodeWidth / 2 + 40);
         exitText.setAttribute('y', node.y + 12);
@@ -724,7 +1306,7 @@
         exitText.setAttribute('fill', 'var(--text-muted)');
         exitText.setAttribute('dominant-baseline', 'middle');
         exitText.setAttribute('text-anchor', 'start');
-        exitText.textContent = `Exit: ${node.exitCode}`;
+        exitText.textContent = `Exit: ${statusInfo.exitCode}`;
         g.appendChild(exitText);
       }
 
@@ -784,9 +1366,23 @@
       const endDate = exec.endTime ? new Date(exec.endTime) : null;
       const duration = exec.duration ? Math.round(exec.duration / 1000) : 0;
 
+      let statusText = 'UNKNOWN';
+      let badgeClass = 'not-executed';
+
+      if (exec.finalStatus === 'success') {
+        statusText = 'SUCCESS';
+        badgeClass = 'executed';
+      } else if (exec.finalStatus === 'failure' || exec.finalStatus === 'error') {
+        statusText = 'FAILED';
+        badgeClass = 'failed';
+      } else if (exec.status === 'running') {
+        statusText = 'IN PROGRESS';
+        badgeClass = 'in-progress';
+      }
+
       let statusColor = 'info';
       if (exec.finalStatus === 'success') statusColor = 'success';
-      else if (exec.finalStatus === 'failure') statusColor = 'error';
+      else if (exec.finalStatus === 'failure' || exec.finalStatus === 'error') statusColor = 'error';
       else if (exec.status === 'running') statusColor = 'warning';
 
       const html = `
@@ -797,8 +1393,8 @@
           <div class="info-row">
             <span class="info-label">Status:</span>
             <span class="info-value">
-              <span class="status-badge status-${exec.finalStatus === 'success' ? 'executed' : (exec.finalStatus === 'failure' ? 'failed' : 'not-executed')}">
-                ${exec.finalStatus.toUpperCase()}
+              <span class="status-badge status-${badgeClass}">
+                ${statusText}
               </span>
             </span>
           </div>
@@ -825,11 +1421,32 @@
       selectNode(nodeId);
     };
 
-    function selectNode(nodeId) {
+    async function selectNode(nodeId) {
       selectedNode = nodeId;
       const node = executionData.nodes.find(n => n.id === nodeId);
 
       if (!node) return;
+
+      // If execution is still in progress, refresh nodeScriptOutputs from server before showing panel
+      if (executionData.isInProgress) {
+        try {
+          const url = `/orchestration/execution/details?jobId=${encodeURIComponent(jobId)}&executionId=${encodeURIComponent(executionId)}`;
+          const response = await fetch(url, { credentials: 'same-origin' });
+          if (response.ok) {
+            const fresh = await response.json();
+            executionData.nodes = fresh.nodes || executionData.nodes;
+            executionData.visitedNodes = fresh.visitedNodes || executionData.visitedNodes;
+            executionData.nodeScriptOutputs = fresh.nodeScriptOutputs || executionData.nodeScriptOutputs;
+            executionData.execution = fresh.execution || executionData.execution;
+            executionData.isInProgress = fresh.execution?.status === 'running';
+            if (fresh.execution?.nodeMetrics) {
+              executionData.execution.nodeMetrics = fresh.execution.nodeMetrics;
+            }
+          }
+        } catch (e) {
+          // Non-critical - use cached data if fetch fails
+        }
+      }
 
       // Remove previous selection highlight
       document.querySelectorAll('[data-node-id]').forEach(el => {
@@ -849,35 +1466,20 @@
       let statusColor = '#9e9e9e';
 
       const nodeOutput = executionData.nodeScriptOutputs[nodeId];
-      const exitCode = nodeOutput?.exitCode !== undefined ? nodeOutput.exitCode : node.exitCode;
       const nodeExecution = executionData.execution;
-      
-      // Re-evaluate status based on actual exit code from nodeOutput
-      const actualHasError = node.hasError || (exitCode !== undefined && exitCode !== 0);
-      const actualIsFailureNode = node.type === 'end-failure' && node.executed;
-      
-      // Start and condition nodes are always successful
-      if (node.type === 'start' || node.type === 'condition') {
-        statusClass = 'executed';
-        statusText = 'Success';
-        statusIcon = '✓';
-        statusColor = '#2e7d32';
-      } else if (!node.executed) {
-        statusClass = 'not-executed';
-        statusText = 'Not Executed';
-        statusIcon = '○';
-        statusColor = '#9e9e9e';
-      } else if (actualIsFailureNode || actualHasError) {
+      const statusInfo = getNodeStatusInfo(nodeId);
+
+      if (statusInfo.state === 'in-progress') {
+        statusClass = 'in-progress';
+      } else if (statusInfo.state === 'failed') {
         statusClass = 'failed';
-        statusText = 'Failed';
-        statusIcon = '✕';
-        statusColor = '#d32f2f';
-      } else {
+      } else if (statusInfo.state === 'success') {
         statusClass = 'executed';
-        statusText = 'Success';
-        statusIcon = '✓';
-        statusColor = '#2e7d32';
       }
+
+      statusText = statusInfo.text;
+      statusIcon = statusInfo.icon;
+      statusColor = statusInfo.color;
 
       let logHtml = '<p style="color: var(--text-muted); margin: 0;">No output captured</p>';
       if (nodeOutput && nodeOutput.stdout) {
@@ -908,16 +1510,28 @@
         timeTakenHtml = formatDuration(node.timeTaken);
       }
 
-      // Parameters
+      // Parameters - read from node.data.parameters (can be space-separated string or object)
       let parametersHtml = 'None';
-      if (node.parameters && Object.keys(node.parameters).length > 0) {
-        parametersHtml = Object.entries(node.parameters)
-          .map(([key, value]) => `<div><strong>${key}:</strong> ${escapeHtml(String(value))}</div>`)
-          .join('');
+      const params = node.data?.parameters || node.parameters;
+      if (params) {
+        if (typeof params === 'string') {
+          // Space-separated string of parameters
+          const paramsList = params.trim().split(/\s+/).filter(p => p.length > 0);
+          if (paramsList.length > 0) {
+            parametersHtml = paramsList
+              .map((value, index) => `<div style="font-family: 'Courier New', monospace;"><strong>${index + 1}:</strong> ${escapeHtml(value)}</div>`)
+              .join('');
+          }
+        } else if (Object.keys(params).length > 0) {
+          // Object format
+          parametersHtml = Object.entries(params)
+            .map(([key, value]) => `<div style="font-family: 'Courier New', monospace;"><strong>${key}:</strong> ${escapeHtml(String(value))}</div>`)
+            .join('');
+        }
       }
 
-      // Agent info
-      const agentHtml = node.agent || 'N/A';
+      // Agent info - check nodeOutput first (has real agent ID), then node.data
+      const agentHtml = nodeOutput?.agent || node.data?.agent || 'N/A';
 
       // Condition evaluation details (for condition nodes)
       let conditionHtml = '';
@@ -948,7 +1562,7 @@
           const conditionDisplay = `${escapeHtml(conditionEval.type)} ${operatorDisplay} ${escapeHtml(String(conditionEval.value))}`;
           
           conditionHtml = `<div class="detail-item">
-            <div class="detail-label">Condition Evaluation</div>
+            <div class="detail-label">CONDITION</div>
             <div class="detail-value">${conditionDisplay}</div>
           </div>
           <div class="detail-item">
@@ -963,19 +1577,21 @@
 
       // Exit code
       let exitCodeHtml = '';
-      let displayExitCode = (exitCode !== null && exitCode !== undefined) ? exitCode : 0;
-      // For failure nodes, use 9999 as exit code
-      if (node.type === 'end-failure') {
+      let displayExitCode = 'N/A';
+      if (statusInfo.exitCode !== undefined) {
+        displayExitCode = statusInfo.exitCode;
+      }
+      if (node.type === 'end-failure' && statusInfo.state === 'failed') {
         displayExitCode = 9999;
       }
-      const exitClass = displayExitCode === 0 ? 'exit-code-success' : 'exit-code-failure';
+      const exitClass = displayExitCode === 0 ? 'exit-code-success' : (displayExitCode === 'N/A' ? '' : 'exit-code-failure');
       exitCodeHtml = `<div class="detail-item">
         <div class="detail-label">Exit Code</div>
         <div class="detail-value ${exitClass}" style="font-weight: bold;">${displayExitCode}</div>
       </div>`;
 
       let errorHtml = '';
-      if (node.hasError) {
+      if (statusInfo.state === 'failed' && node.errorMessage) {
         errorHtml = `<div class="error-message"><strong>Error:</strong> ${escapeHtml(node.errorMessage || 'Unknown error')}</div>`;
       }
 

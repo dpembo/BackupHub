@@ -1621,25 +1621,91 @@ app.get('/runSchedule.html',User.isAuthenticated, asyncHandler(async (req, res) 
     schedule = scheduler.getSchedule(jobname);
   }
   
-  // Check if agent is online before attempting to run (only for classic mode)
-  if (schedule && schedule.scheduleMode !== 'orchestration') {
-    const agent = agents.getAgent(schedule.agent);
-    
-    if (agent) {
-      if (agent.status !== "online") {
-        errorMessage = `Agent '${schedule.agent}' is ${agent.status} - cannot execute job`;
+  // Handle orchestration mode
+  if (schedule && schedule.scheduleMode === 'orchestration') {
+    try {
+      const orchestrationId = schedule.orchestrationId;
+      if (!orchestrationId) {
+        errorMessage = "Orchestration not configured for this schedule";
+      } else {
+        // Generate execution ID immediately (same as orchestrationEngine does)
+        const crypto = require('crypto');
+        const executionId = crypto.randomBytes(8).toString('hex');
+        
+        // Create a stub execution record (NOT saved to permanent history yet)
+        // This is cached in-memory so monitor can find it immediately
+        const stubExecution = {
+          jobId: orchestrationId,
+          executionId: executionId,
+          orchestrationVersion: 1,
+          startTime: new Date().toISOString(),
+          endTime: null,
+          status: 'running',
+          currentNode: null,
+          visitedNodes: [],
+          scriptOutputs: {},
+          conditionEvaluations: {},
+          nodeMetrics: {},
+          errors: [],
+          finalStatus: null,
+          manual: true,
+          isStub: true  // Mark as temporary stub execution
+        };
+        
+        // Cache the stub in-memory (not in permanent history)
+        saveInProgressExecution(orchestrationId, executionId, stubExecution);
+        logger.info(`Created in-progress execution for [${orchestrationId}] with ID [${executionId}]`);
+        
+        // Create callback to update cache as nodes complete
+        const onNodeComplete = (executionLog) => {
+          updateInProgressExecution(orchestrationId, executionId, executionLog);
+        };
+        
+        // Start orchestration execution asynchronously (fire-and-forget)
+        // Pass executionId so engine uses the same ID for websocket events
+        // Pass onNodeComplete callback to update cache as nodes complete
+        // Don't await - redirect immediately so user sees monitor view right away
+        orchestration.executeJob(orchestrationId, true, executionId, onNodeComplete).then(async (executionLog) => {
+          updateInProgressExecution(orchestrationId, executionId, executionLog);
+          // Execute in background, save results when complete
+          await orchestration.saveExecutionResult(executionLog);
+          // Clear the stub from cache - actual execution is now in history
+          clearInProgressExecution(orchestrationId, executionId);
+          logger.info(`Orchestration [${orchestrationId}] execution completed with status: ${executionLog.finalStatus}`);
+        }).catch((err) => {
+          logger.error(`Background orchestration execution failed: ${err.message}`);
+          // Clear the stub on error too
+          clearInProgressExecution(orchestrationId, executionId);
+        });
+        
+        // Redirect to monitor view immediately with the execution ID
+        redir = `/orchestration/monitor.html?jobId=${encodeURIComponent(orchestrationId)}&executionId=${encodeURIComponent(executionId)}`;
       }
-    } else {
-      errorMessage = `Agent '${schedule.agent}' does not exist`;
+    } catch (err) {
+      logger.error(`Error starting orchestration: ${err.message}`);
+      errorMessage = `Failed to start orchestration: ${err.message}`;
     }
-  }
-  
-  // Only attempt to run if no pre-check errors
-  if (!errorMessage) {
-    var status = await scheduler.manualJobRun(index,jobname);
-    logger.info(`Job execution status: ${status}`)
-    if(status!="ok") {
-      errorMessage = "Job execution failed";
+  } else {
+    // Classic mode: Check if agent is online before attempting to run
+    if (schedule && schedule.scheduleMode !== 'orchestration') {
+      const agent = agents.getAgent(schedule.agent);
+      
+      if (agent) {
+        if (agent.status !== "online") {
+          errorMessage = `Agent '${schedule.agent}' is ${agent.status} - cannot execute job`;
+        }
+      } else {
+        errorMessage = `Agent '${schedule.agent}' does not exist`;
+      }
+    }
+    
+    // Only attempt to run if no pre-check errors
+    if (!errorMessage) {
+      var status = await scheduler.manualJobRun(index,jobname);
+      logger.info(`Job execution status: ${status}`)
+      if(status!="ok") {
+        errorMessage = "Job execution failed";
+      }
     }
   }
   
@@ -2318,12 +2384,60 @@ app.post('/rest/orchestration/jobs/:jobId/execute', validateCsrf, User.isAuthent
   
   logger.info(`Executing orchestration job [${jobId}]`);
   
-  const executionLog = await orchestration.executeJob(jobId);
-  await orchestration.saveExecutionResult(executionLog);
+  // Generate execution ID immediately (same as orchestrationEngine does)
+  const crypto = require('crypto');
+  const executionId = crypto.randomBytes(8).toString('hex');
   
+  // Create a stub execution record (NOT saved to permanent history yet)
+  // This is cached in-memory so monitor can find it immediately
+  const stubExecution = {
+    jobId: jobId,
+    executionId: executionId,
+    orchestrationVersion: 1,
+    startTime: new Date().toISOString(),
+    endTime: null,
+    status: 'running',
+    currentNode: null,
+    visitedNodes: [],
+    scriptOutputs: {},
+    conditionEvaluations: {},
+    nodeMetrics: {},
+    errors: [],
+    finalStatus: null,
+    manual: true,
+    isStub: true  // Mark as temporary stub execution
+  };
+  
+  // Cache the stub in-memory (not in permanent history)
+  saveInProgressExecution(jobId, executionId, stubExecution);
+  logger.info(`Created in-progress execution for [${jobId}] with ID [${executionId}]`);
+  
+  // Create callback to update cache as nodes complete
+  const onNodeComplete = (executionLog) => {
+    updateInProgressExecution(jobId, executionId, executionLog);
+  };
+  
+  // Start orchestration execution asynchronously (fire-and-forget)
+  // Pass executionId so engine uses the same ID for websocket events
+  // Pass onNodeComplete callback to update cache as nodes complete
+  // Don't await - return immediately so client redirects right away
+  orchestration.executeJob(jobId, true, executionId, onNodeComplete).then(async (executionLog) => {
+    updateInProgressExecution(jobId, executionId, executionLog);
+    // Execute in background, save results when complete
+    await orchestration.saveExecutionResult(executionLog);
+    // Clear the stub from cache - actual execution is now in history
+    clearInProgressExecution(jobId, executionId);
+    logger.info(`Orchestration [${jobId}] execution completed with status: ${executionLog.finalStatus}`);
+  }).catch((err) => {
+    logger.error(`Background orchestration execution failed: ${err.message}`);
+    // Clear the stub on error too
+    clearInProgressExecution(jobId, executionId);
+  });
+  
+  // Return immediately with executionId
   res.json({ 
     success: true, 
-    execution: executionLog 
+    executionId: executionId
   });
 }));
 
@@ -2376,6 +2490,53 @@ app.get('/orchestrationBuilder.html', User.isAuthenticated, asyncHandler(async (
   });
 }));
 
+// In-memory cache for in-progress orchestration executions
+// These are temporary stub records that get replaced when execution completes
+const inProgressExecutions = {};  // key: `${jobId}:${executionId}`, value: execution stub
+
+// Helper to generate a unique cache key for in-progress executions
+function getInProgressKey(jobId, executionId) {
+  return `${jobId}:${executionId}`;
+}
+
+// Helper to get in-progress execution if it exists
+function getInProgressExecution(jobId, executionId) {
+  const key = getInProgressKey(jobId, executionId);
+  return inProgressExecutions[key];
+}
+
+// Helper to save in-progress execution
+function saveInProgressExecution(jobId, executionId, execution) {
+  const key = getInProgressKey(jobId, executionId);
+  inProgressExecutions[key] = execution;
+  logger.debug(`Cached in-progress execution [${key}]`);
+}
+
+function updateInProgressExecution(jobId, executionId, executionLog) {
+  const cachedExecution = getInProgressExecution(jobId, executionId);
+  if (!cachedExecution || !executionLog) {
+    return;
+  }
+
+  cachedExecution.visitedNodes = executionLog.visitedNodes;
+  cachedExecution.currentNode = executionLog.currentNode;
+  cachedExecution.status = executionLog.status;
+  cachedExecution.finalStatus = executionLog.finalStatus;
+  cachedExecution.endTime = executionLog.endTime;
+  cachedExecution.errors = executionLog.errors;
+  cachedExecution.scriptOutputs = executionLog.scriptOutputs;
+  cachedExecution.conditionEvaluations = executionLog.conditionEvaluations;
+  cachedExecution.nodeMetrics = executionLog.nodeMetrics;
+  saveInProgressExecution(jobId, executionId, cachedExecution);
+}
+
+// Helper to clear in-progress execution
+function clearInProgressExecution(jobId, executionId) {
+  const key = getInProgressKey(jobId, executionId);
+  delete inProgressExecutions[key];
+  logger.debug(`Cleared in-progress execution cache [${key}]`);
+}
+
 /**
  * Orchestration Monitor/Detail Routes
  */
@@ -2404,6 +2565,91 @@ app.get('/orchestration/execution/details', User.isAuthenticated, asyncHandler(a
     return res.status(400).json({ error: 'Job ID is required' });
   }
   
+  // Check if this is an in-progress execution in the cache
+  if (executionId) {
+    const cachedExecution = getInProgressExecution(jobId, executionId);
+    if (cachedExecution) {
+      logger.debug(`Found in-progress execution [${executionId}] in cache, building details`);
+      
+      // Build details from cached stub
+      try {
+        const orchestrationMonitor = require('./orchestrationMonitor.js');
+        const jobDef = await orchestrationMonitor.getJobDefinitionVersion(jobId, 'current');
+        
+        if (!jobDef) {
+          return res.status(404).json({ error: `Orchestration job [${jobId}] not found` });
+        }
+
+        // Fetch live logs from database for in-progress execute nodes
+        const agents = require('./agents.js');
+        for (const node of jobDef.nodes) {
+          if (node.type === 'execute' && node.data && node.data.agent) {
+            const agentId = node.data.agent;
+            const agent = agents.getAgent(agentId);
+            if (agent && (!cachedExecution.scriptOutputs[node.id] || !cachedExecution.scriptOutputs[node.id].stdout)) {
+              // Node is executing or recently completed, try to fetch logs from database
+              const jobName = `Orchestration [${jobId}] Node [${node.id}]`;
+              const logKey = `${agent.name}_${jobName}_log`;
+              try {
+                // Use simpleGetData to match agent's log storage mechanism
+                const logContent = await db.simpleGetData(logKey);
+                if (logContent) {
+                  // Initialize the scriptOutputs entry if not present
+                  if (!cachedExecution.scriptOutputs[node.id]) {
+                    cachedExecution.scriptOutputs[node.id] = {
+                      script: node.data.script || '',
+                      parameters: node.data.parameters || '',
+                      agent: agentId,
+                      status: 'in-progress'
+                    };
+                  }
+                  // Add/update the stdout with the live logs
+                  cachedExecution.scriptOutputs[node.id].stdout = logContent;
+                  logger.info(`[Orchestration Monitor] Fetched live logs for node [${node.id}] - ${logContent.length} bytes from key [${logKey}]`);
+                }
+              } catch (logErr) {
+                // Log file doesn't exist yet or error reading - that's fine
+                logger.debug(`[Orchestration Monitor] No logs yet for node [${node.id}]: ${logErr.message}`);
+              }
+            }
+          }
+        }
+        
+        // Format nodes with cached execution data (including fetched logs)
+        const formattedNodes = orchestrationMonitor.formatNodeDetails(jobDef.nodes, cachedExecution);
+        const formattedEdges = orchestrationMonitor.formatEdgeDetails(jobDef.edges, cachedExecution, cachedExecution.visitedNodes || []);
+        
+        return res.json({
+          jobId: jobDef.id,
+          jobName: jobDef.name,
+          description: jobDef.description || '',
+          orchestrationVersion: jobDef.version || 1,
+          execution: {
+            startTime: cachedExecution.startTime,
+            endTime: cachedExecution.endTime,
+            status: cachedExecution.status,
+            finalStatus: cachedExecution.finalStatus || 'unknown',
+            duration: cachedExecution.endTime ? 
+              new Date(cachedExecution.endTime) - new Date(cachedExecution.startTime) : null,
+            nodeMetrics: cachedExecution.nodeMetrics || {}
+          },
+          nodes: formattedNodes,
+          edges: formattedEdges,
+          nodeScriptOutputs: cachedExecution.scriptOutputs || {},
+          conditionEvaluations: cachedExecution.conditionEvaluations || {},
+          errors: cachedExecution.errors || [],
+          visitedNodes: cachedExecution.visitedNodes || [],
+          executionIndex: 'in-progress',
+          isInProgress: true
+        });
+      } catch (err) {
+        logger.error(`Error building details for cached execution: ${err.message}`);
+        // Fall through to normal execution history lookup
+      }
+    }
+  }
+  
+  // Normal execution history lookup (for completed executions)
   // If executionId is provided, resolve it to an index
   if (executionId && executionIndex === 'latest') {
     const index = await orchestrationEngine.getExecutionIndexById(jobId, executionId);

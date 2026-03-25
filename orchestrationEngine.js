@@ -6,6 +6,7 @@
 const db = require('./db.js');
 const fs = require('fs').promises;
 const EventEmitter = require('events');
+const wsBrowser = require('./communications/wsBrowserTransport.js');
 
 // Global store for pending script executions
 // Keyed by jobName (which includes orchestration jobId and node id)
@@ -127,15 +128,18 @@ function evaluateNumericCondition(actual, operator, expected) {
 /**
  * Execute an orchestration job
  * @param {string} jobId - The orchestration job ID
+ * @param {boolean} isManual - Whether this is a manual execution
+ * @param {string} executionId - Optional execution ID to use (generated if not provided)
  * @returns {Promise<Object>} Execution result with logs
  */
-async function executeJob(jobId, isManual = false) {
+async function executeJob(jobId, isManual = false, executionId = null, onNodeComplete = null) {
   const crypto = require('crypto');
-  const executionId = crypto.randomBytes(8).toString('hex'); // Unique ID for this execution
+  // Use provided executionId or generate a new one
+  const finalExecutionId = executionId || crypto.randomBytes(8).toString('hex');
   const startTime = new Date();
   const executionLog = {
     jobId,
-    executionId,  // NEW: Unique identifier for this execution
+    executionId: finalExecutionId,  // Use the provided or generated ID
     orchestrationVersion: null,  // Will be filled from job
     startTime,
     endTime: null,
@@ -172,7 +176,7 @@ async function executeJob(jobId, isManual = false) {
     logger.info(`Starting execution of orchestration job [${jobId}] at version ${executionLog.orchestrationVersion}`);
 
     // Register this execution so history records can associate nodes with it
-    activeOrchestrationExecutions[jobId] = executionId;
+    activeOrchestrationExecutions[jobId] = finalExecutionId;
 
     // Find start node
     const startNode = job.nodes.find(n => n.type === 'start');
@@ -213,6 +217,14 @@ async function executeJob(jobId, isManual = false) {
 
       const nodeStartTime = new Date().toISOString();
 
+      // Emit nodeStarted event for all nodes (including start)
+      console.log(`[executeJob] Start node - emitting orchestrationNodeStarted for ${currentNodeId}`);
+      wsBrowser.emitOrchestrationEvent(jobId, executionLog.executionId, 'orchestrationNodeStarted', {
+        nodeId: currentNodeId,
+        nodeType: currentNode.type,
+        nodeName: currentNode.data?.name || currentNodeId
+      });
+
       // Handle different node types
       if (currentNode.type === 'start') {
         // Start node: just move to next
@@ -229,6 +241,19 @@ async function executeJob(jobId, isManual = false) {
           endTime: nodeEndTime,
           duration: (new Date(nodeEndTime).getTime() - new Date(nodeStartTime).getTime()) / 1000
         };
+
+        // Emit nodeCompleted event
+        console.log(`[executeJob] Start node - emitting orchestrationNodeCompleted for ${currentNodeId}`);
+        wsBrowser.emitOrchestrationEvent(jobId, executionLog.executionId, 'orchestrationNodeCompleted', {
+          nodeId: currentNodeId,
+          nodeType: currentNode.type,
+          status: 'success'
+        });
+
+        // Update cache with latest visited nodes
+        if (onNodeComplete) {
+          onNodeComplete(executionLog);
+        }
 
         currentNodeId = nextEdge.to;
       } else if (currentNode.type === 'execute') {
@@ -311,20 +336,39 @@ async function executeJob(jobId, isManual = false) {
 
           logger.info(`Script execution completed on agent [${agentId}] with exit code [${result.exitCode}]`);
 
-          // Move to next node
-          const nextEdgeKey = `${currentNodeId}#out`;
-          const nextEdge = edgeMap[nextEdgeKey];
-
-          if (!nextEdge) {
-            throw new Error(`Execute node [${currentNodeId}] has no outgoing connection`);
-          }
-
           const nodeEndTime = new Date().toISOString();
           executionLog.nodeMetrics[currentNodeId] = {
             startTime: nodeStartTime,
             endTime: nodeEndTime,
             duration: (new Date(nodeEndTime).getTime() - new Date(nodeStartTime).getTime()) / 1000
           };
+
+          // Emit nodeCompleted event
+          wsBrowser.emitOrchestrationEvent(jobId, executionLog.executionId, 'orchestrationNodeCompleted', {
+            nodeId: currentNodeId,
+            nodeType: currentNode.type,
+            status: result.exitCode === 0 ? 'success' : 'failed',
+            exitCode: result.exitCode || 0
+          });
+
+          // Update cache with latest visited nodes
+          if (onNodeComplete) {
+            onNodeComplete(executionLog);
+          }
+
+          // Move to next node, or complete if this execute node is terminal
+          const nextEdgeKey = `${currentNodeId}#out`;
+          const nextEdge = edgeMap[nextEdgeKey];
+
+          if (!nextEdge) {
+            executionLog.finalStatus = result.exitCode === 0 ? 'success' : 'failure';
+            executionLog.status = 'completed';
+            executionLog.endTime = nodeEndTime;
+            logger.info(
+              `Orchestration [${jobId}] completed at terminal execute node [${currentNodeId}] with status [${executionLog.finalStatus}]`
+            );
+            break;
+          }
 
           currentNodeId = nextEdge.to;
         } catch (err) {
@@ -435,6 +479,18 @@ async function executeJob(jobId, isManual = false) {
             duration: (new Date(nodeEndTime).getTime() - new Date(nodeStartTime).getTime()) / 1000
           };
 
+          // Emit nodeCompleted event for condition node
+          wsBrowser.emitOrchestrationEvent(jobId, executionLog.executionId, 'orchestrationNodeCompleted', {
+            nodeId: currentNodeId,
+            nodeType: currentNode.type,
+            status: 'success'  // Condition nodes are always successful
+          });
+
+          // Update cache with latest visited nodes
+          if (onNodeComplete) {
+            onNodeComplete(executionLog);
+          }
+
           currentNodeId = nextEdge.to;
         } catch (err) {
           executionLog.errors.push({
@@ -451,6 +507,19 @@ async function executeJob(jobId, isManual = false) {
           endTime: nodeEndTime,
           duration: (new Date(nodeEndTime).getTime() - new Date(nodeStartTime).getTime()) / 1000
         };
+        
+        // Emit nodeCompleted event
+        wsBrowser.emitOrchestrationEvent(jobId, executionLog.executionId, 'orchestrationNodeCompleted', {
+          nodeId: currentNodeId,
+          nodeType: currentNode.type,
+          status: 'success'
+        });
+        
+        // Update cache with latest visited nodes
+        if (onNodeComplete) {
+          onNodeComplete(executionLog);
+        }
+        
         executionLog.finalStatus = 'success';
         executionLog.status = 'completed';
         logger.info(`Orchestration [${jobId}] completed successfully at node [${currentNodeId}]`);
@@ -463,6 +532,19 @@ async function executeJob(jobId, isManual = false) {
           endTime: nodeEndTime,
           duration: (new Date(nodeEndTime).getTime() - new Date(nodeStartTime).getTime()) / 1000
         };
+        
+        // Emit nodeCompleted event  
+        wsBrowser.emitOrchestrationEvent(jobId, executionLog.executionId, 'orchestrationNodeCompleted', {
+          nodeId: currentNodeId,
+          nodeType: currentNode.type,
+          status: 'failure'
+        });
+        
+        // Update cache with latest visited nodes
+        if (onNodeComplete) {
+          onNodeComplete(executionLog);
+        }
+        
         executionLog.finalStatus = 'failure';
         executionLog.status = 'completed';
         logger.info(`Orchestration [${jobId}] completed with failure at node [${currentNodeId}]`);
@@ -500,7 +582,11 @@ async function executeJob(jobId, isManual = false) {
       }
     }
 
-    executionLog.endTime = new Date();
+    executionLog.endTime = new Date().toISOString();
+    executionLog.status = 'completed';
+    if (onNodeComplete) {
+      onNodeComplete(executionLog);
+    }
     return executionLog;
   } catch (err) {
     executionLog.status = 'failed';
@@ -509,7 +595,11 @@ async function executeJob(jobId, isManual = false) {
       message: err.message,
       stack: err.stack
     });
-    executionLog.endTime = new Date();
+    executionLog.endTime = new Date().toISOString();
+
+    if (onNodeComplete) {
+      onNodeComplete(executionLog);
+    }
 
     logger.error(`Orchestration [${jobId}] execution failed: ${err.message}`);
     return executionLog;

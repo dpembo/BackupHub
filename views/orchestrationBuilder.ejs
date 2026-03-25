@@ -1183,11 +1183,9 @@
         type: 'POST',
         contentType: 'application/json',
         success: function(result) {
-          alert('Orchestration execution started!\n\nExecution ID: ' + (result.execution.executionId || 'unknown'));
-          // Optionally redirect to monitor page
-          setTimeout(() => {
-            window.location.href = '/orchestration/monitor.html?jobId=' + encodeURIComponent(orchestrationId);
-          }, 1500);
+          const executionId = result.executionId;
+          // Redirect to monitor page immediately with executionId
+          window.location.href = '/orchestration/monitor.html?jobId=' + encodeURIComponent(orchestrationId) + '&executionId=' + encodeURIComponent(executionId);
         },
         error: function(err) {
           alert('Error executing orchestration: ' + (err.responseJSON ? err.responseJSON.error : err.statusText));

@@ -188,9 +188,10 @@ async function processMessage(topic, message,protocol) {
             logger.debug(`No Log record found - creating with key [${key}]`);
             resp = await db.simplePutData(key,obj.data);
             logger.debug(`Data created successfully for Key [${key}], Response [${resp}], Data \n${obj.data}`);
-            // Emit websocket event for schedule log update (skip for orchestration jobs)
             if (!obj.jobName || !obj.jobName.includes('Orchestration [')) {
               emitScheduleLogUpdate(obj.jobName, obj.data);
+            } else {
+              emitOrchestrationNodeLogUpdate(obj.jobName, obj.data);
             }
         }
         catch (insertErr){
@@ -213,9 +214,10 @@ async function processMessage(topic, message,protocol) {
         logger.debug(``)
         resp = await db.simplePutData(key,data);
         logger.debug(`Data upadated successfully Key [${key}], Response [${resp}], Data \n${data}`);
-        // Emit websocket event for schedule log update (skip for orchestration jobs)
         if (!obj.jobName || !obj.jobName.includes('Orchestration [')) {
           emitScheduleLogUpdate(obj.jobName, data);
+        } else {
+          emitOrchestrationNodeLogUpdate(obj.jobName, data);
         }
       }
       catch (error){
@@ -225,6 +227,28 @@ async function processMessage(topic, message,protocol) {
       }
     }
 
+  }
+
+  function emitOrchestrationNodeLogUpdate(jobName, logData) {
+    try {
+      // jobName format: "Orchestration [jobId] Node [nodeId]"
+      const match = jobName.match(/^Orchestration\s+\[(.+?)\]\s+Node\s+\[(.+?)\]/);
+      if (!match) return;
+      const jobId = match[1];
+      const nodeId = match[2];
+      const orchestrationEngine = require('./orchestrationEngine.js');
+      const executionId = orchestrationEngine.activeOrchestrationExecutions[jobId];
+      if (!executionId) return;
+      const wsBrowserTransport = require('./communications/wsBrowserTransport.js');
+      const io = wsBrowserTransport.getIO();
+      if (io) {
+        const eventName = `orchestrationNodeLog:${jobId}:${executionId}:${nodeId}`;
+        io.emit(eventName, { nodeId, log: logData });
+        logger.debug(`[emitOrchestrationNodeLogUpdate] Emitted ${eventName} (${logData.length} bytes)`);
+      }
+    } catch (error) {
+      logger.debug(`[emitOrchestrationNodeLogUpdate] Error: ${error.message}`);
+    }
   }
 
   function emitScheduleLogUpdate(jobName, logData) {
