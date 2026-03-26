@@ -11,13 +11,26 @@
   
   <style>
     body { margin: 0; padding: 0; overflow: hidden; }
-    #orchestration-container { display: flex; height: 100vh; flex-direction: column; overflow: hidden; }
-    #orchestration-header { background: #f5f5f5; padding: 15px 20px; border-bottom: 1px solid #ddd; flex-shrink: 0; }
+    #orchestration-container { display: flex; height: calc(100vh - 120px); flex-direction: column; overflow: hidden; width: 100%; margin-top: 1px; }
+    #orchestration-header { background: #f5f5f5; padding: 15px 20px; border-bottom: 1px solid #ddd; flex-shrink: 0; position: relative;}
+    #header-buttonss {
+      position: absolute;
+      top: 15px;   /* matches header padding */
+      right: 20px; /* matches header padding */
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    
+    #orchestration-counts{
+      font-size: 13px;
+    }
+
     #orchestration-main { display: flex; flex: 1; overflow: hidden; }
     #orchestration-palette { width: 250px; background: white; border-right: 1px solid #ddd; overflow-y: auto; padding: 15px; flex-shrink: 0; }
     #orchestration-canvas { flex: 1; background: #fafafa; position: relative; overflow: auto; }
     #orchestration-canvas svg { display: block; width: 100%; height: auto; min-height: 100%; background: #fafafa; }
-    #orchestration-properties { width: 300px; background: white; border-left: 1px solid #ddd; overflow-y: auto; padding: 15px; flex-shrink: 0; position: fixed; right: 0; top: 80px; bottom: 0; transform: translateX(100%); transition: transform 0.3s ease-in-out; z-index: 50; }
+    #orchestration-properties { width: 300px; background: white; border-left: 1px solid #ddd; overflow-y: auto; padding: 15px; flex-shrink: 0; position: fixed; right: 0; top: 142px; bottom: 55px; transform: translateX(100%); transition: transform 0.3s ease-in-out; z-index: 50; }
     #orchestration-properties.show { transform: translateX(0); }
     #zoom-controls { right: 20px; }
     #zoom-controls.shift-left { right: 320px; }
@@ -37,7 +50,7 @@
     .delete-btn:hover { background: #d32f2f; }
     .save-btn { background: #4caf50; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }
     .save-btn:hover { background: #388e3c; }
-    #orch-name-display { cursor: pointer; padding: 5px 10px; border-radius: 4px; transition: background 0.2s; display: flex; flex-direction: column; gap: 4px; }
+    #orch-name-display { cursor: pointer; border-radius: 4px; transition: background 0.2s; display: flex; flex-direction: column; gap: 1px; }
     #orch-name-display:hover { background: rgba(33, 150, 243, 0.1); }
     #orch-name-text { font-size: 16px; font-weight: 600; }
     #orch-desc-text { font-size: 13px; color: #666; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 400px; cursor: help; }
@@ -49,17 +62,42 @@
     #orch-name-input:focus { outline: none; box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.2); }
     #orch-desc-input:focus { outline: none; box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.2); }
     .orch-edit-buttons { display: flex; gap: 6px; }
+    h3 {line-height: 35% !important;}
+
+        .details-close-btn {
+      position: absolute;
+      top: 0px;
+      right: 15px;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      font-size: 24px;
+      color: var(--text-primary);
+      padding: 5px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+    }
+
+    .details-close-btn:hover {
+      color: var(--error-color, #d32f2f);
+      transform: scale(1.2);
+    }
+
   </style>
   
 </head>
 <body>
+  <%- include('./partials/_header'); %>
+  
   <div id="orchestration-container">
     <div id="orchestration-header">
       
       <h3 style="margin: 0; display: flex; align-items: center; gap: 15px;">
-        <i class="material-icons">workspaces_outline</i>
+        <i class="material-icons">schema</i>
         <div id="orch-name-display" title="Click to edit orchestration name">
-          <span id="orch-name-text">Orchestration Builder</span>
+          <span id="orch-name-text">Branded Orchestration Builder</span>
           <span id="orch-desc-text" title="Orchestration description">No Description</span>
         </div>
         <div id="orch-name-edit">
@@ -77,6 +115,16 @@
           </div>
         </div>
       </h3>
+      <div id="header-buttonss" style="display: flex; gap: 10px;">
+        <button class="save-btn" style="background: #2196f3;" onclick="runOrchestration()" title="Execute the orchestration">
+          <i class="material-icons" style="font-size: 16px; vertical-align: middle;">play_arrow</i>
+          Run
+        </button>
+        <button class="save-btn" onclick="saveOrchestration()">
+          <i class="material-icons" style="font-size: 16px; vertical-align: middle;">save</i>
+          Save Orchestration
+        </button>
+      </div>
     </div>
     
     <div id="orchestration-main">
@@ -117,11 +165,15 @@
             <span>Failure</span>
           </div>
         </div>
-        
+        <div id="orchestration-counts"><hr>
+          <span><strong id="node-count">0</strong> nodes</span> | <span><strong id="edge-count">0</strong> connections</span>
+        </div>
+<!--        
         <hr />
         <p style="font-size: 12px; color: #999; margin-top: 20px;">
           <strong>Drag items</strong> from this palette onto the canvas to build your orchestration.
         </p>
+-->
       </div>
       
       <!-- Canvas -->
@@ -150,6 +202,7 @@
         </div>
         <div id="properties-content" style="display: none;">
           <div class="properties-section">
+            <button onclick="closeDetailsPanel()" class="details-close-btn" id="detailsClose" title="Close">&times;</button>
             <label>Node Type</label>
             <p id="prop-type" style="margin: 5px 0; font-size: 13px; color: #333;"></p>
           </div>
@@ -178,7 +231,6 @@
               <select id="prop-condition-type">
                 <option value="return_code">Return Code</option>
                 <option value="output_contains">Output Contains</option>
-                <option value="regex_match">Regex Match</option>
                 <option value="execution_time">Execution Time (seconds)</option>
               </select>
             </div>
@@ -213,23 +265,6 @@
           
           <button class="delete-btn" onclick="deleteSelectedNode()">Delete Node</button>
         </div>
-      </div>
-    </div>
-    
-    <div id="orchestration-footer">
-      <div style="font-size: 13px; color: #666;">
-        <span><strong id="node-count">0</strong> nodes</span> | <span><strong id="edge-count">0</strong> connections</span>
-        <span style="margin-left: 20px; color: #999; font-size: 12px;">💡 Drag from port circles to connect nodes</span>
-      </div>
-      <div style="display: flex; gap: 10px;">
-        <button class="save-btn" style="background: #2196f3;" onclick="runOrchestration()" title="Execute the orchestration">
-          <i class="material-icons" style="font-size: 16px; vertical-align: middle;">play_arrow</i>
-          Run
-        </button>
-        <button class="save-btn" onclick="saveOrchestration()">
-          <i class="material-icons" style="font-size: 16px; vertical-align: middle;">save</i>
-          Save Orchestration
-        </button>
       </div>
     </div>
   </div>
@@ -789,12 +824,16 @@
     
     function onSVGClick(e) {
       if (e.target === svg || (e.target.tagName === 'g' && !e.target.hasAttribute('data-node-id'))) {
-        selectedNode = null;
-        document.getElementById('orchestration-properties').classList.remove('show');
-        document.getElementById('zoom-controls').classList.remove('shift-left');
-        updatePropertiesPanel();
-        renderAllNodes();
+        closeDetailsPanel();
       }
+    }
+
+    function closeDetailsPanel(){
+      selectedNode = null;
+      document.getElementById('orchestration-properties').classList.remove('show');
+      document.getElementById('zoom-controls').classList.remove('shift-left');
+      updatePropertiesPanel();
+      renderAllNodes();
     }
     
     function createEdge(fromId, toId, fromPort) {
