@@ -761,6 +761,7 @@
     let executionData = null;
     let selectedNode = null;
     let progressUpdateIntervalId = null;
+    let averageExecutionTime = null;  // Average total time from previous executions
 
     // Get job ID and execution index from URL parameters
     const urlParams = new URLSearchParams(window.location.search);
@@ -777,6 +778,9 @@
       
       // Then load execution details  
       loadExecutionDetails();
+      
+      // Load historical average in the background (don't block page load)
+      loadHistoricalAverage();
       
       // Variable to track the refresh interval
       let statusRefreshInterval = null;
@@ -904,6 +908,63 @@
       // Update progress text
       if (estimatedPercent > 0) {
         document.getElementById('progressBarText').textContent = Math.round(estimatedPercent) + '%';
+      }
+
+      // Calculate ETA and remaining time
+      // Use historical average if available
+      if (averageExecutionTime && averageExecutionTime > 0) {
+        const remainingMs = (averageExecutionTime * 1000) - elapsedMs;
+        const remainingSecs = remainingMs / 1000;
+        
+        if (remainingSecs > 0) {
+          // Still running within predicted time
+          document.getElementById('progressEta').textContent = displaySecs(averageExecutionTime);
+          document.getElementById('progressRemaining').textContent = displaySecs(remainingSecs);
+        } else {
+          // Running over - show overrunning amount
+          const overrunSecs = Math.abs(remainingSecs);
+          document.getElementById('progressEta').textContent = displaySecs(averageExecutionTime);
+          document.getElementById('progressRemaining').innerHTML = '<span style="color: #f57c00;">Overrunning: ' + displaySecs(overrunSecs) + '</span>';
+        }
+      } else {
+        // No historical data yet
+        document.getElementById('progressEta').textContent = 'Calculating...';
+        document.getElementById('progressRemaining').textContent = '--';
+      }
+    }
+
+    async function loadHistoricalAverage() {
+      try {
+        // Fetch execution history for this job in the background
+        const response = await fetch(`/rest/orchestration/jobs/${encodeURIComponent(jobId)}/executions`);
+        if (!response.ok) return;
+        
+        const executions = await response.json();
+        if (!Array.isArray(executions) || executions.length === 0) return;
+        
+        // Calculate average total execution time from completed executions
+        let totalExecutionTime = 0;
+        let completedCount = 0;
+        
+        executions.forEach(execution => {
+          if (execution.endTime && execution.startTime) {
+            const startTime = new Date(execution.startTime).getTime();
+            const endTime = new Date(execution.endTime).getTime();
+            const duration = (endTime - startTime) / 1000;  // Convert to seconds
+            totalExecutionTime += duration;
+            completedCount++;
+          }
+        });
+        
+        if (completedCount > 0) {
+          averageExecutionTime = totalExecutionTime / completedCount;
+          console.log('Loaded average execution time:', displaySecs(averageExecutionTime), 'from', completedCount, 'past executions');
+          // Update progress bar with new ETA
+          updateProgressBar();
+        }
+      } catch (err) {
+        console.log('Could not load execution history:', err.message);
+        // Silently fail - will show "Calculating..." instead
       }
     }
 
