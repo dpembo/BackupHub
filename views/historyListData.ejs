@@ -205,8 +205,21 @@ function displaySecs(secs) {
                   }
               %>
               <td><%=dispDate%> (<%=(diffDisp)%>)</td>
-              <td>-</td>
-              <td>-</td>
+              <% 
+                // Calculate runtime from children
+                var totalRunTime = 0;
+                if (historyList[i].children) {
+                  historyList[i].children.forEach(function(child) {
+                    if (child.runTime) totalRunTime += parseInt(child.runTime) || 0;
+                  });
+                }
+              %>
+              <td><%=displaySecs(totalRunTime)%></td>
+              <% 
+                // Success percentage (pre-calculated on server for orchestrations, regular calculation for other jobs)
+                var successPct = historyList[i].successPercentage !== undefined ? historyList[i].successPercentage : hist.getSuccessPercentage(historyList[i].jobName);
+              %>
+              <td><span><%=successPct%>%</span></td>
               <td>
                 <% if(parseInt(historyList[i].returnCode)==0){%>
                   <span title="Success" class="successIcons material-icons">check_circle</span>

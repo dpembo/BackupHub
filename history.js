@@ -1,5 +1,6 @@
 
 const dateTimeUtils = require('./utils/dateTimeUtils.js');
+const orchestration = require('./orchestration.js');
 
 const MAX_HISTORY_ITEMS = 150;
 const DBKEY = "JOB_HISTORY";
@@ -243,6 +244,32 @@ function getSuccessPercentage(inJobName)
     return pct;
 }
 
+async function getOrchestrationSuccessPercentage(jobId)
+{
+    try {
+        // Get execution history for this orchestration job
+        const executions = await orchestration.getExecutionHistory(jobId);
+        
+        if (!executions || executions.length === 0) {
+            return '-';
+        }
+        
+        var successCount = 0;
+        for(var i = 0; i < executions.length; i++) {
+            if(executions[i].finalStatus === 'success') {
+                successCount++;
+            }
+        }
+        
+        var pct = (successCount / executions.length) * 100;
+        pct = Math.round(pct);
+        return pct;
+    } catch (err) {
+        logger.warn(`Error calculating orchestration success percentage for ${jobId}: ${err.message}`);
+        return '-';
+    }
+}
+
 function getTodaysRun(){
     var today = new Date().toISOString();
     var todayStr = today.split("T")[0];
@@ -428,4 +455,4 @@ async function clearHistory() {
     }
 }
 
-module.exports = { init, add, getItems, getItemsUsingTZ, getItem, searchItemWithName, createHistoryItem,getChartDataSet,getAverageRuntime, getLastRun,getSuccessPercentage, getTodaysRun, getItemsGroupedByOrchestration, clearHistory };
+module.exports = { init, add, getItems, getItemsUsingTZ, getItem, searchItemWithName, createHistoryItem,getChartDataSet,getAverageRuntime, getLastRun,getSuccessPercentage, getOrchestrationSuccessPercentage, getTodaysRun, getItemsGroupedByOrchestration, clearHistory };

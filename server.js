@@ -1189,6 +1189,11 @@ app.get('/historyList/data',User.isAuthenticated, async (req, res) => {
         applyScheduleStyle(historyList[x].children[c]);
       }
     }
+    
+    // Calculate orchestration success percentage based on finalStatus of all executions
+    if (historyList[x].isOrchestration) {
+      historyList[x].successPercentage = await hist.getOrchestrationSuccessPercentage(historyList[x].jobId);
+    }
   }
 
   var refresh = req.query["refresh"];
