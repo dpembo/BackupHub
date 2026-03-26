@@ -304,6 +304,12 @@
       verticalSpacing: 150
     };
     
+    // Helper function to get CSS variable values with fallback
+    function getCSSVariable(varName, fallback) {
+      const value = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+      return value || fallback;
+    }
+    
     let svg = null;
     let edgeLayer = null;
     let nodeLayer = null;
@@ -346,6 +352,21 @@
       setupZoomControls();
       // Setup name display click handler
       document.getElementById('orch-name-display').addEventListener('click', enterNameEditMode);
+      
+      // Setup theme change listener to re-render nodes when theme toggles
+      const stylesheetLink = document.getElementById('maincss');
+      if (stylesheetLink) {
+        const observer = new MutationObserver(() => {
+          // Add a small delay to ensure CSS variables are updated
+          setTimeout(() => {
+            if (Object.keys(nodes).length > 0) {
+              renderAllNodes();
+              renderAllEdges();
+            }
+          }, 50);
+        });
+        observer.observe(stylesheetLink, { attributes: true, attributeFilter: ['href'] });
+      }
     });
     
     function initializeSVG() {
@@ -561,8 +582,8 @@
       rect.setAttribute('y', node.y - CANVAS.nodeHeight / 2);
       rect.setAttribute('width', nodeWidth);
       rect.setAttribute('height', CANVAS.nodeHeight);
-      rect.setAttribute('fill', '#f9f9f9');
-      rect.setAttribute('stroke', selectedNode === nodeId ? '#ff9800' : '#e0e0e0');
+      rect.setAttribute('fill', getCSSVariable('--surface-secondary', '#f9f9f9'));
+      rect.setAttribute('stroke', selectedNode === nodeId ? getCSSVariable('--warning-color', '#ff9800') : getCSSVariable('--border-color', '#e0e0e0'));
       rect.setAttribute('stroke-width', selectedNode === nodeId ? '2' : '1');
       rect.setAttribute('rx', '4');
       grp.appendChild(rect);
@@ -579,13 +600,13 @@
       
       // Set icon color based on node type
       if (node.type === 'start') {
-        icon.setAttribute('fill', '#4caf50');
+        icon.setAttribute('fill', getCSSVariable('--success-color', '#4caf50'));
       } else if (node.type === 'end-success') {
-        icon.setAttribute('fill', '#4caf50');
+        icon.setAttribute('fill', getCSSVariable('--success-color', '#4caf50'));
       } else if (node.type === 'end-failure') {
-        icon.setAttribute('fill', '#f44336');
+        icon.setAttribute('fill', getCSSVariable('--error-color', '#f44336'));
       } else {
-        icon.setAttribute('fill', '#999');
+        icon.setAttribute('fill', getCSSVariable('--text-muted', '#999'));
       }
       
       // Material Icons font mapping
@@ -605,7 +626,7 @@
       text.setAttribute('y', node.y);
       text.setAttribute('text-anchor', 'start');
       text.setAttribute('dominant-baseline', 'middle');
-      text.setAttribute('fill', '#333');
+      text.setAttribute('fill', getCSSVariable('--text-primary', '#333'));
       text.setAttribute('font-size', '14');
       text.setAttribute('font-weight', '500');
       text.setAttribute('pointer-events', 'none');
@@ -638,8 +659,8 @@
         portCircle.setAttribute('cx', node.x + portX - nodeWidth / 2);
         portCircle.setAttribute('cy', node.y + port.y - CANVAS.nodeHeight / 2);
         portCircle.setAttribute('r', CANVAS.portRadius);
-        portCircle.setAttribute('fill', '#fff');
-        portCircle.setAttribute('stroke', '#333');
+        portCircle.setAttribute('fill', getCSSVariable('--surface-color', '#fff'));
+        portCircle.setAttribute('stroke', getCSSVariable('--border-color', '#333'));
         portCircle.setAttribute('stroke-width', '2');
         portGroup.appendChild(portCircle);
         
@@ -649,7 +670,7 @@
         portLabel.setAttribute('y', node.y + port.y - CANVAS.nodeHeight / 2 + 20);
         portLabel.setAttribute('text-anchor', 'middle');
         portLabel.setAttribute('font-size', '11');
-        portLabel.setAttribute('fill', '#666');
+        portLabel.setAttribute('fill', getCSSVariable('--text-muted', '#666'));
         portLabel.setAttribute('pointer-events', 'none');
         portLabel.textContent = port.label;
         portGroup.appendChild(portLabel);
@@ -706,9 +727,17 @@
       const midY = (startY + endY) / 2;
       const pathData = `M ${startX} ${startY} C ${startX} ${midY}, ${endX} ${midY}, ${endX} ${endY}`;
       
+      // Determine edge color dynamically based on type
+      let edgeColor = getCSSVariable('--primary-color', '#2196f3');
+      if (edge.fromPort === 'true') {
+        edgeColor = getCSSVariable('--success-color', '#4caf50');
+      } else if (edge.fromPort === 'false') {
+        edgeColor = getCSSVariable('--error-color', '#f44336');
+      }
+      
       const line = document.createElementNS('http://www.w3.org/2000/svg', 'path');
       line.setAttribute('d', pathData);
-      line.setAttribute('stroke', edge.color || '#2196f3');
+      line.setAttribute('stroke', edgeColor);
       line.setAttribute('stroke-width', '2');
       line.setAttribute('fill', 'none');
       line.setAttribute('marker-end', 'url(#arrowhead)');
@@ -721,7 +750,7 @@
         labelText.setAttribute('y', midY - 8);
         labelText.setAttribute('text-anchor', 'middle');
         labelText.setAttribute('font-size', '11');
-        labelText.setAttribute('fill', edge.color || '#2196f3');
+        labelText.setAttribute('fill', edgeColor);
         labelText.setAttribute('font-weight', 'bold');
         labelText.textContent = edge.label;
         edgeLayer.appendChild(labelText);
@@ -741,7 +770,7 @@
       const startY = startPos.y;
       
       tempEdgeLine = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-      tempEdgeLine.setAttribute('stroke', '#ff9800');
+      tempEdgeLine.setAttribute('stroke', getCSSVariable('--warning-color', '#ff9800'));
       tempEdgeLine.setAttribute('stroke-width', '2');
       tempEdgeLine.setAttribute('fill', 'none');
       tempEdgeLine.setAttribute('stroke-dasharray', '5,5');

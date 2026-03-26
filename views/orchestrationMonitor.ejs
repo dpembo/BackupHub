@@ -658,7 +658,7 @@
 <body>
   <%- include('./partials/_header'); %>
 
-  <div class="section no-pad-bot" id="index-banner" style="background-color: #eeeeee;">
+  <div class="section no-pad-bot" id="index-banner" style="background-color: var(--surface-secondary, #eeeeee);">
     <div class="container">   
       <h5 class="header orange-text">
         <span id="jobTitle" style="color: var(--primary-color); font-size: 0.8em;">Loading...</span>
@@ -748,6 +748,12 @@
   <script src="/js/mermaid/mermaid.min.js"></script>
 
   <script>
+    // Helper function to get CSS variable values with fallback
+    function getCSSVariable(varName, fallback) {
+      const value = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+      return value || fallback;
+    }
+
     // Initialize Mermaid for DAG rendering
     if (typeof mermaid !== 'undefined') {
       mermaid.initialize({ 
@@ -1330,7 +1336,7 @@
       marker.setAttribute('orient', 'auto');
       const polyGreen = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
       polyGreen.setAttribute('points', '0 0, 10 3, 0 6');
-      polyGreen.setAttribute('fill', '#4caf50');
+      polyGreen.setAttribute('fill', getCSSVariable('--success-color', '#4caf50'));
       marker.appendChild(polyGreen);
       defs.appendChild(marker);
 
@@ -1343,7 +1349,7 @@
       markerRed.setAttribute('orient', 'auto');
       const polyRed = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
       polyRed.setAttribute('points', '0 0, 10 3, 0 6');
-      polyRed.setAttribute('fill', '#f44336');
+      polyRed.setAttribute('fill', getCSSVariable('--error-color', '#f44336'));
       markerRed.appendChild(polyRed);
       defs.appendChild(markerRed);
 
@@ -1356,7 +1362,7 @@
       markerGrey.setAttribute('orient', 'auto');
       const polyGrey = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
       polyGrey.setAttribute('points', '0 0, 10 3, 0 6');
-      polyGrey.setAttribute('fill', '#999999');
+      polyGrey.setAttribute('fill', getCSSVariable('--text-muted', '#999999'));
       markerGrey.appendChild(polyGrey);
       defs.appendChild(markerGrey);
       const markerBlue = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
@@ -1368,7 +1374,7 @@
       markerBlue.setAttribute('orient', 'auto');
       const polyBlue = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
       polyBlue.setAttribute('points', '0 0, 10 3, 0 6');
-      polyBlue.setAttribute('fill', '#2196f3');
+      polyBlue.setAttribute('fill', getCSSVariable('--primary-color', '#2196f3'));
       markerBlue.appendChild(polyBlue);
       defs.appendChild(markerBlue);
       svg.insertBefore(defs, edgeLayer);
@@ -1432,7 +1438,7 @@
       rect.setAttribute('y', node.y - CANVAS.nodeHeight / 2);
       rect.setAttribute('width', CANVAS.nodeWidth);
       rect.setAttribute('height', CANVAS.nodeHeight);
-      rect.setAttribute('fill', '#ffffff');
+      rect.setAttribute('fill', getCSSVariable('--surface-color', '#ffffff'));
       rect.setAttribute('stroke', borderColor);
       rect.setAttribute('stroke-width', '2');
       rect.setAttribute('rx', '4');
@@ -2001,6 +2007,20 @@
         setupZoomControls();
       }, 100);
     };
+
+    // Setup theme change listener to re-render nodes when theme toggles
+    const stylesheetLink = document.getElementById('maincss');
+    if (stylesheetLink) {
+      const observer = new MutationObserver(() => {
+        // Add a small delay to ensure CSS variables are updated
+        setTimeout(() => {
+          if (executionData && executionData.nodes && executionData.nodes.length > 0) {
+            renderDiagram();
+          }
+        }, 50);
+      });
+      observer.observe(stylesheetLink, { attributes: true, attributeFilter: ['href'] });
+    }
   </script>
 </body>
 
