@@ -47,10 +47,9 @@
 
     .details-section {
       background: var(--surface-color);
-      border-radius: 8px;
-      padding: 15px 10px;
+      border-radius: 8px 0 0 0;
+      /*padding: 15px 10px;*/
       overflow-y: auto;
-      box-shadow: -2px 0 8px rgba(0, 0, 0, 0.15);
       width: 50%;
       position: absolute;
       right: 0;
@@ -63,6 +62,8 @@
       z-index: 10;
       display: flex;
       flex-direction: column;
+      border-left: 1px solid #dddddd;
+      border-top: 1px solid #dddddd;
     }
 
     .details-section.visible {
@@ -101,7 +102,7 @@
       width: 100%;
     }
 
-    .mermaid-wrapper {
+   .mermaid-wrapper {
       display: flex;
       justify-content: center;
       align-items: flex-start;
@@ -110,8 +111,9 @@
       padding: 20px;
     }
 
+
     .mermaid-wrapper svg {
-      min-width: fit-content;
+      /*min-width: fit-content;*/
       height: auto;
     }
 
@@ -412,7 +414,7 @@
     }
 
     #zoom-controls.slide-left {
-      transform: translateX(-55vw);
+      transform: translateX(-50vw);
     }
 
     #zoom-controls button {
@@ -528,7 +530,7 @@
 
     .progress-bar-fill {
       height: 100%;
-      background: linear-gradient(90deg, #2196f3, #21cbf3);
+      background: linear-gradient(90deg, #ff9800, #e8aa4d);
       transition: width 0.3s ease;
       display: flex;
       align-items: center;
@@ -567,6 +569,92 @@
       font-weight: 500;
       margin-top: 2px;
     }
+
+    /* Orchestration Summary Panel */
+    #index-banner .container {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 20px;
+    }
+
+    #index-banner .header {
+      flex: 1;
+      margin: 0;
+    }
+
+    .orchestration-summary {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px 24px;
+      background: rgba(255, 255, 255, 0.5);
+      padding: 12px 16px;
+      border-radius: 4px;
+      border: 1px solid var(--border-color);
+      min-width: 300px;
+      font-size: 0.9em;
+    }
+
+    .summary-item {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .summary-label {
+      font-size: 0.75em;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .summary-value {
+      font-size: 0.95em;
+      color: var(--text-primary);
+      font-weight: 500;
+      word-break: break-word;
+    }
+
+    .summary-status-badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 3px;
+      font-size: 0.85em;
+      font-weight: 500;
+      width: fit-content;
+    }
+
+    .summary-status-success {
+      background: #c8e6c9;
+      color: #1b5e20;
+    }
+
+    .summary-status-failed {
+      background: #ffcdd2;
+      color: #b71c1c;
+    }
+
+    .summary-status-running {
+      background: #ffe0b2;
+      color: #e65100;
+    }
+
+    @media (max-width: 1400px) {
+      #index-banner .container {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .orchestration-summary {
+        min-width: auto;
+        width: 100%;
+      }
+    }
+
+    #canvas-view{
+      width: 100%;
+    }
   </style>
 </head>
 
@@ -578,6 +666,24 @@
       <h5 class="header orange-text">
         Orchestration Monitor: <span id="jobTitle" style="color: var(--primary-color); font-size: 0.8em;">Loading...</span>
       </h5>
+      <div class="orchestration-summary" id="orchestrationSummary">
+        <div class="summary-item">
+          <div class="summary-label">Status</div>
+          <div class="summary-value" id="summaryStatus">--</div>
+        </div>
+        <div class="summary-item">
+          <div class="summary-label">Start Time</div>
+          <div class="summary-value" id="summaryStartTime">--</div>
+        </div>
+        <div class="summary-item">
+          <div class="summary-label">Duration</div>
+          <div class="summary-value" id="summaryDuration">--</div>
+        </div>
+        <div class="summary-item">
+          <div class="summary-label">Mode</div>
+          <div class="summary-value" id="summaryMode">--</div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -610,7 +716,7 @@
     </div>
   </div>
 
-  <div class="container">
+  <div class="container" id="canvas-view">
     <div class="orchestration-container" id="orchestrationContainer">
       <!-- Diagram Section -->
       <div class="diagram-section">
@@ -713,6 +819,8 @@
               if (!selectedNode) {
                 renderOrchestrationInfo();
               }
+              
+              updateSummaryPanel();
               
               if (isDone) {
                 clearInterval(statusRefreshInterval);
@@ -917,6 +1025,7 @@
           selectNode(nodeId);
         } else if (!selectedNode) {
           renderOrchestrationInfo();
+          updateSummaryPanel();
         }
         
         // Update progress bar with completed node count
@@ -1107,6 +1216,7 @@
         
         renderDiagram();
         renderOrchestrationInfo();
+        updateSummaryPanel();
         startProgressUpdateTimer();
         
         // Dispatch custom event to signal that execution is loaded
@@ -1414,6 +1524,57 @@
       `;
 
       document.getElementById('detailsContent').innerHTML = html;
+    }
+
+    function updateSummaryPanel() {
+      if (!executionData || !executionData.execution) return;
+
+      const exec = executionData.execution;
+      const startDate = new Date(exec.startTime);
+      const duration = exec.duration ? Math.round(exec.duration / 1000) : 0;
+
+      // Format start time
+      const timeStr = startDate.toLocaleTimeString([], { 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        second: '2-digit',
+        hour12: true 
+      });
+      const dateStr = startDate.toLocaleDateString([],
+        { month: 'short', day: 'numeric' }
+      );
+      const startTimeStr = `${dateStr} ${timeStr}`;
+
+      // Format duration
+      let durationStr = '--';
+      if (duration >= 0) {
+        if (duration < 60) {
+          durationStr = `${duration}s`;
+        } else {
+          const mins = Math.floor(duration / 60);
+          const secs = duration % 60;
+          durationStr = `${mins}m ${secs}s`;
+        }
+      }
+
+      // Determine status with badge
+      let statusHtml = '<span class="summary-status-badge">--</span>';
+      if (exec.finalStatus === 'success') {
+        statusHtml = '<span class="summary-status-badge summary-status-success">✓ SUCCESS</span>';
+      } else if (exec.finalStatus === 'failure' || exec.finalStatus === 'error') {
+        statusHtml = '<span class="summary-status-badge summary-status-failed">✗ FAILED</span>';
+      } else if (exec.status === 'running') {
+        statusHtml = '<span class="summary-status-badge summary-status-running">⟳ IN PROGRESS</span>';
+      }
+
+      // Determine mode (default to "Manual" if not specified)
+      const mode = exec.mode || 'Manual';
+
+      // Update DOM
+      document.getElementById('summaryStatus').innerHTML = statusHtml;
+      document.getElementById('summaryStartTime').textContent = startTimeStr;
+      document.getElementById('summaryDuration').textContent = durationStr;
+      document.getElementById('summaryMode').textContent = mode;
     }
 
     // Make nodeClicked accessible globally for Mermaid

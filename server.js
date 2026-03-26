@@ -2484,7 +2484,7 @@ app.get('/orchestrationList.html', User.isAuthenticated, asyncHandler(async (req
 
 app.get('/orchestrationBuilder.html', User.isAuthenticated, asyncHandler(async (req, res) => {
   const jobId = req.query.id; // undefined for new jobs, or specific ID for editing
-  res.render('orchestrationBuilder', { 
+  res.render('orchestrationBuilderBranded', { 
     csrfToken: req.csrfToken(),
     jobId: jobId || ''
   });
