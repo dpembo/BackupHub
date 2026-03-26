@@ -1188,6 +1188,18 @@ app.get('/historyList/data',User.isAuthenticated, async (req, res) => {
       for (var c = 0; c < historyList[x].children.length; c++) {
         applyScheduleStyle(historyList[x].children[c]);
       }
+      
+      // Calculate total runtime from children for orchestration items
+      var totalRunTime = 0;
+      historyList[x].children.forEach(function(child) {
+        if (child.runTime) totalRunTime += parseInt(child.runTime) || 0;
+      });
+      historyList[x].runTime = totalRunTime;
+    }
+    
+    // Set default runTime if not present (for sorting)
+    if (historyList[x].runTime === undefined) {
+      historyList[x].runTime = 0;
     }
     
     // Calculate orchestration success percentage based on finalStatus of all executions
