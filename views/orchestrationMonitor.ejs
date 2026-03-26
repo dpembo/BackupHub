@@ -538,6 +538,7 @@
       min-width: 30px;
     }
 
+
     .progress-bar-text {
       color: white;
       font-size: 0.75em;
@@ -585,12 +586,8 @@
 
     .orchestration-summary {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: 1fr 1fr 1fr 1fr;
       gap: 16px 24px;
-      background: rgba(255, 255, 255, 0.5);
-      padding: 12px 16px;
-      border-radius: 4px;
-      border: 1px solid var(--border-color);
       min-width: 300px;
       font-size: 0.9em;
     }
@@ -661,27 +658,27 @@
 <body>
   <%- include('./partials/_header'); %>
 
-  <div class="section no-pad-bot" id="index-banner">
+  <div class="section no-pad-bot" id="index-banner" style="background-color: #eeeeee;">
     <div class="container">   
       <h5 class="header orange-text">
-        Orchestration Monitor: <span id="jobTitle" style="color: var(--primary-color); font-size: 0.8em;">Loading...</span>
+        <span id="jobTitle" style="color: var(--primary-color); font-size: 0.8em;">Loading...</span>
       </h5>
       <div class="orchestration-summary" id="orchestrationSummary">
         <div class="summary-item">
-          <div class="summary-label">Status</div>
-          <div class="summary-value" id="summaryStatus">--</div>
+          <span class="summary-label">Status</span>
+          <span class="summary-value" id="summaryStatus">--</span>
         </div>
         <div class="summary-item">
-          <div class="summary-label">Start Time</div>
-          <div class="summary-value" id="summaryStartTime">--</div>
+          <span class="summary-label">Start Time</span>
+          <span class="summary-value" id="summaryStartTime">--</span>
         </div>
         <div class="summary-item">
-          <div class="summary-label">Duration</div>
-          <div class="summary-value" id="summaryDuration">--</div>
+          <span class="summary-label">Duration</span>
+          <span class="summary-value" id="summaryDuration">--</span>
         </div>
         <div class="summary-item">
-          <div class="summary-label">Mode</div>
-          <div class="summary-value" id="summaryMode">--</div>
+          <span class="summary-label">Mode</span>
+          <span class="summary-value" id="summaryMode">--</span>
         </div>
       </div>
     </div>
@@ -720,7 +717,6 @@
     <div class="orchestration-container" id="orchestrationContainer">
       <!-- Diagram Section -->
       <div class="diagram-section">
-        <h6>Execution Flow</h6>
         <div class="mermaid-wrapper" id="diagramContainer">
           <p style="text-align: center; color: var(--text-muted);">Loading orchestration diagram...</p>
         </div>
