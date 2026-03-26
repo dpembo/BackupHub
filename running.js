@@ -137,4 +137,20 @@ function removeItem(jobName)
     }
 }
 
-module.exports = { init, add, getItems,getItemsUsingTZ, getItemByName, searchItemWithName, getItem , createItem, removeItem};
+function removeItemByExecutionId(executionId)
+{
+    logger.debug("Removing Running item with Execution ID [" + executionId + "]");
+    //Find index from executionId
+    var index = -1;
+    for(var i=0;i<historyItems.length;i++){
+        if(historyItems[i].executionId == executionId){
+            index = i;
+            break;
+        }
+    }
+    if (index !== -1) {
+        removeItemByIndex(index);
+    }
+}
+
+module.exports = { init, add, getItems,getItemsUsingTZ, getItemByName, searchItemWithName, getItem , createItem, removeItem, removeItemByExecutionId};

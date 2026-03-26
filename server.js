@@ -2388,6 +2388,17 @@ app.post('/rest/orchestration/jobs/:jobId/execute', validateCsrf, User.isAuthent
   const crypto = require('crypto');
   const executionId = crypto.randomBytes(8).toString('hex');
   
+  // Get the orchestration job to get its name for the running queue
+  let orchestrationName = jobId; // fallback to jobId
+  try {
+    const job = await orchestration.getJob(jobId);
+    if (job && job.name) {
+      orchestrationName = job.name;
+    }
+  } catch (err) {
+    logger.warn(`Could not get orchestration name for [${jobId}]: ${err.message}`);
+  }
+  
   // Create a stub execution record (NOT saved to permanent history yet)
   // This is cached in-memory so monitor can find it immediately
   const stubExecution = {
@@ -2412,6 +2423,13 @@ app.post('/rest/orchestration/jobs/:jobId/execute', validateCsrf, User.isAuthent
   saveInProgressExecution(jobId, executionId, stubExecution);
   logger.info(`Created in-progress execution for [${jobId}] with ID [${executionId}]`);
   
+  // Add to running queue so it shows in running list with link to monitor
+  const runningItem = running.createItem(orchestrationName, new Date().toISOString(), 'manual');
+  runningItem.orchestrationId = jobId;
+  runningItem.executionId = executionId;
+  running.add(runningItem);
+  logger.info(`Added orchestration to running queue: [${orchestrationName}] with execution [${executionId}]`);
+  
   // Create callback to update cache as nodes complete
   const onNodeComplete = (executionLog) => {
     updateInProgressExecution(jobId, executionId, executionLog);
@@ -2427,11 +2445,15 @@ app.post('/rest/orchestration/jobs/:jobId/execute', validateCsrf, User.isAuthent
     await orchestration.saveExecutionResult(executionLog);
     // Clear the stub from cache - actual execution is now in history
     clearInProgressExecution(jobId, executionId);
+    // Remove from running queue
+    running.removeItemByExecutionId(executionId);
     logger.info(`Orchestration [${jobId}] execution completed with status: ${executionLog.finalStatus}`);
   }).catch((err) => {
     logger.error(`Background orchestration execution failed: ${err.message}`);
     // Clear the stub on error too
     clearInProgressExecution(jobId, executionId);
+    // Remove from running queue on error as well
+    running.removeItemByExecutionId(executionId);
   });
   
   // Return immediately with executionId

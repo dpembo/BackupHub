@@ -16,6 +16,13 @@ function getSchedule(jobName){
     if(schedules[i].jobName==jobName) return i;
   }
   return -1;
+}
+
+function isOrchestrationNode(jobName){
+  // Pattern: "Orchestration [jobId] Node [nodeId]"
+  // These are individual nodes of an orchestration execution
+  // They should not be displayed since we show the parent orchestration group instead
+  return /^Orchestration \[[^\]]+\] Node \[[^\]]+\]$/.test(jobName);
 } 
 
 function displaySecs(secs) {
@@ -63,9 +70,16 @@ function displaySecs(secs) {
         <!-- RUNNING ITEMS -->
 
         <% for(var i = 0; i<runningList.length;i++) {%>
+          <% if(isOrchestrationNode(runningList[i].jobName)) continue; %>
 
           <tr class="runningHighlight runningItem">
-            <td><span class="material-icons vertMid" style="color:<%=runningList[i].color%>;font-size:24pt"><%=runningList[i].icon%></span></td>
+            <td>
+              <% if (runningList[i].orchestrationId) { %>
+                <span class="material-icons vertMid blinking" style="color:#ff9800;font-size:24pt" title="Orchestration">schema</span>
+              <% } else { %>
+                <span class="material-icons vertMid" style="color:<%=runningList[i].color%>;font-size:24pt"><%=runningList[i].icon%></span>
+              <% } %>
+            </td>
             <td><span class="orange-text blinking"><%=runningList[i].jobName%></span></td>
             
             <td>
@@ -105,7 +119,11 @@ function displaySecs(secs) {
               <td>-</td>
               <td><span title="Running" class="blinking orange-text material-icons">pending</span></td>
               <td>
-                <a href="scheduleInfo.html?index=<%=getSchedule(runningList[i].jobName)%>" title="view log" class="modal-trigger"><span class="material-icons vertTop runningIcons">visibility</span></a>
+                <% if (runningList[i].orchestrationId && runningList[i].executionId) { %>
+                  <a href="/orchestration/monitor.html?jobId=<%=encodeURIComponent(runningList[i].orchestrationId)%>&executionId=<%=encodeURIComponent(runningList[i].executionId)%>" title="view orchestration monitor" class="modal-trigger"><span class="material-icons vertTop runningIcons">visibility</span></a>
+                <% } else { %>
+                  <a href="scheduleInfo.html?index=<%=getSchedule(runningList[i].jobName)%>" title="view log" class="modal-trigger"><span class="material-icons vertTop runningIcons">visibility</span></a>
+                <% } %>
           </tr>
           <%}%>
 
