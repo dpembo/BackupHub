@@ -35,6 +35,7 @@ function waitForScriptCompletion(jobName, timeout = 300000) {
     const timeoutHandle = setTimeout(() => {
       logger.error(`[ORCHESTRATION] Timeout waiting for script [${jobName}]`);
       delete pendingExecutions[jobName];
+      scriptCompletionEmitter.removeListener(`complete:${jobName}`, onCompletion);
       reject(new Error(`Script execution timeout for job [${jobName}] after ${timeout}ms`));
     }, timeout);
 
