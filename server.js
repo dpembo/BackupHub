@@ -1551,6 +1551,14 @@ app.post('/scheduler.html', validateCsrf, User.isAuthenticated, (req, res) => {
     jobName = sanitizeHtml(jobName);
     colour = sanitizeHtml(colour);
     
+    // Normalize and validate scheduleMode to allow-list
+    scheduleMode = scheduleMode === 'orchestration' ? 'orchestration' : 'classic';
+    
+    // Sanitize orchestrationId
+    if (orchestrationId) {
+      orchestrationId = sanitizeHtml(orchestrationId);
+    }
+    
     // Validate based on schedule mode
     if (scheduleMode === 'orchestration') {
       if (!orchestrationId || orchestrationId.length === 0) {
