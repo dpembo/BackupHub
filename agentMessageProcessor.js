@@ -231,14 +231,12 @@ async function processMessage(topic, message,protocol) {
 
   function emitOrchestrationNodeLogUpdate(jobName, logData) {
     try {
-      // jobName format: "Orchestration [jobId] Node [nodeId]"
-      const match = jobName.match(/^Orchestration\s+\[(.+?)\]\s+Node\s+\[(.+?)\]/);
+      // jobName format: "Orchestration [jobId] Execution [executionId] Node [nodeId]"
+      const match = jobName.match(/^Orchestration\s+\[(.+?)\]\s+Execution\s+\[(.+?)\]\s+Node\s+\[(.+?)\]/);
       if (!match) return;
       const jobId = match[1];
-      const nodeId = match[2];
-      const orchestrationEngine = require('./orchestrationEngine.js');
-      const executionTracking = orchestrationEngine.activeOrchestrationExecutions[jobId];
-      const executionId = executionTracking ? executionTracking.latestExecutionId : null;
+      const executionId = match[2];
+      const nodeId = match[3];
       if (!executionId) return;
       const wsBrowserTransport = require('./communications/wsBrowserTransport.js');
       const io = wsBrowserTransport.getIO();
@@ -425,13 +423,11 @@ async function processMessage(topic, message,protocol) {
     
     // Extract executionId for orchestration nodes
     let executionId = null;
-    const orchestrationMatch = obj.jobName.match(/^Orchestration\s+\[(.+?)\]\s+Node/);
+    const orchestrationMatch = obj.jobName.match(/^Orchestration\s+\[(.+?)\]\s+Execution\s+\[(.+?)\]\s+Node/);
     if (orchestrationMatch) {
       try {
-        const orchestrationEngine = require('./orchestrationEngine.js');
         const jobId = orchestrationMatch[1];
-        const executionTracking = orchestrationEngine.activeOrchestrationExecutions[jobId];
-        executionId = executionTracking ? executionTracking.latestExecutionId : null;
+        executionId = orchestrationMatch[2];
       } catch (err) {
         logger.debug(`[ORCHESTRATION] Unable to get executionId: ${err.message}`);
       }

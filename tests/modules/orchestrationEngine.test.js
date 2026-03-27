@@ -129,6 +129,38 @@ describe('Orchestration Engine Module', () => {
       expect(result1.exitCode).toBe(0);
       expect(result2.exitCode).toBe(1);
     });
+
+    it('should handle concurrent executions of the SAME job with different executionIds', async () => {
+      // Simulate two concurrent executions of the same orchestration job with different executionIds
+      // This proves the fix for the concurrency bug where jobName must include executionId
+      const jobName1 = 'Orchestration [test-job] Execution [exec-uuid-1] Node [node-1]';
+      const jobName2 = 'Orchestration [test-job] Execution [exec-uuid-2] Node [node-1]';
+
+      const promise1 = orchestrationEngine.waitForScriptCompletion(jobName1, 5000);
+      const promise2 = orchestrationEngine.waitForScriptCompletion(jobName2, 5000);
+
+      // Simulate completions in reverse order to ensure they don't cross-talk
+      setTimeout(() => {
+        orchestrationEngine.signalScriptCompletion(jobName2, { 
+          exitCode: 1, 
+          stdout: 'Output from execution 2',
+          stderr: '' 
+        });
+        orchestrationEngine.signalScriptCompletion(jobName1, { 
+          exitCode: 0, 
+          stdout: 'Output from execution 1',
+          stderr: '' 
+        });
+      }, 100);
+
+      const [result1, result2] = await Promise.all([promise1, promise2]);
+
+      // Verify each execution got its own result (not cross-talked)
+      expect(result1.exitCode).toBe(0);
+      expect(result1.stdout).toBe('Output from execution 1');
+      expect(result2.exitCode).toBe(1);
+      expect(result2.stdout).toBe('Output from execution 2');
+    });
   });
 
   describe('signalScriptCompletion()', () => {

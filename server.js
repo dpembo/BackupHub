@@ -478,6 +478,43 @@ const validateCsrf = (req, res, next) => {
   next();
 };
 
+// ============================================================================
+// SENSITIVE API TOKEN - For protecting critical data endpoints (/rest/data/*)
+// ============================================================================
+// Generate a token for sensitive data APIs on first startup
+const crypto = require('crypto');
+let sensitiveDataToken = null;
+
+function initializeSensitiveDataToken() {
+  if (!sensitiveDataToken) {
+    sensitiveDataToken = crypto.randomBytes(32).toString('hex');
+    console.log('\n');
+    console.log('='.repeat(80));
+    console.log('SENSITIVE DATA API TOKEN (save this in a safe place):');
+    console.log(`Token: ${sensitiveDataToken}`);
+    console.log('Use as header: X-Data-Token: <token>');
+    console.log('Or as URL param: ?dataToken=<token>');
+    console.log('='.repeat(80));
+    console.log('\n');
+  }
+  return sensitiveDataToken;
+}
+
+// Middleware to validate sensitive data API token
+const validateSensitiveDataToken = (req, res, next) => {
+  const token = initializeSensitiveDataToken();
+  const providedToken = req.headers['x-data-token'] || req.headers['x-sensitive-token'] || req.query.dataToken;
+  
+  if (!providedToken || providedToken !== token) {
+    logger.warn(`[SENSITIVE-API] Unauthorized access attempt to ${req.method} ${req.path} - invalid or missing token`);
+    return res.status(403).json({ success: false, message: 'Invalid or missing sensitive data token. Check server console for token.' });
+  }
+  
+  logger.debug(`[SENSITIVE-API] Authorized access to ${req.method} ${req.path}`);
+  next();
+};
+
+
 // Routes
 // Login route: Redirect to registration if no user is registered
 app.get('/login.html', asyncHandler(async (req, res) => {
@@ -1179,6 +1216,26 @@ app.get('/historyList/data',User.isAuthenticated, async (req, res) => {
     }
   }
   
+  // Pre-fetch orchestration success percentages to avoid N+1 queries
+  // Get all execution history once and compute percentages in-memory
+  let orchestrationSuccessMap = {};
+  try {
+    const allExecutions = await db.getData('ORCHESTRATION_EXECUTIONS');
+    if (allExecutions) {
+      for (const jobId in allExecutions) {
+        const executions = allExecutions[jobId] || [];
+        if (executions.length > 0) {
+          const successCount = executions.filter(e => e.finalStatus === 'success').length;
+          orchestrationSuccessMap[jobId] = Math.round((successCount / executions.length) * 100);
+        } else {
+          orchestrationSuccessMap[jobId] = '-';
+        }
+      }
+    }
+  } catch (err) {
+    logger.warn(`Error pre-fetching orchestration execution history: ${err.message}`);
+  }
+  
   for(var x=0;x<historyList.length;x++)
   {
     applyScheduleStyle(historyList[x]);
@@ -1202,9 +1259,9 @@ app.get('/historyList/data',User.isAuthenticated, async (req, res) => {
       historyList[x].runTime = 0;
     }
     
-    // Calculate orchestration success percentage based on finalStatus of all executions
+    // Use pre-computed success percentage (calculated once before loop)
     if (historyList[x].isOrchestration) {
-      historyList[x].successPercentage = await hist.getOrchestrationSuccessPercentage(historyList[x].jobId);
+      historyList[x].successPercentage = orchestrationSuccessMap[historyList[x].jobId] || '-';
     }
   }
 
@@ -1681,6 +1738,24 @@ app.get('/runSchedule.html',User.isAuthenticated, asyncHandler(async (req, res) 
         saveInProgressExecution(orchestrationId, executionId, stubExecution);
         logger.info(`Created in-progress execution for [${orchestrationId}] with ID [${executionId}]`);
         
+        // Get the orchestration job to get its name for the running queue
+        let orchestrationName = orchestrationId; // fallback to orchestrationId
+        try {
+          const job = await orchestration.getJob(orchestrationId);
+          if (job && job.name) {
+            orchestrationName = job.name;
+          }
+        } catch (err) {
+          logger.warn(`Could not get orchestration name for [${orchestrationId}]: ${err.message}`);
+        }
+        
+        // Add to running queue so it shows in running list with link to monitor
+        const runningItem = running.createItem(orchestrationName, new Date().toISOString(), 'manual');
+        runningItem.orchestrationId = orchestrationId;
+        runningItem.executionId = executionId;
+        running.add(runningItem);
+        logger.info(`Added orchestration to running queue: [${orchestrationName}] with execution [${executionId}]`);
+        
         // Create callback to update cache as nodes complete
         const onNodeComplete = (executionLog) => {
           updateInProgressExecution(orchestrationId, executionId, executionLog);
@@ -1696,11 +1771,15 @@ app.get('/runSchedule.html',User.isAuthenticated, asyncHandler(async (req, res) 
           await orchestration.saveExecutionResult(executionLog);
           // Clear the stub from cache - actual execution is now in history
           clearInProgressExecution(orchestrationId, executionId);
+          // Remove from running queue
+          running.removeItem(orchestrationName);
           logger.info(`Orchestration [${orchestrationId}] execution completed with status: ${executionLog.finalStatus}`);
         }).catch((err) => {
           logger.error(`Background orchestration execution failed: ${err.message}`);
           // Clear the stub on error too
           clearInProgressExecution(orchestrationId, executionId);
+          // Remove from running queue on error
+          running.removeItem(orchestrationName);
         });
         
         // Redirect to monitor view immediately with the execution ID
@@ -1777,29 +1856,21 @@ app.get('/rest/jobs',User.isAuthenticated, (req, res) => {
   res.send(JSON.stringify(config, null, "  "));
 });
 
-app.get('/',User.isAuthenticated, (request, response) => {
+app.get('/',User.isAuthenticated, async (request, response) => {
 
   var historyList = hist.getItemsUsingTZ();
   var runningList = running.getItemsUsingTZ();
   var agentsDict = agents.getDict();
-  var chartData = hist.getChartDataSet(7);
+  var chartData = await hist.getChartDataSet(7);
 
   var username = request.session.user.username;
   if(username===undefined || username===null)username="User";
 
   var runningCount = runningList.length;
-  var successCount = 0;
-  var failCount = 0;
-
-  for(var i=0;i<historyList.length;i++)
-  {
-    if(parseInt(historyList[i].returnCode)==0){
-      successCount++
-    }
-    else{
-      failCount++;
-    }
-  }
+  
+  // Calculate success/fail from chart data (includes both regular jobs and orchestrations)
+  var successCount = chartData.success.reduce((a, b) => a + b, 0);
+  var failCount = chartData.fail.reduce((a, b) => a + b, 0);
 
   //scheduler.getTodaysScheduleCount();
   
@@ -1817,7 +1888,7 @@ app.get('/',User.isAuthenticated, (request, response) => {
     mqttConnected: mqttTransport.isMQTTConnected(),
     todayJobs: scheduler.getTodaysScheduleCount(),
     scheduleHistory: scheduler.getLast7DaysScheduleCount(),
-    todayJobsRun: hist.getTodaysRun()
+    todayJobsRun: await hist.getTodaysRun()
   });
 });
 
@@ -2754,8 +2825,9 @@ app.delete('/rest/users/:username', User.isAuthenticated, asyncHandler(async (re
 
 /**
  * Get value by key from custom data store
+ * REQUIRES: User authentication + Sensitive data token
  */
-app.get('/rest/data/:key', User.isAuthenticated, asyncHandler(async (req, res) => {
+app.get('/rest/data/:key', validateSensitiveDataToken, User.isAuthenticated, asyncHandler(async (req, res) => {
   try {
     const value = await db.getData(req.params.key);
     res.json({ key: req.params.key, value });
@@ -2766,8 +2838,9 @@ app.get('/rest/data/:key', User.isAuthenticated, asyncHandler(async (req, res) =
 
 /**
  * Create or update value by key in custom data store
+ * REQUIRES: User authentication + Sensitive data token
  */
-app.put('/rest/data/:key', User.isAuthenticated, asyncHandler(async (req, res) => {
+app.put('/rest/data/:key', validateSensitiveDataToken, User.isAuthenticated, asyncHandler(async (req, res) => {
   try {
     await db.putData(req.params.key, req.body.value);
     res.json({ success: true });
@@ -2779,8 +2852,9 @@ app.put('/rest/data/:key', User.isAuthenticated, asyncHandler(async (req, res) =
 
 /**
  * Delete value by key from custom data store
+ * REQUIRES: User authentication + Sensitive data token
  */
-app.delete('/rest/data/:key', User.isAuthenticated, asyncHandler(async (req, res) => {
+app.delete('/rest/data/:key', validateSensitiveDataToken, User.isAuthenticated, asyncHandler(async (req, res) => {
   try {
     await db.deleteData(req.params.key);
     res.json({ success: true });
@@ -2903,7 +2977,7 @@ app.get('/orchestration/execution/details', User.isAuthenticated, asyncHandler(a
             const agent = agents.getAgent(agentId);
             if (agent && (!cachedExecution.scriptOutputs[node.id] || !cachedExecution.scriptOutputs[node.id].stdout)) {
               // Node is executing or recently completed, try to fetch logs from database
-              const jobName = `Orchestration [${jobId}] Node [${node.id}]`;
+              const jobName = `Orchestration [${jobId}] Execution [${executionId}] Node [${node.id}]`;
               const logKey = `${agent.name}_${jobName}_log`;
               try {
                 // Use simpleGetData to match agent's log storage mechanism

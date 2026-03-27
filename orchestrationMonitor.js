@@ -249,7 +249,19 @@ async function getExecutionHistory(jobId) {
 async function listJobsWithStatus(timezone) {
   try {
     const jobs = await db.getData('ORCHESTRATION_JOBS');
-    const executions = await db.getData('ORCHESTRATION_EXECUTIONS');
+    
+    // Fetch execution history, treating missing data as empty object
+    // This ensures jobs appear with 'never_run' status on first use
+    let executions = {};
+    try {
+      executions = await db.getData('ORCHESTRATION_EXECUTIONS');
+    } catch (err) {
+      if (!err.message?.includes('NotFoundError')) {
+        throw err;
+      }
+      // If ORCHESTRATION_EXECUTIONS does not exist yet, treat as no executions recorded.
+      executions = {};
+    }
     
     const jobList = [];
     for (const [jobId, jobDef] of Object.entries(jobs || {})) {
@@ -285,9 +297,6 @@ async function listJobsWithStatus(timezone) {
       return getTime(b) - getTime(a);
     });
   } catch (err) {
-    if (err.message?.includes('NotFoundError')) {
-      return [];
-    }
     logger.error(`Error listing orchestration jobs: ${err.message}`);
     throw err;
   }

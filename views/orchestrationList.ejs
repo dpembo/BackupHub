@@ -85,8 +85,8 @@
             <td>${updatedDate}</td>
             <td>
               <a title="edit" href="/orchestrationBuilder.html?id=${encodeURIComponent(orchId)}"><i class="material-icons tableIconButton vertMid">edit</i></a>
-              <a title="delete" onclick="deleteOrchestration('${encodeURIComponent(orchId)}', '${orchNameForOnclick}')"><i class="material-icons tableIconButton vertMid" style="cursor: pointer;">delete</i></a>
-              <a title="run" onclick="runOrchestration('${encodeURIComponent(orchId)}')"><i class="material-icons tableIconButton vertMid" style="cursor: pointer;">play_circle</i></a>
+              <a title="delete" onclick="deleteOrchestration('${escapeQuotes(orchId)}', '${orchNameForOnclick}')"><i class="material-icons tableIconButton vertMid" style="cursor: pointer;">delete</i></a>
+              <a title="run" onclick="runOrchestration('${escapeQuotes(orchId)}')"><i class="material-icons tableIconButton vertMid" style="cursor: pointer;">play_circle</i></a>
             </td>
           </tr>
         `;

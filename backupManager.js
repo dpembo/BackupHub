@@ -42,6 +42,18 @@ function getBackupItems() {
       name: 'Backup Schedules',
       description: 'All configured backup schedules',
     },
+    jobHistory: {
+      name: 'Job Execution History',
+      description: 'Historical logs of all backup job executions',
+    },
+    orchestrationJobs: {
+      name: 'Orchestration Jobs',
+      description: 'All configured orchestration job definitions',
+    },
+    orchestrationExecutions: {
+      name: 'Orchestration Execution History',
+      description: 'Historical records of orchestration job executions',
+    },
     agentHistory: {
       name: 'Agent Connection History',
       description: 'Historical logs of agent connections',
@@ -55,6 +67,9 @@ function getBackupItems() {
  * @param {boolean} options.serverConfig - Include server configuration
  * @param {boolean} options.agentsConfig - Include agents configuration
  * @param {boolean} options.schedules - Include schedules
+ * @param {boolean} options.jobHistory - Include job execution history
+ * @param {boolean} options.orchestrationJobs - Include orchestration jobs
+ * @param {boolean} options.orchestrationExecutions - Include orchestration executions
  * @param {boolean} options.agentHistory - Include agent history
  * @returns {Promise<Buffer>} - Zip file buffer
  */
@@ -64,6 +79,9 @@ async function createBackup(options = {}) {
       serverConfig = true,
       agentsConfig = true,
       schedules = true,
+      jobHistory = true,
+      orchestrationJobs = true,
+      orchestrationExecutions = true,
       agentHistory = true,
     } = options;
 
@@ -94,6 +112,9 @@ async function createBackup(options = {}) {
           serverConfig,
           agentsConfig,
           schedules,
+          jobHistory,
+          orchestrationJobs,
+          orchestrationExecutions,
           agentHistory,
         });
 
@@ -159,6 +180,51 @@ async function addFilesToArchive(archive, options) {
       }
     }
 
+    // Add job history
+    if (options.jobHistory) {
+      try {
+        const jobHistory = await db.getData('JOB_HISTORY');
+        if (jobHistory) {
+          archive.append(JSON.stringify(jobHistory, null, 2), {
+            name: `${backupDir}/job-history.json`,
+          });
+          logger.debug('Added job execution history to backup');
+        }
+      } catch (err) {
+        logger.debug('No job history found in database');
+      }
+    }
+
+    // Add orchestration jobs
+    if (options.orchestrationJobs) {
+      try {
+        const orchJobs = await db.getData('ORCHESTRATION_JOBS');
+        if (orchJobs) {
+          archive.append(JSON.stringify(orchJobs, null, 2), {
+            name: `${backupDir}/orchestration-jobs.json`,
+          });
+          logger.debug('Added orchestration jobs to backup');
+        }
+      } catch (err) {
+        logger.debug('No orchestration jobs found in database');
+      }
+    }
+
+    // Add orchestration executions
+    if (options.orchestrationExecutions) {
+      try {
+        const orchExecutions = await db.getData('ORCHESTRATION_EXECUTIONS');
+        if (orchExecutions) {
+          archive.append(JSON.stringify(orchExecutions, null, 2), {
+            name: `${backupDir}/orchestration-executions.json`,
+          });
+          logger.debug('Added orchestration execution history to backup');
+        }
+      } catch (err) {
+        logger.debug('No orchestration executions found in database');
+      }
+    }
+
     // Add agent history
     if (options.agentHistory) {
       try {
@@ -183,6 +249,9 @@ async function addFilesToArchive(archive, options) {
         serverConfig: options.serverConfig,
         agentsConfig: options.agentsConfig,
         schedules: options.schedules,
+        jobHistory: options.jobHistory,
+        orchestrationJobs: options.orchestrationJobs,
+        orchestrationExecutions: options.orchestrationExecutions,
         agentHistory: options.agentHistory,
       },
     };
@@ -275,6 +344,42 @@ async function restoreBackup(zipBuffer) {
         logger.info('Schedules restored');
       } else {
         results.warnings.push('Schedules not found in backup');
+      }
+    }
+
+    // Restore job history
+    if (metadata.items?.jobHistory) {
+      const jobHistoryPath = path.join(backupPath, 'job-history.json');
+      if (fsSync.existsSync(jobHistoryPath)) {
+        await restoreJobHistory(jobHistoryPath);
+        results.itemsRestored.push('Job Execution History');
+        logger.info('Job history restored');
+      } else {
+        results.warnings.push('Job history not found in backup');
+      }
+    }
+
+    // Restore orchestration jobs
+    if (metadata.items?.orchestrationJobs) {
+      const orchJobsPath = path.join(backupPath, 'orchestration-jobs.json');
+      if (fsSync.existsSync(orchJobsPath)) {
+        await restoreOrchestrationJobs(orchJobsPath);
+        results.itemsRestored.push('Orchestration Jobs');
+        logger.info('Orchestration jobs restored');
+      } else {
+        results.warnings.push('Orchestration jobs not found in backup');
+      }
+    }
+
+    // Restore orchestration executions
+    if (metadata.items?.orchestrationExecutions) {
+      const orchExecutionsPath = path.join(backupPath, 'orchestration-executions.json');
+      if (fsSync.existsSync(orchExecutionsPath)) {
+        await restoreOrchestrationExecutions(orchExecutionsPath);
+        results.itemsRestored.push('Orchestration Execution History');
+        logger.info('Orchestration executions restored');
+      } else {
+        results.warnings.push('Orchestration execution history not found in backup');
       }
     }
 
@@ -397,6 +502,60 @@ async function restoreAgentHistory(historyPath) {
 
   await agentHistoryDb.importAll(historyData);
   logger.info(`Restored ${historyData.length} agent history records`);
+}
+
+/**
+ * Restore job history
+ * @private
+ */
+async function restoreJobHistory(jobHistoryPath) {
+  const content = await fs.readFile(jobHistoryPath, 'utf8');
+  const jobHistory = JSON.parse(content);
+
+  // Validate it's an array
+  if (!Array.isArray(jobHistory)) {
+    throw new AppError('Invalid job history format', 400);
+  }
+
+  // Save to database
+  await db.putData('JOB_HISTORY', jobHistory);
+  logger.info(`Restored ${jobHistory.length} job history records`);
+}
+
+/**
+ * Restore orchestration jobs
+ * @private
+ */
+async function restoreOrchestrationJobs(orchJobsPath) {
+  const content = await fs.readFile(orchJobsPath, 'utf8');
+  const orchJobs = JSON.parse(content);
+
+  // Validate it's an object (keyed by job ID)
+  if (!orchJobs || typeof orchJobs !== 'object' || Array.isArray(orchJobs)) {
+    throw new AppError('Invalid orchestration jobs format', 400);
+  }
+
+  // Save to database
+  await db.putData('ORCHESTRATION_JOBS', orchJobs);
+  logger.info(`Restored ${Object.keys(orchJobs).length} orchestration jobs`);
+}
+
+/**
+ * Restore orchestration executions
+ * @private
+ */
+async function restoreOrchestrationExecutions(orchExecutionsPath) {
+  const content = await fs.readFile(orchExecutionsPath, 'utf8');
+  const orchExecutions = JSON.parse(content);
+
+  // Validate it's an object (keyed by job ID)
+  if (!orchExecutions || typeof orchExecutions !== 'object' || Array.isArray(orchExecutions)) {
+    throw new AppError('Invalid orchestration executions format', 400);
+  }
+
+  // Save to database
+  await db.putData('ORCHESTRATION_EXECUTIONS', orchExecutions);
+  logger.info(`Restored orchestration execution history`);
 }
 
 module.exports = {

@@ -9,7 +9,7 @@ const EventEmitter = require('events');
 const wsBrowser = require('./communications/wsBrowserTransport.js');
 
 // Global store for pending script executions
-// Keyed by jobName (which includes orchestration jobId and node id)
+// Keyed by jobName (which includes orchestration jobId, executionId, and node id)
 const pendingExecutions = {};
 
 // Track active orchestration execution IDs by jobId
@@ -22,7 +22,7 @@ const scriptCompletionEmitter = new EventEmitter();
 
 /**
  * Wait for a script to complete on an agent
- * @param {string} jobName - The job name (orchestration job ID + node ID)
+ * @param {string} jobName - The job name (orchestration job ID + execution ID + node ID)
  * @param {number} timeout - Timeout in milliseconds (default 5 minutes)
  * @returns {Promise<Object>} Execution result with exitCode, stdout, stderr
  */
@@ -250,7 +250,7 @@ async function executeJob(jobId, isManual = false, executionId = null, onNodeCom
         };
 
         // Emit nodeCompleted event
-        console.log(`[executeJob] Start node - emitting orchestrationNodeCompleted for ${currentNodeId}`);
+        logger.info(`[ORCHESTRATION] Node [${currentNodeId}] completed - emitting orchestrationNodeCompleted`);
         wsBrowser.emitOrchestrationEvent(jobId, executionLog.executionId, 'orchestrationNodeCompleted', {
           nodeId: currentNodeId,
           nodeType: currentNode.type,
@@ -283,7 +283,7 @@ async function executeJob(jobId, isManual = false, executionId = null, onNodeCom
           const agents = require('./agents.js');
           const agent = agents.getAgent(agentId);
           if (agent) {
-            const jobName = `Orchestration [${jobId}] Node [${currentNodeId}]`;
+            const jobName = `Orchestration [${jobId}] Execution [${executionLog.executionId}] Node [${currentNodeId}]`;
             const logKey = `${agent.name}_${jobName}_log`;
             try {
               await db.deleteData(logKey);
@@ -305,7 +305,8 @@ async function executeJob(jobId, isManual = false, executionId = null, onNodeCom
           }
 
           // Construct job name that matches what agent will report back
-          const jobName = `Orchestration [${jobId}] Node [${currentNodeId}]`;
+          // Format: Orchestration [jobId] Execution [executionId] Node [nodeId]
+          const jobName = `Orchestration [${jobId}] Execution [${executionLog.executionId}] Node [${currentNodeId}]`;
           
           logger.info(`Sending script [${scriptPath}] to agent [${agentId}]`);
           
