@@ -1268,7 +1268,7 @@ app.get('/historyList/data',User.isAuthenticated, async (req, res) => {
   }
 });
 
-app.delete('/rest/history/clear', validateCsrf, User.isAuthenticated, asyncHandler(async (req, res) => {
+app.delete('/rest/history/clear', User.isAuthenticated, asyncHandler(async (req, res) => {
   logger.info('Clearing all history items');
   try {
     await hist.clearHistory();
@@ -2357,7 +2357,7 @@ app.get('/rest/orchestration/jobs/:jobId', User.isAuthenticated, asyncHandler(as
 /**
  * Create or update an orchestration job
  */
-app.post('/rest/orchestration/jobs', validateCsrf, User.isAuthenticated, asyncHandler(async (req, res) => {
+app.post('/rest/orchestration/jobs', User.isAuthenticated, asyncHandler(async (req, res) => {
   const { jobId, name, description, nodes, edges } = req.body;
   
   if (!jobId || !name) {
@@ -2377,7 +2377,7 @@ app.post('/rest/orchestration/jobs', validateCsrf, User.isAuthenticated, asyncHa
 /**
  * Update an existing orchestration job
  */
-app.put('/rest/orchestration/jobs/:jobId', validateCsrf, User.isAuthenticated, asyncHandler(async (req, res) => {
+app.put('/rest/orchestration/jobs/:jobId', User.isAuthenticated, asyncHandler(async (req, res) => {
   const { name, description, nodes, edges } = req.body;
   const { jobId } = req.params;
   
@@ -2394,7 +2394,7 @@ app.put('/rest/orchestration/jobs/:jobId', validateCsrf, User.isAuthenticated, a
 /**
  * Delete an orchestration job
  */
-app.delete('/rest/orchestration/jobs/:jobId', validateCsrf, User.isAuthenticated, asyncHandler(async (req, res) => {
+app.delete('/rest/orchestration/jobs/:jobId', User.isAuthenticated, asyncHandler(async (req, res) => {
   const { jobId } = req.params;
   
   await orchestration.deleteJob(jobId);
@@ -2404,7 +2404,7 @@ app.delete('/rest/orchestration/jobs/:jobId', validateCsrf, User.isAuthenticated
 /**
  * Execute an orchestration job
  */
-app.post('/rest/orchestration/jobs/:jobId/execute', validateCsrf, User.isAuthenticated, asyncHandler(async (req, res) => {
+app.post('/rest/orchestration/jobs/:jobId/execute', User.isAuthenticated, asyncHandler(async (req, res) => {
   const { jobId } = req.params;
   
   logger.info(`Executing orchestration job [${jobId}]`);
@@ -2550,7 +2550,7 @@ app.get('/rest/schedules/:jobName', User.isAuthenticated, asyncHandler(async (re
 /**
  * Delete a specific schedule by job name
  */
-app.delete('/rest/schedules/:jobName', validateCsrf, User.isAuthenticated, asyncHandler(async (req, res) => {
+app.delete('/rest/schedules/:jobName', User.isAuthenticated, asyncHandler(async (req, res) => {
   const { jobName } = req.params;
   
   try {
@@ -2568,7 +2568,7 @@ app.delete('/rest/schedules/:jobName', validateCsrf, User.isAuthenticated, async
 /**
  * Delete all schedules
  */
-app.delete('/rest/schedules', validateCsrf, User.isAuthenticated, asyncHandler(async (req, res) => {
+app.delete('/rest/schedules', User.isAuthenticated, asyncHandler(async (req, res) => {
   try {
     // Clear all schedules by writing an empty array
     await db.putData('SCHEDULES_CONFIG', []);
