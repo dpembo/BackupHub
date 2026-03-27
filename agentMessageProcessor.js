@@ -425,9 +425,14 @@ async function processMessage(topic, message,protocol) {
     // Extract executionId for orchestration nodes
     let executionId = null;
     const orchestrationMatch = obj.jobName.match(/^Orchestration\s+\[(.+?)\]\s+Node/);
-    if (orchestrationMatch && orchestrationEngine) {
-      const jobId = orchestrationMatch[1];
-      executionId = orchestrationEngine.activeOrchestrationExecutions[jobId] || null;
+    if (orchestrationMatch) {
+      try {
+        const orchestrationEngine = require('./orchestrationEngine.js');
+        const jobId = orchestrationMatch[1];
+        executionId = orchestrationEngine.activeOrchestrationExecutions[jobId] || null;
+      } catch (err) {
+        logger.debug(`[ORCHESTRATION] Unable to get executionId: ${err.message}`);
+      }
     }
     
     try {
