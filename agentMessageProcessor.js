@@ -105,14 +105,14 @@ async function processMessage(topic, message,protocol) {
             try {
               const logKey = `${obj.name}_${obj.jobName}_log`;
               logger.debug(`[ORCHESTRATION] Fetching log with key: [${logKey}]`);
-              const logData = await db.simpleGetData(logKey);
+              const logData = await db.getData(logKey);
               logOutput = logData || '';
               logger.debug(`[ORCHESTRATION] Fetched log (${logOutput.length} bytes) for job [${obj.jobName}]`);
               logger.debug(`[ORCHESTRATION] Log content first 100 chars: ${logOutput.substring(0, 100)}`);
               
               // Clear the log from the database to prevent mixing with future runs if same job ID is reused
               try {
-                await db.simpleDeleteData(logKey);
+                await db.deleteData(logKey);
                 logger.debug(`[ORCHESTRATION] Cleared log data for key [${logKey}]`);
               } catch (deleteErr) {
                 logger.debug(`[ORCHESTRATION] Could not clear log (non-critical): ${deleteErr.message}`);
@@ -292,13 +292,13 @@ async function processMessage(topic, message,protocol) {
         var stats = null;
         var log = null;
         try {
-          stats = await db.simpleGetData(key1);
+          stats = await db.getData(key1);
         } catch(err) {
           logger.warn(`[emitScheduleUpdate] Unable to find stats data for ${key1}`);
         }
         
         try {
-          log = await db.simpleGetData(key2);
+          log = await db.getData(key2);
         } catch(err) {
           logger.warn(`[emitScheduleUpdate] Unable to find log data for ${key2}`);
         }

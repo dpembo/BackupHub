@@ -307,6 +307,7 @@ module.exports = {
   // Legacy aliases for old code (will be removed)
   simpleGetData: getData,          // Old name -> new function
   simplePutData: putData,          // Old name -> new function
+  simpleDeleteData: deleteData,    // Old name -> new function
   getMany: getManyData,            // Old name -> new function
   batch: batchData,                // Old name -> new function
   clear: clearData,                // Old name -> new function
