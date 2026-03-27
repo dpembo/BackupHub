@@ -405,7 +405,7 @@ function noValue(inValue){
               </div>
             </div>
 
-            <div class="row" id="customRow" style="display:display;position: relative;top:-100px">
+            <div class="row" id="customRow" style="display:block;position: relative;top:-100px">
               <div class="input-field col s7">
                 <textarea id="commandparams" name="commandparams" class="materialize-textarea"><%=getSchedule().commandParams%></textarea>
                 <label class="active" for="commandparams">Custom Command / Parameters</label>
@@ -435,7 +435,7 @@ function noValue(inValue){
           <!-- END ORCHESTRATION MODE SECTION -->
 
           
-          <div class="row" style="position:relative; top: -90px">
+          <div class="row">
             <a href="#" class="btn waves-effect waves-light" onclick="doCancel()">Cancel</a>
             <button class="btn waves-effect waves-light" type="submit">Save</button>
             <a href="#" id="openModalButton" class="btn waves-effect waves-light" style="background-color:red;float:right">Delete</a>
