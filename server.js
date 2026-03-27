@@ -2515,6 +2515,274 @@ app.get('/rest/orchestration/agents', User.isAuthenticated, asyncHandler(async (
 }));
 
 /**
+ * Get all schedules
+ */
+app.get('/rest/schedules', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const schedules = scheduler.getSchedules();
+  res.json(schedules);
+}));
+
+/**
+ * Get a specific schedule by job name
+ */
+app.get('/rest/schedules/:jobName', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const { jobName } = req.params;
+  const schedule = scheduler.getSchedule(jobName);
+  
+  if (!schedule) {
+    return res.status(404).json({ 
+      success: false, 
+      message: `Schedule [${jobName}] not found` 
+    });
+  }
+  
+  res.json(schedule);
+}));
+
+/**
+ * Delete a specific schedule by job name
+ */
+app.delete('/rest/schedules/:jobName', validateCsrf, User.isAuthenticated, asyncHandler(async (req, res) => {
+  const { jobName } = req.params;
+  
+  try {
+    await scheduler.deleteSchedule(jobName);
+    res.json({ success: true, message: `Schedule [${jobName}] deleted` });
+  } catch (err) {
+    logger.error(`Error deleting schedule [${jobName}]: ${err.message}`);
+    res.status(400).json({ 
+      success: false, 
+      message: `Failed to delete schedule: ${err.message}` 
+    });
+  }
+}));
+
+/**
+ * Delete all schedules
+ */
+app.delete('/rest/schedules', validateCsrf, User.isAuthenticated, asyncHandler(async (req, res) => {
+  try {
+    // Clear all schedules by writing an empty array
+    await db.putData('SCHEDULES_CONFIG', []);
+    scheduler.init(); // Reinitialize scheduler with empty data
+    res.json({ success: true, message: 'All schedules deleted' });
+  } catch (err) {
+    logger.error(`Error deleting all schedules: ${err.message}`);
+    res.status(400).json({ 
+      success: false, 
+      message: `Failed to delete schedules: ${err.message}` 
+    });
+  }
+}));
+
+// =========================
+// NOTIFICATIONS REST API - ADDITIONAL ENDPOINTS
+// =========================
+
+/**
+ * Create a new notification
+ */
+app.post('/rest/notifications', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const { type, title, description, url } = req.body;
+  const runDate = new Date().toISOString();
+  const item = notificationData.createNotificationItem(runDate, type, title, description, url);
+  notificationData.add(item);
+  res.status(201).json({ success: true, item });
+}));
+
+/**
+ * Update a notification by index
+ */
+app.put('/rest/notifications/:index', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const index = parseInt(req.params.index);
+  const { type, title, description, url } = req.body;
+  let items = notificationData.getItems();
+  if (index < 0 || index >= items.length) {
+    return res.status(404).json({ success: false, message: 'Notification not found' });
+  }
+  items[index] = notificationData.createNotificationItem(new Date().toISOString(), type, title, description, url);
+  await notificationData.updateDbPromise();
+  res.json({ success: true, item: items[index] });
+}));
+
+// =========================
+// JOB HISTORY REST API - CRUD ENDPOINTS
+// =========================
+
+/**
+ * Get all job history items
+ */
+app.get('/rest/history', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const items = await hist.getItemsUsingTZ();
+  res.json(items);
+}));
+
+/**
+ * Get a single job history item by index
+ */
+app.get('/rest/history/:index', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const items = await hist.getItemsUsingTZ();
+  const index = parseInt(req.params.index);
+  if (index < 0 || index >= items.length) {
+    return res.status(404).json({ success: false, message: 'History item not found' });
+  }
+  res.json(items[index]);
+}));
+
+/**
+ * Create a new job history item
+ */
+app.post('/rest/history', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const item = req.body;
+  hist.add(item);
+  res.status(201).json({ success: true, item });
+}));
+
+/**
+ * Update a job history item by index
+ */
+app.put('/rest/history/:index', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const items = await hist.getItemsUsingTZ();
+  const index = parseInt(req.params.index);
+  if (index < 0 || index >= items.length) {
+    return res.status(404).json({ success: false, message: 'History item not found' });
+  }
+  items[index] = req.body;
+  await hist.updateDb();
+  res.json({ success: true, item: items[index] });
+}));
+
+/**
+ * Delete a job history item by index
+ */
+app.delete('/rest/history/:index', User.isAuthenticated, asyncHandler(async (req, res) => {
+  let items = await hist.getItemsUsingTZ();
+  const index = parseInt(req.params.index);
+  if (index < 0 || index >= items.length) {
+    return res.status(404).json({ success: false, message: 'History item not found' });
+  }
+  items.splice(index, 1);
+  await hist.updateDb();
+  res.json({ success: true });
+}));
+
+// =========================
+// USER REST API - CRUD ENDPOINTS
+// =========================
+
+/**
+ * List all users
+ */
+app.get('/rest/users', User.isAuthenticated, asyncHandler(async (req, res) => {
+  try {
+    let users = [];
+    for await (const [key, value] of User.db.iterator()) {
+      users.push({ username: value.username, email: value.email });
+    }
+    res.json(users);
+  } catch (err) {
+    logger.error(`Error listing users: ${err.message}`);
+    res.status(500).json({ success: false, message: 'Error listing users' });
+  }
+}));
+
+/**
+ * Get a user by username
+ */
+app.get('/rest/users/:username', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const user = await User.getUserByUsername(req.params.username);
+  if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+  res.json({ username: user.username, email: user.email });
+}));
+
+/**
+ * Create a new user
+ */
+app.post('/rest/users', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const { username, email, password } = req.body;
+  try {
+    await User.createUser(username, email, password);
+    res.status(201).json({ success: true, message: 'User created' });
+  } catch (err) {
+    logger.error(`Error creating user [${username}]: ${err.message}`);
+    res.status(400).json({ success: false, message: `Error creating user: ${err.message}` });
+  }
+}));
+
+/**
+ * Update a user's email or password
+ */
+app.put('/rest/users/:username', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const { email, password } = req.body;
+  try {
+    const user = await User.getUserByUsername(req.params.username);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+    if (email) user.email = email;
+    if (password) await User.updatePassword(req.params.username, password);
+    else await User.updateUser(req.params.username, user);
+    res.json({ success: true });
+  } catch (err) {
+    logger.error(`Error updating user [${req.params.username}]: ${err.message}`);
+    res.status(400).json({ success: false, message: `Error updating user: ${err.message}` });
+  }
+}));
+
+/**
+ * Delete a user
+ */
+app.delete('/rest/users/:username', User.isAuthenticated, asyncHandler(async (req, res) => {
+  try {
+    await User.deleteUser(req.params.username);
+    res.json({ success: true });
+  } catch (err) {
+    logger.error(`Error deleting user [${req.params.username}]: ${err.message}`);
+    res.status(400).json({ success: false, message: `Error deleting user: ${err.message}` });
+  }
+}));
+
+// =========================
+// GENERIC KEY-VALUE DATA REST API
+// =========================
+
+/**
+ * Get value by key from custom data store
+ */
+app.get('/rest/data/:key', User.isAuthenticated, asyncHandler(async (req, res) => {
+  try {
+    const value = await db.getData(req.params.key);
+    res.json({ key: req.params.key, value });
+  } catch (err) {
+    res.status(404).json({ success: false, message: 'Key not found' });
+  }
+}));
+
+/**
+ * Create or update value by key in custom data store
+ */
+app.put('/rest/data/:key', User.isAuthenticated, asyncHandler(async (req, res) => {
+  try {
+    await db.putData(req.params.key, req.body.value);
+    res.json({ success: true });
+  } catch (err) {
+    logger.error(`Error storing data [${req.params.key}]: ${err.message}`);
+    res.status(400).json({ success: false, message: `Error storing data: ${err.message}` });
+  }
+}));
+
+/**
+ * Delete value by key from custom data store
+ */
+app.delete('/rest/data/:key', User.isAuthenticated, asyncHandler(async (req, res) => {
+  try {
+    await db.deleteData(req.params.key);
+    res.json({ success: true });
+  } catch (err) {
+    logger.error(`Error deleting data [${req.params.key}]: ${err.message}`);
+    res.status(400).json({ success: false, message: `Error deleting data: ${err.message}` });
+  }
+}));
+
+/**
  * Orchestration UI pages
  */
 app.get('/orchestrationList.html', User.isAuthenticated, asyncHandler(async (req, res) => {

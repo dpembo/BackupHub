@@ -14,11 +14,28 @@ This document describes the main REST API endpoints exposed by the BackupHub ser
   - [Backup Restore](#backup-restore)
 
 - [Notifications](#notifications)
+
   - [Notifications List](#notifications-list)
+  - [Notifications Create](#notifications-create)
+  - [Notifications Update](#notifications-update)
   - [Notifications Count](#notifications-count)
   - [Notifications Delete All](#notifications-delete-all)
   - [Notifications Delete by Index](#notifications-delete-by-index)
   - [Notifications Test](#notifications-test)
+
+  - [Job History List](#job-history-list)
+  - [Job History Get](#job-history-get)
+  - [Job History Create](#job-history-create)
+  - [Job History Update](#job-history-update)
+  - [Job History Delete](#job-history-delete)
+
+  - [User List](#user-list)
+  - [User Get](#user-get)
+  - [User Create](#user-create)
+  - [User Update](#user-update)
+  - [User Delete](#user-delete)
+
+  - [Generic Key-Value Data](#generic-key-value-data)
 
 - [Agent Management](#agent-management)
   - [Agent Details](#agent-details)
@@ -92,29 +109,8 @@ All REST API endpoints require authentication unless otherwise noted. The Backup
 
 
 
-#### Backup Create
-`POST /api/backup/create` | Create a backup with provided options.
-
-| Property | Value | Example |
-|---|---|---|
-| **Input** | JSON body with backup options | `{ "items": ["db", "config"] }` |
-| **Output** | ZIP file (download) | `backuphub-backup-20260326.zip` |
-
-
-
-#### Backup Restore
-`POST /api/backup/restore` | Restore data from uploaded backup file.
-
-| Property | Value | Example |
-|---|---|---|
-| **Input** | Multipart form-data with `backupFile` | `backuphub-backup-20260326.zip` |
-| **Output** | JSON `{ success, itemsRestored, warnings, recommendations }` | `{ "success": true, "itemsRestored": ["db"], "warnings": [], "recommendations": [] }` |
-
----
 
 ## Notifications
-
-
 
 #### Notifications List
 `GET /rest/notifications` | Get all notifications.
@@ -124,7 +120,21 @@ All REST API endpoints require authentication unless otherwise noted. The Backup
 | **Input** | None | |
 | **Output** | JSON array of notifications | `[ { "type": "info", "message": "Backup completed" } ]` |
 
+#### Notifications Create
+`POST /rest/notifications` | Create a new notification.
 
+| Property | Value | Example |
+|---|---|---|
+| **Input** | JSON body: `{ type, title, description, url }` | `{ "type": "info", "title": "Backup", "description": "Backup completed", "url": "http://..." }` |
+| **Output** | JSON with created item | `{ "success": true, "item": { ... } }` |
+
+#### Notifications Update
+`PUT /rest/notifications/:index` | Update a notification by index.
+
+| Property | Value | Example |
+|---|---|---|
+| **Input** | URL param: `index`, JSON body: `{ type, title, description, url }` | `1`, `{ "type": "warn", ... }` |
+| **Output** | JSON with updated item | `{ "success": true, "item": { ... } }` |
 
 #### Notifications Count
 `GET /rest/notifications/count` | Get notification count.
@@ -134,11 +144,145 @@ All REST API endpoints require authentication unless otherwise noted. The Backup
 | **Input** | None | |
 | **Output** | `{ count: number }` | `{ "count": 3 }` |
 
-
-
 #### Notifications Delete All
 `DELETE /rest/notifications` | Delete all notifications.
 
+| Property | Value | Example |
+|---|---|---|
+| **Input** | None | |
+| **Output** | 200 OK | `200` |
+
+#### Notifications Delete by Index
+`DELETE /rest/notifications/:index` | Delete notification at index.
+
+| Property | Value | Example |
+|---|---|---|
+| **Input** | URL param: `index` | `2` |
+| **Output** | 200 OK | `200` |
+
+#### Notifications Test
+`GET /rest/notifty/test` | Send a test notification.
+
+| Property | Value | Example |
+|---|---|---|
+| **Input** | None | |
+| **Output** | 200 OK | `200` |
+
+---
+
+## Job History
+
+#### Job History List
+`GET /rest/history` | Get all job history items.
+
+| Property | Value | Example |
+|---|---|---|
+| **Input** | None | |
+| **Output** | JSON array of job history items | `[ { ... }, ... ]` |
+
+#### Job History Get
+`GET /rest/history/:index` | Get a single job history item by index.
+
+| Property | Value | Example |
+|---|---|---|
+| **Input** | URL param: `index` | `0` |
+| **Output** | JSON job history item | `{ ... }` |
+
+#### Job History Create
+`POST /rest/history` | Create a new job history item.
+
+| Property | Value | Example |
+|---|---|---|
+| **Input** | JSON body: job history item | `{ ... }` |
+| **Output** | JSON with created item | `{ "success": true, "item": { ... } }` |
+
+#### Job History Update
+`PUT /rest/history/:index` | Update a job history item by index.
+
+| Property | Value | Example |
+|---|---|---|
+| **Input** | URL param: `index`, JSON body: job history item | `1`, `{ ... }` |
+| **Output** | JSON with updated item | `{ "success": true, "item": { ... } }` |
+
+#### Job History Delete
+`DELETE /rest/history/:index` | Delete a job history item by index.
+
+| Property | Value | Example |
+|---|---|---|
+| **Input** | URL param: `index` | `1` |
+| **Output** | JSON with success | `{ "success": true }` |
+
+---
+
+## User Management
+
+#### User List
+`GET /rest/users` | List all users (usernames and emails).
+
+| Property | Value | Example |
+|---|---|---|
+| **Input** | None | |
+| **Output** | JSON array of users | `[ { "username": "alice", "email": "alice@example.com" }, ... ]` |
+
+#### User Get
+`GET /rest/users/:username` | Get a user by username.
+
+| Property | Value | Example |
+|---|---|---|
+| **Input** | URL param: `username` | `alice` |
+| **Output** | JSON user object | `{ "username": "alice", "email": "alice@example.com" }` |
+
+#### User Create
+`POST /rest/users` | Create a new user.
+
+| Property | Value | Example |
+|---|---|---|
+| **Input** | JSON body: `{ username, email, password }` | `{ "username": "bob", "email": "bob@example.com", "password": "secret" }` |
+| **Output** | JSON with success | `{ "success": true }` |
+
+#### User Update
+`PUT /rest/users/:username` | Update a user's email or password.
+
+| Property | Value | Example |
+|---|---|---|
+| **Input** | URL param: `username`, JSON body: `{ email?, password? }` | `alice`, `{ "email": "new@example.com" }` |
+| **Output** | JSON with success | `{ "success": true }` |
+
+#### User Delete
+`DELETE /rest/users/:username` | Delete a user.
+
+| Property | Value | Example |
+|---|---|---|
+| **Input** | URL param: `username` | `bob` |
+| **Output** | JSON with success | `{ "success": true }` |
+
+---
+
+## Generic Key-Value Data
+
+#### Get Value by Key
+`GET /rest/data/:key` | Get value by key.
+
+| Property | Value | Example |
+|---|---|---|
+| **Input** | URL param: `key` | `customKey` |
+| **Output** | JSON with key and value | `{ "key": "customKey", "value": "some data" }` |
+
+#### Create or Update Value by Key
+`PUT /rest/data/:key` | Create or update value by key.
+
+| Property | Value | Example |
+|---|---|---|
+| **Input** | URL param: `key`, JSON body: `{ value }` | `customKey`, `{ "value": "new data" }` |
+| **Output** | JSON with success | `{ "success": true }` |
+
+#### Delete Value by Key
+`DELETE /rest/data/:key` | Delete value by key.
+
+| Property | Value | Example |
+|---|---|---|
+| **Input** | URL param: `key` | `customKey` |
+| **Output** | JSON with success | `{ "success": true }` |
 | Property | Value | Example |
 |---|---|---|
 | **Input** | None | |
@@ -349,6 +493,47 @@ All REST API endpoints require authentication unless otherwise noted. The Backup
 |---|---|---|
 | **Input** | URL param: `script` | `backupDB.sh` |
 | **Output** | JSON script object | `{ "name": "backupDB.sh", "description": "Backup database" }` |
+
+---
+
+
+---
+
+## Schedule Management
+
+The following endpoints allow you to read and delete schedule data. All endpoints require authentication.
+
+#### List All Schedules
+`GET /rest/schedules` | Get all schedules.
+
+| Property    | Value         | Example |
+|-------------|---------------|---------|
+| **Input**   | None          |         |
+| **Output**  | JSON array of schedules | `[ { "jobName": "BackupDB", ... }, ... ]` |
+
+#### Get a Schedule by Job Name
+`GET /rest/schedules/:jobName` | Get a specific schedule by job name.
+
+| Property    | Value         | Example |
+|-------------|---------------|---------|
+| **Input**   | URL param: `jobName` | `BackupDB` |
+| **Output**  | JSON schedule object | `{ "jobName": "BackupDB", ... }` |
+
+#### Delete a Schedule by Job Name
+`DELETE /rest/schedules/:jobName` | Delete a specific schedule by job name.
+
+| Property    | Value         | Example |
+|-------------|---------------|---------|
+| **Input**   | URL param: `jobName` | `BackupDB` |
+| **Output**  | JSON result   | `{ "success": true, "message": "Schedule [BackupDB] deleted" }` |
+
+#### Delete All Schedules
+`DELETE /rest/schedules` | Delete all schedules.
+
+| Property    | Value         | Example |
+|-------------|---------------|---------|
+| **Input**   | None          |         |
+| **Output**  | JSON result   | `{ "success": true, "message": "All schedules deleted" }` |
 
 ---
 
