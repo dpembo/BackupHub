@@ -11,6 +11,7 @@
   --primary-color: #64b5f6;
   --error-color: #ef5350;
   --success-color: #81c784;
+  --success-color-dark: #66bb6a;
   --warning-color: #ffb74d;
 }
 
@@ -91,12 +92,13 @@ header {
 }
 
 body {
-  background-color: #37474f; /* Darker blue-grey background */
-  color: #ffffff; /* White text */
+  background-color: var(--surface-secondary); /* Dark mode background */
+  color: var(--text-primary); /* Dark mode text */
 }
 
 input {
-  color:#ffffff;
+  color: var(--text-primary);
+}
 }
 
 textarea{
