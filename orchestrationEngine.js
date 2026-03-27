@@ -13,8 +13,9 @@ const wsBrowser = require('./communications/wsBrowserTransport.js');
 const pendingExecutions = {};
 
 // Track active orchestration execution IDs by jobId
-// This allows history recording to associate nodes with their execution
-const activeOrchestrationExecutions = {};  // jobId -> executionId
+// Structure: { [jobId]: { executionIds: Set<string>, latestExecutionId: string } }
+// This allows multiple concurrent executions of the same job without cross-talk
+const activeOrchestrationExecutions = {};  // jobId -> { executionIds: Set, latestExecutionId: string }
 
 // Event emitter for script completion events
 const scriptCompletionEmitter = new EventEmitter();
@@ -177,7 +178,12 @@ async function executeJob(jobId, isManual = false, executionId = null, onNodeCom
     logger.info(`Starting execution of orchestration job [${jobId}] at version ${executionLog.orchestrationVersion}`);
 
     // Register this execution so history records can associate nodes with it
-    activeOrchestrationExecutions[jobId] = finalExecutionId;
+    // Support multiple concurrent executions per job
+    if (!activeOrchestrationExecutions[jobId]) {
+      activeOrchestrationExecutions[jobId] = { executionIds: new Set(), latestExecutionId: null };
+    }
+    activeOrchestrationExecutions[jobId].executionIds.add(finalExecutionId);
+    activeOrchestrationExecutions[jobId].latestExecutionId = finalExecutionId;
 
     // Find start node
     const startNode = job.nodes.find(n => n.type === 'start');
@@ -608,8 +614,21 @@ async function executeJob(jobId, isManual = false, executionId = null, onNodeCom
     // Clean up execution tracking - but delay for 30 seconds to allow pending messages to be processed
     // Some agent messages may still be in the queue after orchestration completes
     setTimeout(() => {
-      delete activeOrchestrationExecutions[jobId];
-      logger.debug(`Cleared execution tracking for orchestration [${jobId}]`);
+      if (activeOrchestrationExecutions[jobId]) {
+        activeOrchestrationExecutions[jobId].executionIds.delete(finalExecutionId);
+        // If no more active executions for this job, clean up the entry
+        if (activeOrchestrationExecutions[jobId].executionIds.size === 0) {
+          delete activeOrchestrationExecutions[jobId];
+          logger.debug(`Cleared execution tracking for orchestration [${jobId}] (no more active executions)`);
+        } else {
+          // Update latestExecutionId to the remaining execution if we just removed it
+          if (activeOrchestrationExecutions[jobId].latestExecutionId === finalExecutionId) {
+            const remaining = Array.from(activeOrchestrationExecutions[jobId].executionIds);
+            activeOrchestrationExecutions[jobId].latestExecutionId = remaining[remaining.length - 1];
+          }
+          logger.debug(`Cleared execution [${finalExecutionId}] for orchestration [${jobId}] (${activeOrchestrationExecutions[jobId].executionIds.size} still active)`);
+        }
+      }
     }, 30000);
   }
 }
@@ -693,5 +712,6 @@ module.exports = {
   signalScriptCompletion,
   waitForScriptCompletion,
   activeOrchestrationExecutions,
-  getExecutionIndexById
+  getExecutionIndexById,
+  evaluateNumericCondition  // Export for testing
 };

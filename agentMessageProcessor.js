@@ -237,7 +237,8 @@ async function processMessage(topic, message,protocol) {
       const jobId = match[1];
       const nodeId = match[2];
       const orchestrationEngine = require('./orchestrationEngine.js');
-      const executionId = orchestrationEngine.activeOrchestrationExecutions[jobId];
+      const executionTracking = orchestrationEngine.activeOrchestrationExecutions[jobId];
+      const executionId = executionTracking ? executionTracking.latestExecutionId : null;
       if (!executionId) return;
       const wsBrowserTransport = require('./communications/wsBrowserTransport.js');
       const io = wsBrowserTransport.getIO();
@@ -429,7 +430,8 @@ async function processMessage(topic, message,protocol) {
       try {
         const orchestrationEngine = require('./orchestrationEngine.js');
         const jobId = orchestrationMatch[1];
-        executionId = orchestrationEngine.activeOrchestrationExecutions[jobId] || null;
+        const executionTracking = orchestrationEngine.activeOrchestrationExecutions[jobId];
+        executionId = executionTracking ? executionTracking.latestExecutionId : null;
       } catch (err) {
         logger.debug(`[ORCHESTRATION] Unable to get executionId: ${err.message}`);
       }

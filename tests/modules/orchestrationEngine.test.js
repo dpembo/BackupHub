@@ -156,10 +156,63 @@ describe('Orchestration Engine Module', () => {
   });
 
   describe('evaluateNumericCondition()', () => {
-    // Access evaluateNumericCondition through module internals or test via executeJob
-    it('should evaluate numeric conditions correctly', () => {
-      // Test via orchestrationEngine module if exposed, or implicitly through integration tests
-      expect(logger).toBeDefined();
+    it('should evaluate equality operator ==', () => {
+      expect(orchestrationEngine.evaluateNumericCondition(10, '==', 10)).toBe(true);
+      expect(orchestrationEngine.evaluateNumericCondition(10, '==', 5)).toBe(false);
+    });
+
+    it('should evaluate alternative equality operator =', () => {
+      expect(orchestrationEngine.evaluateNumericCondition(10, '=', 10)).toBe(true);
+      expect(orchestrationEngine.evaluateNumericCondition(10, '=', 5)).toBe(false);
+    });
+
+    it('should evaluate not equal operator !=', () => {
+      expect(orchestrationEngine.evaluateNumericCondition(10, '!=', 5)).toBe(true);
+      expect(orchestrationEngine.evaluateNumericCondition(10, '!=', 10)).toBe(false);
+    });
+
+    it('should evaluate greater than operator >', () => {
+      expect(orchestrationEngine.evaluateNumericCondition(15, '>', 10)).toBe(true);
+      expect(orchestrationEngine.evaluateNumericCondition(5, '>', 10)).toBe(false);
+      expect(orchestrationEngine.evaluateNumericCondition(10, '>', 10)).toBe(false);
+    });
+
+    it('should evaluate greater than or equal operator >=', () => {
+      expect(orchestrationEngine.evaluateNumericCondition(15, '>=', 10)).toBe(true);
+      expect(orchestrationEngine.evaluateNumericCondition(10, '>=', 10)).toBe(true);
+      expect(orchestrationEngine.evaluateNumericCondition(5, '>=', 10)).toBe(false);
+    });
+
+    it('should evaluate less than operator <', () => {
+      expect(orchestrationEngine.evaluateNumericCondition(5, '<', 10)).toBe(true);
+      expect(orchestrationEngine.evaluateNumericCondition(15, '<', 10)).toBe(false);
+      expect(orchestrationEngine.evaluateNumericCondition(10, '<', 10)).toBe(false);
+    });
+
+    it('should evaluate less than or equal operator <=', () => {
+      expect(orchestrationEngine.evaluateNumericCondition(5, '<=', 10)).toBe(true);
+      expect(orchestrationEngine.evaluateNumericCondition(10, '<=', 10)).toBe(true);
+      expect(orchestrationEngine.evaluateNumericCondition(15, '<=', 10)).toBe(false);
+    });
+
+    it('should support negated operators with ! prefix', () => {
+      expect(orchestrationEngine.evaluateNumericCondition(10, '!=', 5)).toBe(true);
+      expect(orchestrationEngine.evaluateNumericCondition(15, '!>', 10)).toBe(false);
+      expect(orchestrationEngine.evaluateNumericCondition(5, '!>', 10)).toBe(true);
+      expect(orchestrationEngine.evaluateNumericCondition(10, '!==', 10)).toBe(false);
+      expect(orchestrationEngine.evaluateNumericCondition(10, '!==', 5)).toBe(true);
+    });
+
+    it('should handle string numbers via parseFloat', () => {
+      expect(orchestrationEngine.evaluateNumericCondition('10', '==', '10')).toBe(true);
+      expect(orchestrationEngine.evaluateNumericCondition('15.5', '>', '10.5')).toBe(true);
+      expect(orchestrationEngine.evaluateNumericCondition('5.5', '<', '10.5')).toBe(true);
+    });
+
+    it('should default unknown operators to equality', () => {
+      expect(orchestrationEngine.evaluateNumericCondition(10, 'unknown', 10)).toBe(true);
+      expect(orchestrationEngine.evaluateNumericCondition(10, 'unknown', 5)).toBe(false);
+      expect(logger.warn).toHaveBeenCalledWith('Unknown operator: unknown, defaulting to ==');
     });
   });
 
