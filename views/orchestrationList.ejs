@@ -12,6 +12,20 @@
   <script>
     let orchestrations = {};
     
+    // Helper function to escape HTML special characters
+    function escapeHtml(text) {
+      if (!text) return '';
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+    
+    // Helper function to escape single quotes for use in onclick attributes
+    function escapeQuotes(text) {
+      if (!text) return '';
+      return String(text).replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    }
+    
     function loadOrchestrations() {
       $.ajax({
         url: '/rest/orchestration/jobs',
@@ -59,18 +73,20 @@
       
       Object.entries(orchestrations).forEach(([orchId, orch]) => {
         const updatedDate = orch.updatedAt ? new Date(orch.updatedAt).toLocaleString() : 'N/A';
-        const description = orch.description || 'No description';
+        const description = escapeHtml(orch.description || 'No description');
+        const orchName = escapeHtml(orch.name);
+        const orchNameForOnclick = escapeQuotes(orch.name);
         
         tableHtml += `
           <tr>
             <td><span class="material-icons" style="color: #ff9800; font-size: 24pt;" title="Orchestration">schema</span></td>
-            <td>${orch.name}</td>
+            <td>${orchName}</td>
             <td>${description}</td>
             <td>${updatedDate}</td>
             <td>
               <a title="edit" href="/orchestrationBuilder.html?id=${encodeURIComponent(orchId)}"><i class="material-icons tableIconButton vertMid">edit</i></a>
-              <a title="delete" onclick="deleteOrchestration('${orchId}', '${orch.name}')"><i class="material-icons tableIconButton vertMid" style="cursor: pointer;">delete</i></a>
-              <a title="run" onclick="runOrchestration('${orchId}')"><i class="material-icons tableIconButton vertMid" style="cursor: pointer;">play_circle</i></a>
+              <a title="delete" onclick="deleteOrchestration('${encodeURIComponent(orchId)}', '${orchNameForOnclick}')"><i class="material-icons tableIconButton vertMid" style="cursor: pointer;">delete</i></a>
+              <a title="run" onclick="runOrchestration('${encodeURIComponent(orchId)}')"><i class="material-icons tableIconButton vertMid" style="cursor: pointer;">play_circle</i></a>
             </td>
           </tr>
         `;
