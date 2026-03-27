@@ -274,7 +274,16 @@ async function listJobsWithStatus(timezone) {
       });
     }
     
-    return jobList.sort((a, b) => b.lastExecuted - a.lastExecuted);
+    return jobList.sort((a, b) => {
+      const getTime = (item) => {
+        if (!item.lastExecuted) {
+          return 0;
+        }
+        const time = Date.parse(item.lastExecuted);
+        return Number.isNaN(time) ? 0 : time;
+      };
+      return getTime(b) - getTime(a);
+    });
   } catch (err) {
     if (err.message?.includes('NotFoundError')) {
       return [];
