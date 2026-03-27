@@ -52,6 +52,7 @@ async function getExecutionDetails(jobId, executionIndex = 'latest') {
       description: jobDef.description || '',
       orchestrationVersion: jobDef.version || 1,
       execution: {
+        executionId: execution.executionId,
         startTime: execution.startTime,
         endTime: execution.endTime,
         status: execution.status,
@@ -167,7 +168,7 @@ async function getJobDefinitionVersion(jobId, version = 'current') {
     const job = jobs[jobId];
     
     if (!job) {
-      return null;
+      throw new Error(`Orchestration job [${jobId}] not found`);
     }
     
     // Handle versioned format
@@ -260,7 +261,7 @@ async function listJobsWithStatus(timezone) {
         name: jobDef.name,
         description: jobDef.description || '',
         lastExecuted: latestExecution?.startTime || null,
-        lastStatus: latestExecution?.finalStatus || 'never_run',
+        lastExecutionStatus: latestExecution?.finalStatus || 'never_run',
         executionCount: jobExecutions.length,
         lastExecutedFormatted: latestExecution?.startTime ? 
           dateTimeUtils.displayFormatDate(
