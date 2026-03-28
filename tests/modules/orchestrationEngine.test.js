@@ -53,6 +53,7 @@ jest.mock('../../configuration.js', () => ({
 }));
 
 const db = require('../../db.js');
+const wsBrowserTransport = require('../../communications/wsBrowserTransport.js');
 const notifier = require('../../notify.js');
 const orchestrationMonitor = require('../../orchestrationMonitor.js');
 const configuration = require('../../configuration.js');
@@ -89,10 +90,7 @@ describe('Orchestration Engine Module', () => {
       sendCommand: jest.fn(),
     };
 
-    global.wsBrowser = {
-      emitOrchestrationEvent: jest.fn(),
-      emitNotification: jest.fn(),
-    };
+    global.wsBrowser = wsBrowserTransport;
 
     // Setup notifier mock
     notifier.sendNotification = jest.fn();
@@ -109,7 +107,10 @@ describe('Orchestration Engine Module', () => {
     }
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    jest.clearAllMocks();
+    // Wait for pending timers/promises to settle
+    await new Promise(resolve => setImmediate(resolve));
     delete global.logger;
     delete global.serverConfig;
     delete global.db;
@@ -638,6 +639,1008 @@ describe('Orchestration Engine Module', () => {
     it('should expose activeOrchestrationExecutions object', () => {
       expect(orchestrationEngine.activeOrchestrationExecutions).toBeDefined();
       expect(typeof orchestrationEngine.activeOrchestrationExecutions).toBe('object');
+    });
+  });
+
+  describe('executeJob()', () => {
+    // Helper function to create a mock orchestration job
+    const createMockJob = (override = {}) => {
+      const baseJob = {
+        id: 'test-job',
+        name: 'Test Orchestration',
+        currentVersion: 1,
+        versions: [
+          {
+            nodes: [
+              { id: 'start-node', type: 'start', data: { name: 'Start' } },
+              { id: 'execute-node', type: 'execute', data: { script: 'test.sh', agent: 'agent1', parameters: '' } },
+              { id: 'end-node', type: 'end-success', data: { name: 'End Success' } },
+            ],
+            edges: [
+              { from: 'start-node', fromPort: 'out', to: 'execute-node' },
+              { from: 'execute-node', fromPort: 'out', to: 'end-node' },
+            ],
+          },
+        ],
+      };
+      return { ...baseJob, ...override };
+    };
+
+    beforeEach(() => {
+      // Mock fs.readFile for script reading
+      require('fs').promises.readFile.mockResolvedValue('#!/bin/bash\necho "test"');
+      
+      // Mock agents.getAgent
+      const agents = require('../../agents.js');
+      agents.getAgent.mockReturnValue({ name: 'test-agent', id: 'agent1' });
+      agents.getDict.mockReturnValue({ agent1: { name: 'test-agent' } });
+    });
+
+    describe('Happy Path Scenarios', () => {
+      it('should execute simple start -> execute -> end-success path', async () => {
+        const mockJob = createMockJob();
+        db.getData.mockResolvedValue({ 'test-job': mockJob });
+
+        // Mock script completion signal to happen after execution
+        setTimeout(() => {
+          const jobName = 'Orchestration [test-job] Execution [test-exec1] Node [execute-node]';
+          orchestrationEngine.signalScriptCompletion(jobName, {
+            exitCode: 0,
+            stdout: 'Script output',
+            stderr: '',
+          });
+        }, 50);
+
+        const result = await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(result.jobId).toBe('test-job');
+        expect(result.executionId).toBe('test-exec1');
+        expect(result.status).toBe('completed');
+        expect(result.finalStatus).toBe('success');
+        expect(result.visitedNodes).toContain('start-node');
+        expect(result.visitedNodes).toContain('execute-node');
+        expect(result.visitedNodes).toContain('end-node');
+        expect(result.scriptOutputs['execute-node']).toBeDefined();
+        expect(result.scriptOutputs['execute-node'].exitCode).toBe(0);
+      });
+
+      it('should emit orchestrationNodeStarted and orchestrationNodeCompleted events for each node', async () => {
+        const mockJob = createMockJob();
+        db.getData.mockResolvedValue({ 'test-job': mockJob });
+
+        // Reset the mock to ensure clean call tracking
+        wsBrowserTransport.emitOrchestrationEvent.mockClear();
+
+        setTimeout(() => {
+          const jobName = 'Orchestration [test-job] Execution [test-exec1] Node [execute-node]';
+          orchestrationEngine.signalScriptCompletion(jobName, {
+            exitCode: 0,
+            stdout: 'Script output',
+            stderr: '',
+          });
+        }, 50);
+
+        await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        // At least some events should have been emitted
+        expect(wsBrowserTransport.emitOrchestrationEvent).toHaveBeenCalled();
+        
+        // Verify events included start and completion for nodes
+        const calls = wsBrowserTransport.emitOrchestrationEvent.mock.calls;
+        
+        // Should have calls with orchestrationNodeStarted
+        const hasNodeStarted = calls.some(call => call[2] === 'orchestrationNodeStarted');
+        expect(hasNodeStarted).toBe(true);
+        
+        // Should have calls with orchestrationNodeCompleted
+        const hasNodeCompleted = calls.some(call => call[2] === 'orchestrationNodeCompleted');
+        expect(hasNodeCompleted).toBe(true);
+      });
+
+      it('should send script content and parameters to agent', async () => {
+        const mockJob = createMockJob({
+          versions: [
+            {
+              nodes: [
+                { id: 'start-node', type: 'start', data: { name: 'Start' } },
+                { 
+                  id: 'execute-node', 
+                  type: 'execute', 
+                  data: { 
+                    script: 'backup.sh', 
+                    agent: 'agent1', 
+                    parameters: '--incremental --compress' 
+                  } 
+                },
+                { id: 'end-node', type: 'end-success', data: { name: 'End Success' } },
+              ],
+              edges: [
+                { from: 'start-node', fromPort: 'out', to: 'execute-node' },
+                { from: 'execute-node', fromPort: 'out', to: 'end-node' },
+              ],
+            },
+          ],
+        });
+        db.getData.mockResolvedValue({ 'test-job': mockJob });
+
+        setTimeout(() => {
+          const jobName = 'Orchestration [test-job] Execution [test-exec1] Node [execute-node]';
+          orchestrationEngine.signalScriptCompletion(jobName, {
+            exitCode: 0,
+            stdout: 'Backup complete',
+            stderr: '',
+          });
+        }, 50);
+
+        await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        // Verify script content was sent to agent
+        expect(global.agentComms.sendCommand).toHaveBeenCalledWith(
+          'agent1',
+          'execute/orchestrationScript',
+          '#!/bin/bash\necho "test"',
+          '--incremental --compress',
+          expect.stringContaining('[test-job]'),
+          undefined,
+          false,
+          'test-exec1'
+        );
+      });
+
+      it('should clear old logs before executing script', async () => {
+        const mockJob = createMockJob();
+        db.getData.mockResolvedValue({ 'test-job': mockJob });
+
+        setTimeout(() => {
+          const jobName = 'Orchestration [test-job] Execution [test-exec1] Node [execute-node]';
+          orchestrationEngine.signalScriptCompletion(jobName, {
+            exitCode: 0,
+            stdout: 'Output',
+            stderr: '',
+          });
+        }, 50);
+
+        await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        // Verify deleteData was called to clear old logs
+        expect(db.deleteData).toHaveBeenCalledWith(
+          expect.stringContaining('test-agent_Orchestration')
+        );
+      });
+
+      it('should record node metrics (timing) for all nodes', async () => {
+        const mockJob = createMockJob();
+        db.getData.mockResolvedValue({ 'test-job': mockJob });
+
+        setTimeout(() => {
+          const jobName = 'Orchestration [test-job] Execution [test-exec1] Node [execute-node]';
+          orchestrationEngine.signalScriptCompletion(jobName, {
+            exitCode: 0,
+            stdout: 'Output',
+            stderr: '',
+          });
+        }, 50);
+
+        const result = await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(result.nodeMetrics['start-node']).toBeDefined();
+        expect(result.nodeMetrics['start-node'].duration).toBeGreaterThanOrEqual(0);
+        expect(result.nodeMetrics['execute-node']).toBeDefined();
+        expect(result.nodeMetrics['end-node']).toBeDefined();
+      });
+
+      it('should handle manual execution flag', async () => {
+        const mockJob = createMockJob();
+        db.getData.mockResolvedValue({ 'test-job': mockJob });
+
+        setTimeout(() => {
+          const jobName = 'Orchestration [test-job] Execution [test-exec1] Node [execute-node]';
+          orchestrationEngine.signalScriptCompletion(jobName, {
+            exitCode: 0,
+            stdout: 'Output',
+            stderr: '',
+          });
+        }, 50);
+
+        const result = await orchestrationEngine.executeJob('test-job', true, 'test-exec1');
+
+        expect(result.manual).toBe(true);
+        // Verify isManual was passed to agent (it's the 7th parameter)
+        expect(global.agentComms.sendCommand).toHaveBeenCalled();
+        const callArgs = global.agentComms.sendCommand.mock.calls[0];
+        expect(callArgs[6]).toBe(true); // isManual is the 7th parameter (index 6)
+      });
+
+      it('should handle multiple execute nodes in sequence', async () => {
+        const mockJob = createMockJob({
+          versions: [
+            {
+              nodes: [
+                { id: 'start-node', type: 'start', data: { name: 'Start' } },
+                { id: 'execute-1', type: 'execute', data: { script: 'script1.sh', agent: 'agent1' } },
+                { id: 'execute-2', type: 'execute', data: { script: 'script2.sh', agent: 'agent1' } },
+                { id: 'end-node', type: 'end-success', data: { name: 'End' } },
+              ],
+              edges: [
+                { from: 'start-node', fromPort: 'out', to: 'execute-1' },
+                { from: 'execute-1', fromPort: 'out', to: 'execute-2' },
+                { from: 'execute-2', fromPort: 'out', to: 'end-node' },
+              ],
+            },
+          ],
+        });
+        db.getData.mockResolvedValue({ 'test-job': mockJob });
+
+        // Mock sendCommand to intercept and signal completions
+        let sendCommandCallCount = 0;
+        global.agentComms.sendCommand.mockImplementation((agentId, command, script, params, jobName) => {
+          sendCommandCallCount++;
+          // Stagger the responses
+          setTimeout(() => {
+            orchestrationEngine.signalScriptCompletion(jobName, {
+              exitCode: 0,
+              stdout: `Execution ${sendCommandCallCount} completed`,
+              stderr: '',
+            });
+          }, 100);
+        });
+
+        const result = await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(result.visitedNodes).toEqual(['start-node', 'execute-1', 'execute-2', 'end-node']);
+        expect(result.scriptOutputs['execute-1']).toBeDefined();
+        expect(result.scriptOutputs['execute-2']).toBeDefined();
+        expect(result.finalStatus).toBe('success');
+      }, 30000);
+    });
+
+    describe('Condition Node - Return Code Evaluation', () => {
+      it('should evaluate return_code condition with == operator', async () => {
+        const mockJob = createMockJob({
+          versions: [
+            {
+              nodes: [
+                { id: 'start-node', type: 'start', data: { name: 'Start' } },
+                { id: 'execute-node', type: 'execute', data: { script: 'test.sh', agent: 'agent1' } },
+                {
+                  id: 'condition-node',
+                  type: 'condition',
+                  data: {
+                    conditionType: 'return_code',
+                    operator: '==',
+                    conditionValue: '0',
+                  },
+                },
+                { id: 'end-success', type: 'end-success', data: { name: 'Success' } },
+                { id: 'end-failure', type: 'end-failure', data: { name: 'Failure' } },
+              ],
+              edges: [
+                { from: 'start-node', fromPort: 'out', to: 'execute-node' },
+                { from: 'execute-node', fromPort: 'out', to: 'condition-node' },
+                { from: 'condition-node', fromPort: 'true', to: 'end-success' },
+                { from: 'condition-node', fromPort: 'false', to: 'end-failure' },
+              ],
+            },
+          ],
+        });
+        db.getData.mockResolvedValue({ 'test-job': mockJob });
+
+        setTimeout(() => {
+          orchestrationEngine.signalScriptCompletion(
+            'Orchestration [test-job] Execution [test-exec1] Node [execute-node]',
+            { exitCode: 0, stdout: 'Success', stderr: '' }
+          );
+        }, 50);
+
+        const result = await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(result.conditionEvaluations['condition-node']).toBeDefined();
+        expect(result.conditionEvaluations['condition-node'].result).toBe(true);
+        expect(result.visitedNodes).toContain('end-success');
+        expect(result.finalStatus).toBe('success');
+      });
+
+      it('should route to false branch when return_code condition fails', async () => {
+        const mockJob = createMockJob({
+          versions: [
+            {
+              nodes: [
+                { id: 'start-node', type: 'start', data: { name: 'Start' } },
+                { id: 'execute-node', type: 'execute', data: { script: 'test.sh', agent: 'agent1' } },
+                {
+                  id: 'condition-node',
+                  type: 'condition',
+                  data: {
+                    conditionType: 'return_code',
+                    operator: '==',
+                    conditionValue: '0',
+                  },
+                },
+                { id: 'end-success', type: 'end-success', data: { name: 'Success' } },
+                { id: 'end-failure', type: 'end-failure', data: { name: 'Failure' } },
+              ],
+              edges: [
+                { from: 'start-node', fromPort: 'out', to: 'execute-node' },
+                { from: 'execute-node', fromPort: 'out', to: 'condition-node' },
+                { from: 'condition-node', fromPort: 'true', to: 'end-success' },
+                { from: 'condition-node', fromPort: 'false', to: 'end-failure' },
+              ],
+            },
+          ],
+        });
+        db.getData.mockResolvedValue({ 'test-job': mockJob });
+
+        setTimeout(() => {
+          orchestrationEngine.signalScriptCompletion(
+            'Orchestration [test-job] Execution [test-exec1] Node [execute-node]',
+            { exitCode: 1, stdout: 'Failed', stderr: 'Error' }
+          );
+        }, 50);
+
+        const result = await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(result.conditionEvaluations['condition-node'].result).toBe(false);
+        expect(result.visitedNodes).toContain('end-failure');
+        expect(result.finalStatus).toBe('failure');
+      });
+
+      it('should support all comparison operators for return_code', async () => {
+        const testCases = [
+          { operator: '>', exitCode: 5, conditionValue: '3', expectedResult: true },
+          { operator: '<', exitCode: 3, conditionValue: '5', expectedResult: true },
+          { operator: '>=', exitCode: 5, conditionValue: '5', expectedResult: true },
+          { operator: '<=', exitCode: 5, conditionValue: '5', expectedResult: true },
+          { operator: '!=', exitCode: 1, conditionValue: '0', expectedResult: true },
+        ];
+
+        for (const testCase of testCases) {
+          const mockJob = createMockJob({
+            versions: [
+              {
+                nodes: [
+                  { id: 'start-node', type: 'start', data: { name: 'Start' } },
+                  { id: 'execute-node', type: 'execute', data: { script: 'test.sh', agent: 'agent1' } },
+                  {
+                    id: 'condition-node',
+                    type: 'condition',
+                    data: {
+                      conditionType: 'return_code',
+                      operator: testCase.operator,
+                      conditionValue: testCase.conditionValue,
+                    },
+                  },
+                  { id: 'end-success', type: 'end-success', data: { name: 'Success' } },
+                  { id: 'end-failure', type: 'end-failure', data: { name: 'Failure' } },
+                ],
+                edges: [
+                  { from: 'start-node', fromPort: 'out', to: 'execute-node' },
+                  { from: 'execute-node', fromPort: 'out', to: 'condition-node' },
+                  { from: 'condition-node', fromPort: 'true', to: 'end-success' },
+                  { from: 'condition-node', fromPort: 'false', to: 'end-failure' },
+                ],
+              },
+            ],
+          });
+          db.getData.mockResolvedValue({ 'test-job': mockJob });
+
+          setTimeout(() => {
+            orchestrationEngine.signalScriptCompletion(
+              'Orchestration [test-job] Execution [test-exec-' + testCase.operator + '] Node [execute-node]',
+              { exitCode: testCase.exitCode, stdout: 'Output', stderr: '' }
+            );
+          }, 50);
+
+          jest.clearAllMocks();
+          const result = await orchestrationEngine.executeJob('test-job', false, 'test-exec-' + testCase.operator);
+
+          expect(result.conditionEvaluations['condition-node'].result).toBe(testCase.expectedResult);
+        }
+      });
+    });
+
+    describe('Condition Node - Output Contains Evaluation', () => {
+      it('should evaluate output_contains condition when string is present', async () => {
+        const mockJob = createMockJob({
+          versions: [
+            {
+              nodes: [
+                { id: 'start-node', type: 'start', data: { name: 'Start' } },
+                { id: 'execute-node', type: 'execute', data: { script: 'test.sh', agent: 'agent1' } },
+                {
+                  id: 'condition-node',
+                  type: 'condition',
+                  data: {
+                    conditionType: 'output_contains',
+                    operator: '==',
+                    conditionValue: 'SUCCESS',
+                  },
+                },
+                { id: 'end-success', type: 'end-success', data: { name: 'Success' } },
+                { id: 'end-failure', type: 'end-failure', data: { name: 'Failure' } },
+              ],
+              edges: [
+                { from: 'start-node', fromPort: 'out', to: 'execute-node' },
+                { from: 'execute-node', fromPort: 'out', to: 'condition-node' },
+                { from: 'condition-node', fromPort: 'true', to: 'end-success' },
+                { from: 'condition-node', fromPort: 'false', to: 'end-failure' },
+              ],
+            },
+          ],
+        });
+        db.getData.mockResolvedValue({ 'test-job': mockJob });
+
+        setTimeout(() => {
+          orchestrationEngine.signalScriptCompletion(
+            'Orchestration [test-job] Execution [test-exec1] Node [execute-node]',
+            { exitCode: 0, stdout: 'Backup completed with SUCCESS status', stderr: '' }
+          );
+        }, 50);
+
+        const result = await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(result.conditionEvaluations['condition-node'].result).toBe(true);
+        expect(result.finalStatus).toBe('success');
+      });
+
+      it('should handle output_contains with negation operator !=', async () => {
+        const mockJob = createMockJob({
+          versions: [
+            {
+              nodes: [
+                { id: 'start-node', type: 'start', data: { name: 'Start' } },
+                { id: 'execute-node', type: 'execute', data: { script: 'test.sh', agent: 'agent1' } },
+                {
+                  id: 'condition-node',
+                  type: 'condition',
+                  data: {
+                    conditionType: 'output_contains',
+                    operator: '!=',
+                    conditionValue: 'ERROR',
+                  },
+                },
+                { id: 'end-success', type: 'end-success', data: { name: 'Success' } },
+                { id: 'end-failure', type: 'end-failure', data: { name: 'Failure' } },
+              ],
+              edges: [
+                { from: 'start-node', fromPort: 'out', to: 'execute-node' },
+                { from: 'execute-node', fromPort: 'out', to: 'condition-node' },
+                { from: 'condition-node', fromPort: 'true', to: 'end-success' },
+                { from: 'condition-node', fromPort: 'false', to: 'end-failure' },
+              ],
+            },
+          ],
+        });
+        db.getData.mockResolvedValue({ 'test-job': mockJob });
+
+        setTimeout(() => {
+          orchestrationEngine.signalScriptCompletion(
+            'Orchestration [test-job] Execution [test-exec1] Node [execute-node]',
+            { exitCode: 0, stdout: 'Backup completed successfully', stderr: '' }
+          );
+        }, 50);
+
+        const result = await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(result.conditionEvaluations['condition-node'].result).toBe(true);
+      });
+    });
+
+    describe('Condition Node - Regex Match Evaluation', () => {
+      it('should evaluate regex_match condition with valid pattern', async () => {
+        const mockJob = createMockJob({
+          versions: [
+            {
+              nodes: [
+                { id: 'start-node', type: 'start', data: { name: 'Start' } },
+                { id: 'execute-node', type: 'execute', data: { script: 'test.sh', agent: 'agent1' } },
+                {
+                  id: 'condition-node',
+                  type: 'condition',
+                  data: {
+                    conditionType: 'regex_match',
+                    operator: '==',
+                    conditionValue: '^Backup (completed|finished)',
+                  },
+                },
+                { id: 'end-success', type: 'end-success', data: { name: 'Success' } },
+                { id: 'end-failure', type: 'end-failure', data: { name: 'Failure' } },
+              ],
+              edges: [
+                { from: 'start-node', fromPort: 'out', to: 'execute-node' },
+                { from: 'execute-node', fromPort: 'out', to: 'condition-node' },
+                { from: 'condition-node', fromPort: 'true', to: 'end-success' },
+                { from: 'condition-node', fromPort: 'false', to: 'end-failure' },
+              ],
+            },
+          ],
+        });
+        db.getData.mockResolvedValue({ 'test-job': mockJob });
+
+        setTimeout(() => {
+          orchestrationEngine.signalScriptCompletion(
+            'Orchestration [test-job] Execution [test-exec1] Node [execute-node]',
+            { exitCode: 0, stdout: 'Backup completed successfully', stderr: '' }
+          );
+        }, 50);
+
+        const result = await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(result.conditionEvaluations['condition-node'].result).toBe(true);
+        expect(result.finalStatus).toBe('success');
+      });
+
+      it('should reject invalid regex patterns', async () => {
+        const mockJob = createMockJob({
+          versions: [
+            {
+              nodes: [
+                { id: 'start-node', type: 'start', data: { name: 'Start' } },
+                { id: 'execute-node', type: 'execute', data: { script: 'test.sh', agent: 'agent1' } },
+                {
+                  id: 'condition-node',
+                  type: 'condition',
+                  data: {
+                    conditionType: 'regex_match',
+                    operator: '==',
+                    conditionValue: '[invalid(regex',
+                  },
+                },
+                { id: 'end-success', type: 'end-success', data: { name: 'Success' } },
+              ],
+              edges: [
+                { from: 'start-node', fromPort: 'out', to: 'execute-node' },
+                { from: 'execute-node', fromPort: 'out', to: 'condition-node' },
+                { from: 'condition-node', fromPort: 'true', to: 'end-success' },
+              ],
+            },
+          ],
+        });
+        db.getData.mockResolvedValue({ 'test-job': mockJob });
+
+        setTimeout(() => {
+          orchestrationEngine.signalScriptCompletion(
+            'Orchestration [test-job] Execution [test-exec1] Node [execute-node]',
+            { exitCode: 0, stdout: 'Output', stderr: '' }
+          );
+        }, 50);
+
+        const result = await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(result.status).toBe('failed');
+        expect(result.finalStatus).toBe('error');
+        expect(result.errors.length).toBeGreaterThan(0);
+        expect(result.errors[0].message).toContain('Invalid regex');
+      });
+    });
+
+    describe('Condition Node - Execution Time Evaluation', () => {
+      it('should evaluate execution_time condition', async () => {
+        const mockJob = createMockJob({
+          versions: [
+            {
+              nodes: [
+                { id: 'start-node', type: 'start', data: { name: 'Start' } },
+                { id: 'execute-node', type: 'execute', data: { script: 'test.sh', agent: 'agent1' } },
+                {
+                  id: 'condition-node',
+                  type: 'condition',
+                  data: {
+                    conditionType: 'execution_time',
+                    operator: '<',
+                    conditionValue: '10',
+                  },
+                },
+                { id: 'end-success', type: 'end-success', data: { name: 'Success' } },
+                { id: 'end-failure', type: 'end-failure', data: { name: 'Failure' } },
+              ],
+              edges: [
+                { from: 'start-node', fromPort: 'out', to: 'execute-node' },
+                { from: 'execute-node', fromPort: 'out', to: 'condition-node' },
+                { from: 'condition-node', fromPort: 'true', to: 'end-success' },
+                { from: 'condition-node', fromPort: 'false', to: 'end-failure' },
+              ],
+            },
+          ],
+        });
+        db.getData.mockResolvedValue({ 'test-job': mockJob });
+
+        setTimeout(() => {
+          orchestrationEngine.signalScriptCompletion(
+            'Orchestration [test-job] Execution [test-exec1] Node [execute-node]',
+            { exitCode: 0, stdout: 'Completed', stderr: '' }
+          );
+        }, 50);
+
+        const result = await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(result.conditionEvaluations['condition-node']).toBeDefined();
+        expect(result.conditionEvaluations['condition-node'].result).toBe(true);
+      });
+    });
+
+    describe('End Node Handling', () => {
+      it('should set finalStatus to success at end-success node', async () => {
+        const mockJob = createMockJob();
+        db.getData.mockResolvedValue({ 'test-job': mockJob });
+
+        setTimeout(() => {
+          orchestrationEngine.signalScriptCompletion(
+            'Orchestration [test-job] Execution [test-exec1] Node [execute-node]',
+            { exitCode: 0, stdout: 'Output', stderr: '' }
+          );
+        }, 50);
+
+        const result = await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(result.finalStatus).toBe('success');
+        expect(result.visitedNodes[result.visitedNodes.length - 1]).toBe('end-node');
+      });
+
+      it('should set finalStatus to failure at end-failure node', async () => {
+        const mockJob = createMockJob({
+          versions: [
+            {
+              nodes: [
+                { id: 'start-node', type: 'start', data: { name: 'Start' } },
+                { id: 'end-failure', type: 'end-failure', data: { name: 'End Failure' } },
+              ],
+              edges: [{ from: 'start-node', fromPort: 'out', to: 'end-failure' }],
+            },
+          ],
+        });
+        db.getData.mockResolvedValue({ 'test-job': mockJob });
+
+        const result = await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(result.finalStatus).toBe('failure');
+      });
+
+      it('should determine status from last execute node if no explicit end node', async () => {
+        const mockJob = createMockJob({
+          versions: [
+            {
+              nodes: [
+                { id: 'start-node', type: 'start', data: { name: 'Start' } },
+                { id: 'execute-node', type: 'execute', data: { script: 'test.sh', agent: 'agent1' } },
+              ],
+              edges: [{ from: 'start-node', fromPort: 'out', to: 'execute-node' }],
+            },
+          ],
+        });
+        db.getData.mockResolvedValue({ 'test-job': mockJob });
+
+        setTimeout(() => {
+          orchestrationEngine.signalScriptCompletion(
+            'Orchestration [test-job] Execution [test-exec1] Node [execute-node]',
+            { exitCode: 0, stdout: 'Output', stderr: '' }
+          );
+        }, 50);
+
+        const result = await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(result.finalStatus).toBe('success');
+      });
+    });
+
+    describe('Error Handling', () => {
+      it('should throw error when job not found', async () => {
+        db.getData.mockResolvedValue({});
+
+        const result = await orchestrationEngine.executeJob('nonexistent-job', false, 'test-exec1');
+
+        expect(result.status).toBe('failed');
+        expect(result.finalStatus).toBe('error');
+        expect(result.errors.length).toBeGreaterThan(0);
+        expect(result.errors[0].message).toContain('not found');
+      });
+
+      it('should throw error when no start node found', async () => {
+        const mockJob = createMockJob({
+          versions: [
+            {
+              nodes: [
+                { id: 'execute-node', type: 'execute', data: { script: 'test.sh', agent: 'agent1' } },
+                { id: 'end-node', type: 'end-success', data: { name: 'End' } },
+              ],
+              edges: [{ from: 'execute-node', fromPort: 'out', to: 'end-node' }],
+            },
+          ],
+        });
+        db.getData.mockResolvedValue({ 'test-job': mockJob });
+
+        const result = await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(result.status).toBe('failed');
+        expect(result.finalStatus).toBe('error');
+        expect(result.errors[0].message).toContain('No start node');
+      });
+
+      it('should throw error when node not found in graph', async () => {
+        const mockJob = createMockJob({
+          versions: [
+            {
+              nodes: [
+                { id: 'start-node', type: 'start', data: { name: 'Start' } },
+              ],
+              edges: [{ from: 'start-node', fromPort: 'out', to: 'nonexistent-node' }],
+            },
+          ],
+        });
+        db.getData.mockResolvedValue({ 'test-job': mockJob });
+
+        const result = await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(result.status).toBe('failed');
+        expect(result.finalStatus).toBe('error');
+        expect(result.errors[0].message).toContain('not found in orchestration');
+      });
+
+      it('should throw error when execute node has no script', async () => {
+        const mockJob = createMockJob({
+          versions: [
+            {
+              nodes: [
+                { id: 'start-node', type: 'start', data: { name: 'Start' } },
+                { id: 'execute-node', type: 'execute', data: { agent: 'agent1' } },
+                { id: 'end-node', type: 'end-success', data: { name: 'End' } },
+              ],
+              edges: [
+                { from: 'start-node', fromPort: 'out', to: 'execute-node' },
+                { from: 'execute-node', fromPort: 'out', to: 'end-node' },
+              ],
+            },
+          ],
+        });
+        db.getData.mockResolvedValue({ 'test-job': mockJob });
+
+        const result = await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(result.status).toBe('failed');
+        expect(result.errors[0].message).toContain('no script');
+      });
+
+      it('should throw error when execute node has no agent', async () => {
+        const mockJob = createMockJob({
+          versions: [
+            {
+              nodes: [
+                { id: 'start-node', type: 'start', data: { name: 'Start' } },
+                { id: 'execute-node', type: 'execute', data: { script: 'test.sh' } },
+                { id: 'end-node', type: 'end-success', data: { name: 'End' } },
+              ],
+              edges: [
+                { from: 'start-node', fromPort: 'out', to: 'execute-node' },
+                { from: 'execute-node', fromPort: 'out', to: 'end-node' },
+              ],
+            },
+          ],
+        });
+        db.getData.mockResolvedValue({ 'test-job': mockJob });
+
+        const result = await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(result.status).toBe('failed');
+        expect(result.errors[0].message).toContain('no agent');
+      });
+
+      it('should throw error when script file not found', async () => {
+        const mockJob = createMockJob();
+        db.getData.mockResolvedValue({ 'test-job': mockJob });
+        require('fs').promises.readFile.mockRejectedValue(new Error('ENOENT: no such file'));
+
+        const result = await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(result.status).toBe('failed');
+        expect(result.finalStatus).toBe('error');
+        expect(result.errors[0].message).toContain('Failed to read script');
+      });
+
+      it('should throw error when unknown node type encountered', async () => {
+        const mockJob = createMockJob({
+          versions: [
+            {
+              nodes: [
+                { id: 'start-node', type: 'start', data: { name: 'Start' } },
+                { id: 'unknown-node', type: 'unknown-type', data: {} },
+              ],
+              edges: [{ from: 'start-node', fromPort: 'out', to: 'unknown-node' }],
+            },
+          ],
+        });
+        db.getData.mockResolvedValue({ 'test-job': mockJob });
+
+        const result = await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(result.status).toBe('failed');
+        expect(result.errors[0].message).toContain('Unknown node type');
+      });
+
+      it('should throw error when start node has no outgoing connection', async () => {
+        const mockJob = createMockJob({
+          versions: [
+            {
+              nodes: [
+                { id: 'start-node', type: 'start', data: { name: 'Start' } },
+              ],
+              edges: [],
+            },
+          ],
+        });
+        db.getData.mockResolvedValue({ 'test-job': mockJob });
+
+        const result = await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(result.status).toBe('failed');
+        expect(result.errors[0].message).toContain('no outgoing connection');
+      });
+
+      it('should throw error when condition has no true branch', async () => {
+        const mockJob = createMockJob({
+          versions: [
+            {
+              nodes: [
+                { id: 'start-node', type: 'start', data: { name: 'Start' } },
+                { id: 'execute-node', type: 'execute', data: { script: 'test.sh', agent: 'agent1' } },
+                {
+                  id: 'condition-node',
+                  type: 'condition',
+                  data: {
+                    conditionType: 'return_code',
+                    operator: '==',
+                    conditionValue: '0',
+                  },
+                },
+              ],
+              edges: [
+                { from: 'start-node', fromPort: 'out', to: 'execute-node' },
+                { from: 'execute-node', fromPort: 'out', to: 'condition-node' },
+              ],
+            },
+          ],
+        });
+        db.getData.mockResolvedValue({ 'test-job': mockJob });
+
+        setTimeout(() => {
+          orchestrationEngine.signalScriptCompletion(
+            'Orchestration [test-job] Execution [test-exec1] Node [execute-node]',
+            { exitCode: 0, stdout: 'Output', stderr: '' }
+          );
+        }, 50);
+
+        const result = await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(result.status).toBe('failed');
+        expect(result.errors[0].message).toContain('no true branch');
+      });
+    });
+
+    describe('Edge Cases', () => {
+      it('should handle empty script output', async () => {
+        const mockJob = createMockJob();
+        db.getData.mockResolvedValue({ 'test-job': mockJob });
+
+        setTimeout(() => {
+          orchestrationEngine.signalScriptCompletion(
+            'Orchestration [test-job] Execution [test-exec1] Node [execute-node]',
+            { exitCode: 0, stdout: '', stderr: '' }
+          );
+        }, 50);
+
+        const result = await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(result.status).toBe('completed');
+        expect(result.scriptOutputs['execute-node'].stdout).toBe('');
+      });
+
+      it('should detect infinite loops and stop at maxIterations', async () => {
+        // Create a self-referencing execute node (infinite loop)
+        const mockJob = createMockJob({
+          versions: [
+            {
+              nodes: [
+                { id: 'start-node', type: 'start', data: { name: 'Start' } },
+                { id: 'execute-node', type: 'execute', data: { script: 'test.sh', agent: 'agent1' } },
+              ],
+              edges: [
+                { from: 'start-node', fromPort: 'out', to: 'execute-node' },
+                { from: 'execute-node', fromPort: 'out', to: 'execute-node' }, // Self-reference creates infinite loop
+              ],
+            },
+          ],
+        });
+        db.getData.mockResolvedValue({ 'test-job': mockJob });
+
+        // Keep signaling for the looping node
+        let callCount = 0;
+        global.agentComms.sendCommand.mockImplementation(() => {
+          callCount++;
+          setTimeout(() => {
+            orchestrationEngine.signalScriptCompletion(
+              `Orchestration [test-job] Execution [test-exec1] Node [execute-node]`,
+              { exitCode: 0, stdout: 'Completed', stderr: '' }
+            );
+          }, 10);
+        });
+
+        const result = await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(result.status).toBe('failed');
+        expect(result.finalStatus).toBe('error');
+        expect(result.errors[0].message).toContain('exceeded maximum iterations');
+      }, 30000);
+
+      it('should handle execution with onNodeComplete callback', async () => {
+        const mockJob = createMockJob();
+        db.getData.mockResolvedValue({ 'test-job': mockJob });
+
+        const onNodeCompleteSpy = jest.fn();
+
+        setTimeout(() => {
+          orchestrationEngine.signalScriptCompletion(
+            'Orchestration [test-job] Execution [test-exec1] Node [execute-node]',
+            { exitCode: 0, stdout: 'Output', stderr: '' }
+          );
+        }, 50);
+
+        await orchestrationEngine.executeJob('test-job', false, 'test-exec1', onNodeCompleteSpy);
+
+        // onNodeComplete should be called for each node completion
+        expect(onNodeCompleteSpy).toHaveBeenCalled();
+        expect(onNodeCompleteSpy.mock.calls.length).toBeGreaterThanOrEqual(3);
+      });
+
+      it('should generate unique executionId if not provided', async () => {
+        const mockJob = createMockJob();
+        db.getData.mockResolvedValue({ 'test-job': mockJob });
+
+        // Mock sendCommand to capture the job name and signal back with it
+        global.agentComms.sendCommand.mockImplementation((agentId, command, script, params, jobName) => {
+          setTimeout(() => {
+            orchestrationEngine.signalScriptCompletion(jobName, {
+              exitCode: 0,
+              stdout: 'Output',
+              stderr: '',
+            });
+          }, 50);
+        });
+
+        const result = await orchestrationEngine.executeJob('test-job', false);
+
+        expect(result.executionId).toBeDefined();
+        expect(result.executionId.length).toBeGreaterThan(0);
+        expect(result.status).toBe('completed');
+        expect(result.finalStatus).toBe('success');
+      }, 20000);
+    });
+
+    describe('Concurrency', () => {
+      it('should track multiple concurrent executions of same job', async () => {
+        const mockJob = createMockJob();
+        db.getData.mockResolvedValue({ 'test-job': mockJob });
+
+        // Start two concurrent executions
+        const exec1Promise = orchestrationEngine.executeJob('test-job', false, 'exec-1');
+        const exec2Promise = orchestrationEngine.executeJob('test-job', false, 'exec-2');
+
+        // Send completion signals
+        setTimeout(() => {
+          orchestrationEngine.signalScriptCompletion(
+            'Orchestration [test-job] Execution [exec-1] Node [execute-node]',
+            { exitCode: 0, stdout: 'Output 1', stderr: '' }
+          );
+          orchestrationEngine.signalScriptCompletion(
+            'Orchestration [test-job] Execution [exec-2] Node [execute-node]',
+            { exitCode: 1, stdout: 'Output 2', stderr: '' }
+          );
+        }, 50);
+
+        const [result1, result2] = await Promise.all([exec1Promise, exec2Promise]);
+
+        expect(result1.executionId).toBe('exec-1');
+        expect(result2.executionId).toBe('exec-2');
+        expect(result1.scriptOutputs['execute-node'].exitCode).toBe(0);
+        expect(result2.scriptOutputs['execute-node'].exitCode).toBe(1);
+      });
     });
   });
 

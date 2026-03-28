@@ -137,6 +137,7 @@ describe('Scheduler Module', () => {
     
     db.getData.mockResolvedValue(sampleSchedules);
     db.putData.mockResolvedValue(true);
+    db.deleteData.mockResolvedValue(true);
 
     global.agents = mockAgents;
     global.hist = mockHistory;
@@ -145,7 +146,10 @@ describe('Scheduler Module', () => {
     scheduler = require('../../scheduler.js');
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    jest.clearAllMocks();
+    // Wait for pending timers/promises to settle
+    await new Promise(resolve => setImmediate(resolve));
     delete global.logger;
     delete global.serverConfig;
     delete global.agentComms;
@@ -304,4 +308,580 @@ describe('Scheduler Module', () => {
       }
     });
   });
+
+  describe('runJob()', () => {
+    beforeEach(async () => {
+      db.getData.mockResolvedValue([
+        {
+          jobName: 'test-job',
+          description: 'Test Job',
+          agent: 'test-agent',
+          command: 'test.sh',
+          commandParams: '--verbose',
+          scheduleType: 'daily',
+          scheduleTime: '12:00',
+          dayOfWeek: '*',
+          dayInMonth: '*',
+          scheduleMode: 'classic',
+        },
+      ]);
+      await scheduler.init();
+    });
+
+    it('should execute a classic schedule job successfully', async () => {
+      mockAgents.getAgent.mockReturnValue({
+        name: 'test-agent',
+        status: 'online',
+      });
+
+      fs.promises.readFile.mockResolvedValue('#!/bin/bash\necho "test"');
+
+      const result = await scheduler.runJob('test-job', false);
+
+      expect(result).toBe('ok');
+      expect(global.agentComms.sendCommand).toHaveBeenCalled();
+    });
+
+    it('should reject if schedule item not found', async () => {
+      try {
+        await scheduler.runJob('nonexistent-job', false);
+        fail('Should have thrown an error');
+      } catch (err) {
+        expect(err.message).toContain('not found');
+      }
+    });
+
+    it('should reject if agent not found', async () => {
+      mockAgents.getAgent.mockReturnValue(undefined);
+
+      const result = await scheduler.runJob('test-job', false);
+
+      expect(result).toBe('error');
+      expect(global.notifier.sendNotification).toHaveBeenCalledWith(
+        expect.stringContaining('Unable to execute job'),
+        expect.stringContaining('does not exist'),
+        expect.anything(),
+        expect.anything()
+      );
+    });
+
+    it('should reject if agent is offline', async () => {
+      mockAgents.getAgent.mockReturnValue({
+        name: 'test-agent',
+        status: 'offline',
+      });
+
+      const result = await scheduler.runJob('test-job', false);
+
+      expect(result).toBe('error');
+      expect(global.notifier.sendNotification).toHaveBeenCalledWith(
+        expect.stringContaining('Unable to execute job'),
+        expect.stringContaining('not in the correct state'),
+        expect.anything(),
+        expect.anything()
+      );
+    });
+
+    it('should handle script file read errors', async () => {
+      mockAgents.getAgent.mockReturnValue({
+        name: 'test-agent',
+        status: 'online',
+      });
+
+      fs.promises.readFile.mockRejectedValue(new Error('ENOENT: file not found'));
+
+      const result = await scheduler.runJob('test-job', false);
+
+      expect(result).toBe('error');
+      expect(global.notifier.sendNotification).toHaveBeenCalledWith(
+        expect.stringContaining('Error reading backup script'),
+        expect.anything(),
+        expect.anything(),
+        expect.anything()
+      );
+    });
+
+    it('should add additional data to command params if provided', async () => {
+      mockAgents.getAgent.mockReturnValue({
+        name: 'test-agent',
+        status: 'online',
+      });
+
+      fs.promises.readFile.mockResolvedValue('#!/bin/bash\necho "test"');
+
+      const result = await scheduler.runJob('test-job', false, ' --extra-param=value');
+
+      expect(result).toBe('ok');
+      expect(global.agentComms.sendCommand).toHaveBeenCalled();
+    });
+
+    it('should set manual flag when isManual is true', async () => {
+      mockAgents.getAgent.mockReturnValue({
+        name: 'test-agent',
+        status: 'online',
+      });
+
+      fs.promises.readFile.mockResolvedValue('#!/bin/bash\necho "test"');
+
+      const result = await scheduler.runJob('test-job', true);
+
+      expect(result).toBe('ok');
+      const callArgs = global.agentComms.sendCommand.mock.calls[0];
+      expect(callArgs[6]).toBe(true); // isManual is 7th param (index 6)
+    });
+
+    it('should delete old log entry before execution', async () => {
+      mockAgents.getAgent.mockReturnValue({
+        name: 'test-agent',
+        status: 'online',
+      });
+
+      fs.promises.readFile.mockResolvedValue('#!/bin/bash\necho "test"');
+
+      await scheduler.runJob('test-job', false);
+
+      expect(db.deleteData).toHaveBeenCalledWith('test-agent_test-job_log');
+    });
+
+    it('should handle orchestration schedule mode', async () => {
+      db.getData.mockResolvedValue([
+        {
+          jobName: 'orch-job',
+          description: 'Orchestration Job',
+          scheduleType: 'daily',
+          scheduleTime: '12:00',
+          scheduleMode: 'orchestration',
+          orchestrationId: 'orch-123',
+        },
+      ]);
+      await scheduler.init();
+
+      // Mock orchestrationEngine
+      const mockOrchestrationEngine = {
+        executeJob: jest.fn().mockResolvedValue({
+          finalStatus: 'success',
+          executionId: 'exec-1',
+          jobId: 'orch-123',
+        }),
+        saveExecutionResult: jest.fn().mockResolvedValue(undefined),
+      };
+
+      jest.doMock('../../orchestrationEngine.js', () => mockOrchestrationEngine);
+
+      const result = await scheduler.runJob('orch-job', false);
+
+      expect(result).toBe('ok');
+    });
+
+    it('should handle orchestration schedule mode with success', async () => {
+      // This test verifies that orchestration mode is recognized
+      // Full orchestrationEngine integration testing is done in orchestrationEngine.test.js
+      db.getData.mockResolvedValue([
+        {
+          jobName: 'orch-job',
+          description: 'Orchestration Job',
+          scheduleType: 'daily',
+          scheduleTime: '12:00',
+          scheduleMode: 'orchestration',
+          orchestrationId: 'orch-123',
+        },
+      ]);
+      await scheduler.init();
+
+      // Just verify that the schedule was loaded
+      const schedule = scheduler.getSchedule('orch-job');
+      expect(schedule.scheduleMode).toBe('orchestration');
+      expect(schedule.orchestrationId).toBe('orch-123');
+    });
+
+
+    it('should create history item on agent offline error', async () => {
+      mockAgents.getAgent.mockReturnValue({
+        name: 'test-agent',
+        status: 'offline',
+      });
+
+      await scheduler.runJob('test-job', false);
+
+      expect(mockHistory.createHistoryItem).toHaveBeenCalledWith(
+        'test-job',
+        expect.any(String),
+        9998,
+        0,
+        expect.stringContaining('not in the correct state'),
+        false
+      );
+      expect(mockHistory.add).toHaveBeenCalled();
+    });
+  });
+
+  describe('scheduleJobs() - internal function tested through init', () => {
+    it('should schedule jobs during initialization', async () => {
+      db.getData.mockResolvedValue([
+        {
+          jobName: 'daily-job',
+          description: 'Daily Job',
+          agent: 'test-agent',
+          command: 'daily.sh',
+          scheduleType: 'daily',
+          scheduleTime: '14:30',
+          dayOfWeek: '*',
+          dayInMonth: '*',
+        },
+      ]);
+
+      await scheduler.init();
+
+      // scheduleJobs is called internally during init
+      expect(logger.info).toHaveBeenCalled();
+      expect(global.thresholdJobs.empty).toHaveBeenCalled();
+    });
+
+    it('should clear existing schedules before scheduling', async () => {
+      const mockJob = { cancel: jest.fn() };
+      global.nodeschedule.scheduledJobs = { 'existing-job': mockJob };
+
+      db.getData.mockResolvedValue([]);
+      await scheduler.init();
+
+      // Should have cleared existing jobs
+      expect(mockJob.cancel).toHaveBeenCalled();
+    });
+
+    it('should schedule daily, weekly, and monthly jobs', async () => {
+      db.getData.mockResolvedValue([
+        {
+          jobName: 'daily-job',
+          description: 'Daily',
+          agent: 'test-agent',
+          command: 'daily.sh',
+          scheduleType: 'daily',
+          scheduleTime: '14:30',
+        },
+        {
+          jobName: 'weekly-job',
+          description: 'Weekly',
+          agent: 'test-agent',
+          command: 'weekly.sh',
+          scheduleType: 'weekly',
+          scheduleTime: '09:00',
+          dayOfWeek: '3',
+        },
+        {
+          jobName: 'monthly-job',
+          description: 'Monthly',
+          agent: 'test-agent',
+          command: 'monthly.sh',
+          scheduleType: 'monthly',
+          scheduleTime: '10:00',
+          dayInMonth: '15',
+        },
+      ]);
+
+      await scheduler.init();
+
+      // Should have called scheduleJob for clock-type jobs
+      expect(global.nodeschedule.scheduleJob).toHaveBeenCalled();
+    });
+
+    it('should handle threshold jobs', async () => {
+      // Threshold jobs have a scheduleType that doesn't match daily/weekly/monthly
+      db.getData.mockResolvedValue([
+        {
+          jobName: 'threshold-job',
+          description: 'Threshold',
+          agent: 'test-agent',
+          command: 'threshold.sh',
+          scheduleType: 'threshold',
+        },
+      ]);
+
+      await scheduler.init();
+
+      // Verify the schedule was loaded
+      const schedule = scheduler.getSchedule('threshold-job');
+      expect(schedule).toBeDefined();
+      expect(schedule.jobName).toBe('threshold-job');
+      expect(schedule.scheduleType).toBe('threshold');
+    });
+  });
+
+  describe('getNextRunDate() edge cases', () => {
+    it('should calculate daily next run for future time today', async () => {
+      const schedule = {
+        scheduleType: 'daily',
+        scheduleTime: '23:00', // assuming current time is earlier
+      };
+
+      const nextRun = scheduler.getNextRunDate(schedule);
+
+      expect(nextRun).toBeInstanceOf(Date);
+      expect(nextRun.getHours()).toBe(23);
+      expect(nextRun.getMinutes()).toBe(0);
+    });
+
+    it('should calculate daily next run for past time today (move to tomorrow)', async () => {
+      const schedule = {
+        scheduleType: 'daily',
+        scheduleTime: '00:01', // very early morning
+      };
+
+      const now = new Date();
+      const nextRun = scheduler.getNextRunDate(schedule);
+
+      // Should be tomorrow (unless we test at exactly 00:00-00:01)
+      expect(nextRun).toBeInstanceOf(Date);
+      expect(nextRun.getHours()).toBe(0);
+      expect(nextRun.getMinutes()).toBe(1);
+    });
+
+    it('should calculate weekly next run for scheduled day', async () => {
+      const now = new Date();
+      const dayOfWeek = (now.getDay() + 1) % 7; // Tomorrow's day
+
+      const schedule = {
+        scheduleType: 'weekly',
+        scheduleTime: '15:30',
+        dayOfWeek: dayOfWeek.toString(),
+      };
+
+      const nextRun = scheduler.getNextRunDate(schedule);
+
+      expect(nextRun).toBeInstanceOf(Date);
+      expect(nextRun.getDay()).toBe(dayOfWeek);
+    });
+
+    it('should calculate monthly next run for valid day', async () => {
+      const schedule = {
+        scheduleType: 'monthly',
+        scheduleTime: '12:00',
+        dayInMonth: '25',
+      };
+
+      const nextRun = scheduler.getNextRunDate(schedule);
+
+      expect(nextRun).toBeInstanceOf(Date);
+      expect(nextRun.getDate()).toBe(25);
+    });
+
+    it('should throw error for invalid dayInMonth > 31', async () => {
+      const schedule = {
+        scheduleType: 'monthly',
+        scheduleTime: '12:00',
+        dayInMonth: '32',
+      };
+
+      expect(() => scheduler.getNextRunDate(schedule)).toThrow('Invalid dayInMonth');
+    });
+
+    it('should throw error for invalid dayInMonth < 1', async () => {
+      const schedule = {
+        scheduleType: 'monthly',
+        scheduleTime: '12:00',
+        dayInMonth: '0',
+      };
+
+      expect(() => scheduler.getNextRunDate(schedule)).toThrow('Invalid dayInMonth');
+    });
+
+    it('should return "n/a" for invalid schedule type', () => {
+      const schedule = {
+        scheduleType: 'invalid',
+        scheduleTime: '12:00',
+      };
+
+      const result = scheduler.getNextRunDate(schedule);
+
+      expect(result).toBe('n/a');
+    });
+
+    it('should parse schedule time correctly', () => {
+      const schedule = {
+        scheduleType: 'daily',
+        scheduleTime: '14:45',
+      };
+
+      const nextRun = scheduler.getNextRunDate(schedule);
+
+      expect(nextRun.getHours()).toBe(14);
+      expect(nextRun.getMinutes()).toBe(45);
+    });
+  });
+
+  describe('getTodaysScheduleCount()', () => {
+    beforeEach(async () => {
+      const now = new Date();
+      const todayDayOfWeek = now.getDay();
+
+      db.getData.mockResolvedValue([
+        { jobName: 'daily-1', scheduleType: 'daily', dayOfWeek: '*', dayInMonth: '*' },
+        { jobName: 'daily-2', scheduleType: 'daily', dayOfWeek: '*', dayInMonth: '*' },
+        { jobName: 'weekly', scheduleType: 'weekly', dayOfWeek: todayDayOfWeek.toString(), dayInMonth: '*' },
+        { jobName: 'monthly', scheduleType: 'monthly', dayOfWeek: '*', dayInMonth: '31' },
+      ]);
+      await scheduler.init();
+    });
+
+    it('should count jobs scheduled for today', () => {
+      const count = scheduler.getTodaysScheduleCount();
+
+      expect(typeof count).toBe('number');
+      expect(count).toBeGreaterThanOrEqual(2); // At least the two daily jobs
+    });
+
+    it('should return 0 if no jobs scheduled for today', async () => {
+      db.getData.mockResolvedValue([
+        { jobName: 'monthly', scheduleType: 'monthly', dayOfWeek: '*', dayInMonth: '31' },
+      ]);
+      await scheduler.init();
+
+      const count = scheduler.getTodaysScheduleCount();
+
+      if (new Date().getDate() !== 31) {
+        expect(count).toBe(0);
+      }
+    });
+
+    it('should include daily jobs in count', async () => {
+      db.getData.mockResolvedValue([
+        { jobName: 'daily-job', scheduleType: 'daily', dayOfWeek: '*', dayInMonth: '*' },
+      ]);
+      await scheduler.init();
+
+      const count = scheduler.getTodaysScheduleCount();
+
+      expect(count).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  describe('getLast7DaysScheduleCount()', () => {
+    beforeEach(async () => {
+      db.getData.mockResolvedValue([
+        { jobName: 'daily-1', scheduleType: 'daily', dayOfWeek: '*', dayInMonth: '*' },
+        { jobName: 'daily-2', scheduleType: 'daily', dayOfWeek: '*', dayInMonth: '*' },
+      ]);
+      await scheduler.init();
+    });
+
+    it('should return array of 7 daily counts', () => {
+      const counts = scheduler.getLast7DaysScheduleCount();
+
+      expect(Array.isArray(counts)).toBe(true);
+      expect(counts.length).toBe(7);
+    });
+
+    it('should have all numeric values', () => {
+      const counts = scheduler.getLast7DaysScheduleCount();
+
+      counts.forEach(count => {
+        expect(typeof count).toBe('number');
+        expect(count).toBeGreaterThanOrEqual(0);
+      });
+    });
+
+    it('should include today count at end of array', () => {
+      const counts = scheduler.getLast7DaysScheduleCount();
+      const todayCount = scheduler.getTodaysScheduleCount();
+
+      expect(counts[6]).toBe(todayCount);
+    });
+
+    it('should have increasing counts for daily jobs', () => {
+      const counts = scheduler.getLast7DaysScheduleCount();
+
+      // With daily jobs, all days should have same count
+      counts.forEach(count => {
+        expect(count).toBe(2); // Two daily jobs from beforeEach
+      });
+    });
+  });
+
+  describe('migrateSchedulesToDatabase()', () => {
+    it('should be called during init if JSON file exists', async () => {
+      // migrateSchedulesToDatabase is internal, but we can verify
+      // it was called during init by checking if db.putData was called
+      fs.existsSync.mockReturnValue(true);
+      fs.promises.readFile.mockResolvedValue(JSON.stringify([
+        { jobName: 'test-job', agent: 'test-agent', command: 'test.sh' },
+      ]));
+      fs.promises.unlink.mockResolvedValue(undefined);
+
+      // Clear previous calls
+      db.putData.mockClear();
+
+      await scheduler.init();
+
+      // If migration was triggered, putData should have been called
+      expect(db.putData).toHaveBeenCalled();
+    });
+
+    it('should not fail if migration file does not exist', async () => {
+      fs.existsSync.mockReturnValue(false);
+
+      // Should initialize without errors
+      await scheduler.init();
+
+      expect(logger.info).toHaveBeenCalled();
+    });
+  });
+
+
+  describe('runUpdateJob()', () => {
+    it('should execute agent update job when agent is online', () => {
+      mockAgents.getAgent.mockReturnValue({
+        name: 'test-agent',
+        id: 'agent-1',
+        status: 'online',
+      });
+
+      const result = scheduler.runUpdateJob('agent-1', 'update-command');
+
+      expect(result).toBe('ok');
+      expect(global.agentComms.sendCommand).toHaveBeenCalled();
+    });
+
+    it('should reject if agent is offline', () => {
+      mockAgents.getAgent.mockReturnValue({
+        name: 'test-agent',
+        id: 'agent-1',
+        status: 'offline',
+      });
+
+      const result = scheduler.runUpdateJob('agent-1', 'update-command');
+
+      expect(result).toBe('error');
+      expect(global.notifier.sendNotification).toHaveBeenCalledWith(
+        expect.stringContaining('Upgrade Failed'),
+        expect.stringContaining('not in the correct state'),
+        'ERROR',
+        expect.anything()
+      );
+    });
+
+    it('should create history item for failed update', () => {
+      mockAgents.getAgent.mockReturnValue({
+        name: 'test-agent',
+        id: 'agent-1',
+        status: 'offline',
+      });
+
+      scheduler.runUpdateJob('agent-1', 'update-command');
+
+      expect(mockHistory.createHistoryItem).toHaveBeenCalled();
+      expect(mockHistory.add).toHaveBeenCalled();
+    });
+
+    it('should delete old log before update', () => {
+      mockAgents.getAgent.mockReturnValue({
+        name: 'test-agent',
+        id: 'agent-1',
+        status: 'online',
+      });
+
+      scheduler.runUpdateJob('agent-1', 'update-command');
+
+      expect(db.deleteData).toHaveBeenCalled();
+    });
+  });
 });
+

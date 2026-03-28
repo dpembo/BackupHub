@@ -225,7 +225,7 @@ async function executeJob(jobId, isManual = false, executionId = null, onNodeCom
       const nodeStartTime = new Date().toISOString();
 
       // Emit nodeStarted event for all nodes (including start)
-      console.log(`[executeJob] Start node - emitting orchestrationNodeStarted for ${currentNodeId}`);
+      logger.debug(`[executeJob] Start node - emitting orchestrationNodeStarted for ${currentNodeId}`);
       wsBrowser.emitOrchestrationEvent(jobId, executionLog.executionId, 'orchestrationNodeStarted', {
         nodeId: currentNodeId,
         nodeType: currentNode.type,
@@ -615,7 +615,7 @@ async function executeJob(jobId, isManual = false, executionId = null, onNodeCom
   } finally {
     // Clean up execution tracking - but delay for 30 seconds to allow pending messages to be processed
     // Some agent messages may still be in the queue after orchestration completes
-    setTimeout(() => {
+    const cleanupTimeout = setTimeout(() => {
       if (activeOrchestrationExecutions[jobId]) {
         activeOrchestrationExecutions[jobId].executionIds.delete(finalExecutionId);
         // If no more active executions for this job, clean up the entry
@@ -632,6 +632,11 @@ async function executeJob(jobId, isManual = false, executionId = null, onNodeCom
         }
       }
     }, 30000);
+    
+    // Allow process to exit even if this timeout is pending (useful for tests)
+    if (cleanupTimeout.unref) {
+      cleanupTimeout.unref();
+    }
   }
 }
 
