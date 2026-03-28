@@ -147,9 +147,6 @@ async function getChartDataSet(numberOfDays) {
         failPerDay[date] = 0;
     });
 
-    // Track which orchestration executions we process to avoid double-counting
-    const processedOrchestrations = new Set();
-
     // Iterate through regular job history, EXCLUDING orchestration node items
     getItemsUsingTZ().forEach(item => {
         // Skip orchestration node items - we'll count only the parent execution instead
