@@ -282,7 +282,6 @@ describe('Scheduler Module', () => {
       expect(result.status).toBe('error');
       expect(result.executionId).toBeNull();
     });
-    });
   });
 
   describe('upsertSchedule()', () => {
