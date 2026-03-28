@@ -1907,15 +1907,15 @@ app.get('/runSchedule.html',User.isAuthenticated, asyncHandler(async (req, res) 
           await orchestration.saveExecutionResult(executionLog);
           // Clear the stub from cache - actual execution is now in history
           clearInProgressExecution(orchestrationId, executionId);
-          // Remove from running queue
-          running.removeItem(orchestrationName);
+          // Remove from running queue by executionId for consistency with REST endpoint
+          running.removeItemByExecutionId(executionId);
           logger.info(`Orchestration [${orchestrationId}] execution completed with status: ${executionLog.finalStatus}`);
         }).catch((err) => {
           logger.error(`Background orchestration execution failed: ${err.message}`);
           // Clear the stub on error too
           clearInProgressExecution(orchestrationId, executionId);
-          // Remove from running queue on error
-          running.removeItem(orchestrationName);
+          // Remove from running queue on error by executionId
+          running.removeItemByExecutionId(executionId);
         });
         
         // Redirect to monitor view immediately with the execution ID
