@@ -421,7 +421,31 @@ tbody tr.orch-expanded td {
     });
   }
 
-
+  function runOrchestrationFromHistory(jobId) {
+    $.ajax({
+      url: `/rest/orchestration/jobs/${encodeURIComponent(jobId)}/execute`,
+      type: 'POST',
+      headers: {
+        'X-CSRF-Token': $('meta[name="csrf-token"]').attr('content') || document.querySelector('input[name="_csrf"]')?.value
+      },
+      success: function(data) {
+        if (data.success && data.executionId) {
+          M.toast({ html: 'Orchestration started' });
+          // Wait a moment then scroll back to top to see it in running items
+          setTimeout(() => {
+            window.scrollTo(0, 0);
+            fetchRunList('runList');
+          }, 500);
+        } else {
+          M.toast({ html: 'Failed to start orchestration execution' });
+        }
+      },
+      error: function(xhr, status, error) {
+        console.error('Failed to execute orchestration:', error);
+        M.toast({ html: 'Failed to execute orchestration' });
+      }
+    });
+  }
 
   </script>
 </head>
@@ -459,7 +483,7 @@ tbody tr.orch-expanded td {
               <a class="sortableHeader" onclick="fetchList('historyList','status',(order === 'asc' && sort === 'status') ? 'desc' : 'asc');" href="#">Status</a>
               <span id="status-SortIcon" class="material-icons vertMid">&nbsp;</span>
             </th>
-            <th class="shortcol">Actions</th>
+            <th class="shortcol" style="min-width: 90px;">Actions</th>
           </thead>
           <tbody id="runList"></tbody>
           <tbody id="historyList"></tbody>

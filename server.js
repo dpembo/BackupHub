@@ -3209,6 +3209,39 @@ app.get('/orchestration/node/output', User.isAuthenticated, asyncHandler(async (
   res.json(output);
 }));
 
+app.get('/api/schedules/by-orchestration/:orchestrationId', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const orchestrationId = req.params.orchestrationId;
+  
+  if (!orchestrationId) {
+    return res.status(400).json({ error: 'Orchestration ID is required' });
+  }
+  
+  // Get all schedules
+  const allSchedules = await scheduler.getSchedules(-1); // Get all (passing -1 might be placeholder, let's use direct access)
+  let matchingSchedules = [];
+  
+  try {
+    // Access schedules from database
+    const schedulesDb = require('./db.js');
+    const schedules = await schedulesDb.getData('SCHEDULES_CONFIG').catch(() => []);
+    
+    if (Array.isArray(schedules)) {
+      matchingSchedules = schedules.filter(schedule => 
+        schedule.scheduleMode === 'orchestration' && 
+        schedule.orchestrationId === orchestrationId
+      );
+    }
+  } catch (err) {
+    logger.warn('Error fetching schedules for orchestration:', err.message);
+    matchingSchedules = [];
+  }
+  
+  res.json({
+    success: true,
+    schedules: matchingSchedules
+  });
+}));
+
 // ============================================================================
 // ERROR HANDLING MIDDLEWARE (must be registered last)
 // ============================================================================

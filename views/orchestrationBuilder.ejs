@@ -116,6 +116,10 @@
         </div>
       </h3>
       <div id="header-buttonss" style="display: flex; gap: 10px;">
+        <button class="save-btn" style="background: #1976d2;" onclick="listSchedulesForOrchestration()" title="View schedules that use this orchestration">
+          <i class="material-icons" style="font-size: 16px; vertical-align: middle;">list</i>
+          List Schedules
+        </button>
         <button class="save-btn" style="background: #2196f3;" onclick="runOrchestration()" title="Execute the orchestration">
           <i class="material-icons" style="font-size: 16px; vertical-align: middle;">play_arrow</i>
           Run
@@ -289,6 +293,20 @@
     <div class="modal-footer">
       <a href="#!" class="modal-close waves-effect waves-green btn-flat">Cancel</a>
       <a href="#!" onclick="confirmOrchestrationName()" id="naming-confirm-button" class="waves-effect waves-green btn-flat" style="color: #4caf50; font-weight: 600;">Save & Continue</a>
+    </div>
+  </div>
+  
+  <!-- List Schedules Modal -->
+  <div id="schedules-list-modal" class="modal" style="max-height: 90vh; max-width: 800px; width: 90%;">
+    <div class="modal-content" style="max-height: 75vh; overflow-y: auto; position: relative;">
+      <button class="modal-close" style="position: absolute; top: 10px; right: 10px; background: none; border: none; cursor: pointer; color: #999; font-size: 28px; padding: 0; line-height: 1;">&times;</button>
+      <h4><i class="material-icons" style="vertical-align: middle; margin-right: 10px;">list</i>Schedules Using This Orchestration</h4>
+      <div id="schedules-list-container">
+        <p style="text-align: center; color: #999;">Loading schedules...</p>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <a href="#!" class="modal-close waves-effect waves-green btn-flat">Close</a>
     </div>
   </div>
   
@@ -1344,6 +1362,121 @@
       const descEl = document.getElementById('orch-desc-text');
       descEl.textContent = orchestrationDescription || 'No Description';
       descEl.setAttribute('title', orchestrationDescription || 'No Description');
+    }
+    
+    function listSchedulesForOrchestration() {
+      // If orchestration hasn't been saved yet, show a message
+      if (!orchestrationId) {
+        M.toast({html: 'Please save the orchestration first'});
+        return;
+      }
+      
+      // Fetch schedules that use this orchestration
+      $.ajax({
+        url: `/api/schedules/by-orchestration/${encodeURIComponent(orchestrationId)}`,
+        type: 'GET',
+        dataType: 'json',
+        success: function(data) {
+          displaySchedulesList(data.schedules || []);
+          const modal = M.Modal.getInstance(document.getElementById('schedules-list-modal'));
+          if (modal) {
+            modal.open();
+          } else {
+            M.Modal.init(document.getElementById('schedules-list-modal')).open();
+          }
+        },
+        error: function(xhr, status, error) {
+          console.error('Failed to fetch schedules:', error);
+          M.toast({html: 'Failed to fetch schedules'});
+        }
+      });
+    }
+    
+    function displaySchedulesList(schedules) {
+      const container = document.getElementById('schedules-list-container');
+      
+      if (!schedules || schedules.length === 0) {
+        container.innerHTML = '<p style="text-align: center; color: #999;">No schedules are using this orchestration</p>';
+        return;
+      }
+      
+      let html = '<div style="overflow-x: auto;"><table style="width: 100%; border-collapse: collapse;">';
+      html += '<thead style="background: #f5f5f5; border-bottom: 2px solid #ddd;">';
+      html += '<tr><th style="padding: 12px 8px; text-align: left; font-weight: 600;"></th>';
+      html += '<th style="padding: 12px 8px; text-align: left; font-weight: 600;">Schedule Name</th>';
+      html += '<th style="padding: 12px 8px; text-align: left; font-weight: 600;">Schedule</th>';
+      html += '<th style="padding: 12px 8px; text-align: center; font-weight: 600;">Actions</th></tr></thead><tbody>';
+      
+      schedules.forEach(function(schedule, idx) {
+        const bgColor = idx % 2 === 0 ? 'white' : '#fafafa';
+        const scheduleDisplay = formatScheduleDisplay(schedule);
+        const icon = schedule.icon || 'schedule';
+        const color = schedule.color || '#999';
+        
+        html += `<tr style="background: ${bgColor}; border-bottom: 1px solid #eee;">`;
+        html += `<td style="padding: 12px 8px; text-align: center;"><i class="material-icons" style="color: ${escapeHtml(color)}; font-size: 20px;">${escapeHtml(icon)}</i></td>`;
+        html += `<td style="padding: 12px 8px; font-weight: 500;">${escapeHtml(schedule.jobName)}</td>`;
+        html += `<td style="padding: 12px 8px; font-size: 0.9em; color: #666;">${scheduleDisplay}</td>`;
+        html += `<td style="padding: 12px 8px; text-align: center;">`;
+        html += `<a href="#" onclick="event.preventDefault(); editScheduleFromList('${escapeHtml(schedule.jobName)}')" title="Edit schedule" style="color: #2196f3; text-decoration: none; margin-right: 10px;">`;
+        html += `<i class="material-icons" style="font-size: 18px; vertical-align: middle;">edit</i></a>`;
+        html += `</td></tr>`;
+      });
+      
+      html += '</tbody></table></div>';
+      container.innerHTML = html;
+    }
+    
+    function formatScheduleDisplay(schedule) {
+      const type = schedule.scheduleType || 'once';
+      const time = schedule.scheduleTime || '00:00';
+      const dayOfWeek = schedule.dayOfWeek || 0;
+      const dayInMonth = schedule.dayInMonth || 1;
+      
+      const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      
+      switch(type) {
+        case 'daily':
+          return `Daily at ${time}`;
+        case 'weekly':
+          return `${daysOfWeek[dayOfWeek]} at ${time}`;
+        case 'monthly':
+          return `${getOrdinalDay(dayInMonth)} of Month at ${time}`;
+        case 'once':
+        default:
+          return 'Once';
+      }
+    }
+    
+    function getOrdinalDay(day) {
+      const j = day % 10;
+      const k = day % 100;
+      if (j === 1 && k !== 11) return day + 'st';
+      if (j === 2 && k !== 12) return day + 'nd';
+      if (j === 3 && k !== 13) return day + 'rd';
+      return day + 'th';
+    }
+    
+    function editScheduleFromList(jobName) {
+      // Close the modal
+      const modal = M.Modal.getInstance(document.getElementById('schedules-list-modal'));
+      if (modal) {
+        modal.close();
+      }
+      
+      // Navigate to scheduler with the job name
+      window.location.href = `/scheduler.html?jobname=${encodeURIComponent(jobName)}&redir=${encodeURIComponent('/orchestrationBuilder.html?id=' + encodeURIComponent(orchestrationId))}`;
+    }
+    
+    function escapeHtml(text) {
+      const map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+      };
+      return text.replace(/[&<>"']/g, function(m) { return map[m]; });
     }
     
     function updateStats() {

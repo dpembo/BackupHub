@@ -235,6 +235,10 @@ function displaySecs(secs) {
                 <a href="/orchestration/monitor.html?jobId=<%=encodeURIComponent(historyList[i].jobId)%><% if(historyList[i].executionId) { %>&executionId=<%=encodeURIComponent(historyList[i].executionId)%><% } %>" title="View Orchestration Details" target="_blank">
                   <span class="<%=classVal%> material-icons">open_in_new</span>
                 </a>
+                <a title="Edit Orchestration" href="/orchestrationBuilder.html?id=<%=encodeURIComponent(historyList[i].jobId)%>&redir=<%=encodeURIComponent('/history.html')%>"><i class="material-icons <%=classVal%> vertTop">edit</i></a>
+                <% if(parseInt(historyList[i].returnCode)!=0) {%>
+                  <a title="Re-run Orchestration" onclick="runOrchestrationFromHistory('<%=historyList[i].jobId%>')"><i class="material-icons <%=classVal%> vertTop" style="cursor:pointer;">play_circle</i></a>
+                <% } %>
               </td>
             </tr>
 
@@ -293,7 +297,6 @@ function displaySecs(secs) {
               <% } else {%> 
                 <%=historyList[i].jobName%>
               <% }%>
-              
             </td>
             <td>
               <% var runType="schedule"; var runDesc="Scheduled Execution";%>

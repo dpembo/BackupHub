@@ -81,7 +81,7 @@
           <tr>
             <td><span class="material-icons" style="color: #ff9800; font-size: 24pt;" title="Orchestration">schema</span></td>
             <td>${orchName}</td>
-            <td>${description}</td>
+            <td><div style="max-width: 250px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${description}">${description}</div></td>
             <td>${updatedDate}</td>
             <td>
               <a title="edit" href="/orchestrationBuilder.html?id=${encodeURIComponent(orchId)}"><i class="material-icons tableIconButton vertMid">edit</i></a>
