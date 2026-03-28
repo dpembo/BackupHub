@@ -381,7 +381,7 @@ async function getSchedulerData(index, executionId = null)
 
   // If executionId provided, look up specific historical execution
   if (executionId) {
-    logger.info(`Looking up historical execution [${executionId}] for job [${schedule.jobName}]`);
+    logger.info(`Looking up execution [${executionId}] for job [${schedule.jobName}]`);
     const allHistory = hist.getItems();
     const historyItem = allHistory.find(item => item.jobName === schedule.jobName && item.executionId === executionId);
     
@@ -392,13 +392,24 @@ async function getSchedulerData(index, executionId = null)
       data.stats = null;  // No live stats for historical lookups
       data.executionMode = 'historical';
     } else {
-      logger.warn(`Historical execution [${executionId}] not found for job [${schedule.jobName}]`);
-      data.executionMode = 'historical_not_found';
+      // Check if it's a currently running execution with this ID
+      const runningItem = running.getItems().find(item => item.jobName === schedule.jobName && item.executionId === executionId);
+      if (runningItem) {
+        logger.info(`Found active execution [${executionId}] - treating as current run`);
+        // Treat as current/active execution, get live stats
+        data.executionMode = 'current_active';
+      } else {
+        logger.warn(`Execution [${executionId}] not found for job [${schedule.jobName}]`);
+        data.executionMode = 'historical_not_found';
+      }
     }
   } else {
     // Current mode - get live stats
     data.executionMode = 'current';
-    
+  }
+  
+  // If not historical, get current live stats
+  if (data.executionMode !== 'historical' && data.executionMode !== 'historical_not_found') {
     //return logEvent.name + "_" + logEvent.jobName + "_" + type;
     var key1 = schedule.agent + "_" + schedule.jobName + "_" + "stats";
     var key2 = schedule.agent + "_" + schedule.jobName + "_" + "log";
@@ -1941,10 +1952,19 @@ app.get('/runSchedule.html',User.isAuthenticated, asyncHandler(async (req, res) 
     
     // Only attempt to run if no pre-check errors
     if (!errorMessage) {
-      var status = await scheduler.manualJobRun(index,jobname);
-      logger.info(`Job execution status: ${status}`)
-      if(status!="ok") {
+      logger.info(`About to call manualJobRun with index=${index}, jobname=${jobname}`);
+      var result = await scheduler.manualJobRun(index,jobname);
+      logger.info(`Job execution result: ${JSON.stringify(result)}`)
+      if(result && result.status !== "ok") {
         errorMessage = "Job execution failed";
+        logger.error(`Classic job execution failed - result: ${JSON.stringify(result)}`);
+      } else if (result && result.executionId) {
+        logger.info(`Adding executionId to URL: ${result.executionId}`);
+        // Add executionId to redirect URL for classic jobs
+        redir += (redir.includes('?') ? '&' : '?') + 'executionId=' + encodeURIComponent(result.executionId);
+        logger.info(`Final redirect URL: ${redir}`);
+      } else {
+        logger.warn(`No executionId in result: ${JSON.stringify(result)}`);
       }
     }
   }
@@ -1955,6 +1975,7 @@ app.get('/runSchedule.html',User.isAuthenticated, asyncHandler(async (req, res) 
     const encodedMsg = encodeURIComponent(errorMessage);
     redir += separator + "message=" + encodedMsg;
   }
+  logger.info(`Final redir URL before redirect: ${redir}`);
   res.redirect(redir);
 }));
 

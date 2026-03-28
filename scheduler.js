@@ -12,6 +12,7 @@ const path = require('path');
 const dateTimeUtils = require('./utils/dateTimeUtils.js');
 const asyncUtils = require('./utils/asyncUtils.js');
 const { handleError, AppError } = require('./utils/errorHandler.js');
+const running = require('./running.js');
 
 function checkExecutePermissionCapability(directoryPath) {
   try {
@@ -419,7 +420,7 @@ async function runJob(jobName, isManual, inData) {
         await orchestration.saveExecutionResult(executionLog);
         
         logger.info(`Orchestration [${schedItem.orchestrationId}] execution completed with status [${executionLog.finalStatus}]`);
-        return executionLog.finalStatus === 'success' ? 'ok' : 'error';
+        return { status: (executionLog.finalStatus === 'success' ? 'ok' : 'error'), executionId: executionLog.executionId || null };
       } catch (err) {
         logger.error(`Error executing orchestration [${schedItem.orchestrationId}]:`, err.message);
         if (serverConfig.server.jobFailEnabled == "true") {
@@ -430,7 +431,7 @@ async function runJob(jobName, isManual, inData) {
             `/orchestrationList.html`
           );
         }
-        return "error";
+        return { status: "error", executionId: null };
       }
     }
 
@@ -444,7 +445,7 @@ async function runJob(jobName, isManual, inData) {
       if (serverConfig.server.jobFailEnabled == "true") {
         notifier.sendNotification(`Unable to execute job [${jobName}]`, message, "WARNING", `/scheduler.html?jobname=${jobName}`);
       }
-      return "error";
+      return { status: "error", executionId: null };
     }
 
     // Delete old log entry
@@ -463,19 +464,20 @@ async function runJob(jobName, isManual, inData) {
       }
       var obj = hist.createHistoryItem(jobName, new Date().toISOString(), 9998, 0, fullMessage, isManual);
       hist.add(obj);
-      return "error";
+      return { status: "error", executionId: null };
     }
 
     var command = schedItem.command;
     var commandParams = schedItem.commandParams;
     logger.info(`Command [${command}]`);
 
+    // Generate execution ID for this job run (at the beginning so we can return it)
+    const crypto = require('crypto');
+    const executionId = crypto.randomBytes(8).toString('hex');
+    logger.info(`Generated execution ID for job [${jobName}]: ${executionId}`);
+    
     if (command !== undefined && command !== null && command.length > 0) {
       try {
-        // Generate execution ID for this job run
-        const crypto = require('crypto');
-        const executionId = crypto.randomBytes(8).toString('hex');
-        
         const scriptPath = "./scripts/" + command;
         const data = await fs.readFile(scriptPath, 'utf8');
         logger.debug('Script file content loaded successfully');
@@ -490,13 +492,19 @@ async function runJob(jobName, isManual, inData) {
         if (serverConfig.server.jobFailEnabled == "true") {
           notifier.sendNotification(`Error reading backup script for job [${jobName}]`, `${err.message}`, "ERROR", `/scheduler.html?jobname=${jobName}`);
         }
-        return "error";
+        return { status: "error", executionId: null };
       }
     } else {
-      publishExecute(schedItem.agent, commandParams, "", jobName, isManual);
+      publishExecute(schedItem.agent, commandParams, "", jobName, isManual, executionId);
     }
 
-    return "ok";
+    // Add to running queue to track this execution
+    const runningItem = running.createItem(jobName, new Date().toISOString(), 'manual', executionId);
+    running.add(runningItem);
+    logger.info(`Added job to running queue: [${jobName}] with execution ID [${executionId}]`);
+
+    logger.info(`Returning from runJob with status=ok and executionId=${executionId}`);
+    return { status: "ok", executionId: executionId };
   } catch (err) {
     logger.error(`Error in runJob [${jobName}]:`, err.message);
     throw err;
@@ -510,14 +518,14 @@ async function manualJobRun(index, jobName) {
 
     if (Array.isArray(jobName)) {
       logger.error("Error: jobName was an array");
-      return "error";
+      return { status: "error", executionId: null };
     }
 
     logger.debug("passed array check");
 
     if (jobName !== undefined && jobName !== null && typeof jobName !== 'string') {
       logger.error("Error in jobname sanitization");
-      return "error";
+      return { status: "error", executionId: null };
     }
 
     logger.debug("passed string check");
@@ -527,7 +535,10 @@ async function manualJobRun(index, jobName) {
     }
 
     logger.debug('Requesting Manual Run of:' + jobName);
-    return await runJob(jobName, "manual");
+    logger.info(`Starting manual run of job: ${jobName}`);
+    const result = await runJob(jobName, "manual");
+    logger.info(`Manual run completed with result: ${JSON.stringify(result)}`);
+    return result;
   } catch (err) {
     logger.error(`Error in manualJobRun:`, err.message);
     throw err;

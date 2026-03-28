@@ -375,9 +375,7 @@ function displaySecs(secs) {
 
               <% if(itemInternal == false)  {%>
               <% if(!deleted){%><a title="Edit Job" href="/scheduler.html?jobname=<%=historyList[i].jobName%>&redir=<%=encodeURIComponent('/history.html')%>"><i class="material-icons <%=logclass%> vertTop">edit</i></a><%}%>
-              <% if(parseInt(historyList[i].returnCode)!=0) {%>
-                <% if(!deleted){%><a title="Re-run" href="/runSchedule.html?jobname=<%=historyList[i].jobName%>&redir=<%=encodeURIComponent('/history.html')%>"><i class="material-icons <%=logclass%> vertTop">play_circle</i></a><%}%>
-              <%}%>
+              <% if(!deleted){%><a title="Re-run Job" href="/runSchedule.html?jobname=<%=historyList[i].jobName%>&redir=<%=encodeURIComponent('/history.html')%>"><i class="material-icons <%=logclass%> vertTop">play_circle</i></a><%}%>
               <% } else { %> 
                 <% if(!deleted){%><a title="Internal Job"><i class="material-icons <%=logclass%> vertTop">blocked</a>
                 <% } else {%>

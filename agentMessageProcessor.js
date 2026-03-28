@@ -39,9 +39,22 @@ async function processMessage(topic, message,protocol) {
       //known agent running status
       if (topic == "backup/agent/status" && obj.status == "running") {
         logger.debug(">>>>>> RUNNING\n" + JSON.stringify(obj));
+        logger.info(`Agent running: jobName=[${obj.jobName}], executionId=[${obj.executionId}], manual=[${obj.manual}]`);
         agents.updateAgentStatus(obj.name, obj.status, obj.description, null,obj.jobName, new Date(),message,protocol);
-        var item = running.createItem(obj.jobName, obj.lastStatusReport, obj.manual, obj.executionId);   
-        running.add(item);
+        
+        // Check if this execution is already in the running queue to avoid duplicates
+        const existingItem = running.getItems().find(item => 
+          item.jobName === obj.jobName && item.executionId === obj.executionId
+        );
+        
+        if (!existingItem) {
+          logger.info(`Creating new running item for [${obj.jobName}] with executionId [${obj.executionId}]`);
+          var item = running.createItem(obj.jobName, obj.lastStatusReport, obj.manual, obj.executionId);
+          logger.info(`Created running item: jobName=[${item.jobName}], executionId=[${item.executionId}]`);
+          running.add(item);
+        } else {
+          logger.info(`Running item already exists for [${obj.jobName}] with executionId [${obj.executionId}], skipping duplicate add`);
+        }
       }
   
       //Ping response received
@@ -138,7 +151,17 @@ async function processMessage(topic, message,protocol) {
         }
         
         updateStatusRecords(obj, startTime);
-        running.removeItem(obj.jobName);
+        
+        // Remove from running queue by executionId if available, otherwise by job name
+        logger.info(`Job completion for [${obj.jobName}]: executionId=[${obj.executionId}], returnCode=[${obj.returnCode}]`);
+        if (obj.executionId) {
+          logger.info(`Removing job [${obj.jobName}] from running queue by executionId [${obj.executionId}]`);
+          running.removeItemByExecutionId(obj.executionId);
+        } else {
+          logger.info(`Removing job [${obj.jobName}] from running queue by job name (no executionId)`);
+          running.removeItem(obj.jobName);
+        }
+        
         agents.updateAgentStatus(obj.name, "online", `Job [${obj.name}] completed`,null,null,null,message,protocol,null);
         
         // Emit schedule update to notify frontend that job completed (skip for orchestration jobs)

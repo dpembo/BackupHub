@@ -141,16 +141,22 @@ function removeItem(jobName)
 function removeItemByExecutionId(executionId)
 {
     logger.debug("Removing Running item with Execution ID [" + executionId + "]");
+    logger.debug(`Current running items: ${JSON.stringify(historyItems.map(item => ({jobName: item.jobName, executionId: item.executionId})))}`);
     //Find index from executionId
     var index = -1;
     for(var i=0;i<historyItems.length;i++){
+        logger.debug(`Comparing executionId: "${executionId}" == "${historyItems[i].executionId}" (types: ${typeof executionId} vs ${typeof historyItems[i].executionId})`);
         if(historyItems[i].executionId == executionId){
             index = i;
+            logger.info(`Found matching executionId at index ${i}`);
             break;
         }
     }
     if (index !== -1) {
+        logger.info(`Removing running item at index ${index} for executionId [${executionId}]`);
         removeItemByIndex(index);
+    } else {
+        logger.warn(`No running item found with executionId [${executionId}]`);
     }
 }
 

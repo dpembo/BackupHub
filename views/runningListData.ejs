@@ -122,7 +122,7 @@ function displaySecs(secs) {
                 <% if (runningList[i].orchestrationId && runningList[i].executionId) { %>
                   <a href="/orchestration/monitor.html?jobId=<%=encodeURIComponent(runningList[i].orchestrationId)%>&executionId=<%=encodeURIComponent(runningList[i].executionId)%>" title="view orchestration monitor" class="modal-trigger"><span class="material-icons vertTop runningIcons">visibility</span></a>
                 <% } else { %>
-                  <a href="scheduleInfo.html?index=<%=getSchedule(runningList[i].jobName)%>" title="view log" class="modal-trigger"><span class="material-icons vertTop runningIcons">visibility</span></a>
+                  <a href="scheduleInfo.html?index=<%=getSchedule(runningList[i].jobName)%><% if(runningList[i].executionId) { %>&executionId=<%=encodeURIComponent(runningList[i].executionId)%><% } %>" title="view log" class="modal-trigger"><span class="material-icons vertTop runningIcons">visibility</span></a>
                 <% } %>
           </tr>
           <%}%>

@@ -265,19 +265,23 @@ describe('Scheduler Module', () => {
       });
 
       const result = await scheduler.manualJobRun(0, 'test-job');
-      expect(result).toBe('error');
+      expect(result.status).toBe('error');
+      expect(result.executionId).toBeNull();
     });
 
     it('should reject if agent not found', async () => {
       mockAgents.getAgent.mockReturnValue(undefined);
 
       const result = await scheduler.manualJobRun(0, 'test-job');
-      expect(result).toBe('error');
+      expect(result.status).toBe('error');
+      expect(result.executionId).toBeNull();
     });
 
     it('should validate job name is a string', async () => {
       const result = await scheduler.manualJobRun(0, ['not-a-string']);
-      expect(result).toBe('error');
+      expect(result.status).toBe('error');
+      expect(result.executionId).toBeNull();
+    });
     });
   });
 
@@ -338,7 +342,8 @@ describe('Scheduler Module', () => {
 
       const result = await scheduler.runJob('test-job', false);
 
-      expect(result).toBe('ok');
+      expect(result.status).toBe('ok');
+      expect(result.executionId).toBeDefined();
       expect(global.agentComms.sendCommand).toHaveBeenCalled();
     });
 
@@ -356,7 +361,8 @@ describe('Scheduler Module', () => {
 
       const result = await scheduler.runJob('test-job', false);
 
-      expect(result).toBe('error');
+      expect(result.status).toBe('error');
+      expect(result.executionId).toBeNull();
       expect(global.notifier.sendNotification).toHaveBeenCalledWith(
         expect.stringContaining('Unable to execute job'),
         expect.stringContaining('does not exist'),
@@ -373,7 +379,8 @@ describe('Scheduler Module', () => {
 
       const result = await scheduler.runJob('test-job', false);
 
-      expect(result).toBe('error');
+      expect(result.status).toBe('error');
+      expect(result.executionId).toBeNull();
       expect(global.notifier.sendNotification).toHaveBeenCalledWith(
         expect.stringContaining('Unable to execute job'),
         expect.stringContaining('not in the correct state'),
@@ -392,7 +399,8 @@ describe('Scheduler Module', () => {
 
       const result = await scheduler.runJob('test-job', false);
 
-      expect(result).toBe('error');
+      expect(result.status).toBe('error');
+      expect(result.executionId).toBeNull();
       expect(global.notifier.sendNotification).toHaveBeenCalledWith(
         expect.stringContaining('Error reading backup script'),
         expect.anything(),
@@ -411,7 +419,8 @@ describe('Scheduler Module', () => {
 
       const result = await scheduler.runJob('test-job', false, ' --extra-param=value');
 
-      expect(result).toBe('ok');
+      expect(result.status).toBe('ok');
+      expect(result.executionId).toBeDefined();
       expect(global.agentComms.sendCommand).toHaveBeenCalled();
     });
 
@@ -425,7 +434,8 @@ describe('Scheduler Module', () => {
 
       const result = await scheduler.runJob('test-job', true);
 
-      expect(result).toBe('ok');
+      expect(result.status).toBe('ok');
+      expect(result.executionId).toBeDefined();
       const callArgs = global.agentComms.sendCommand.mock.calls[0];
       expect(callArgs[6]).toBe(true); // isManual is 7th param (index 6)
     });
@@ -470,7 +480,8 @@ describe('Scheduler Module', () => {
 
       const result = await scheduler.runJob('orch-job', false);
 
-      expect(result).toBe('ok');
+      expect(result.status).toBe('ok');
+      expect(result.executionId).toBe('exec-1');
     });
 
     it('should handle orchestration schedule mode with success', async () => {
