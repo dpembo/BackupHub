@@ -37,7 +37,25 @@ jest.mock('../../history.js', () => ({
   createHistoryItem: jest.fn(),
 }));
 
+// Mock notify module before importing orchestrationEngine
+jest.mock('../../notify.js', () => ({
+  sendNotification: jest.fn(),
+}));
+
+// Mock orchestrationMonitor module before importing orchestrationEngine
+jest.mock('../../orchestrationMonitor.js', () => ({
+  getJobDefinitionVersion: jest.fn(),
+}));
+
+// Mock configuration module before importing orchestrationEngine
+jest.mock('../../configuration.js', () => ({
+  getConfig: jest.fn(),
+}));
+
 const db = require('../../db.js');
+const notifier = require('../../notify.js');
+const orchestrationMonitor = require('../../orchestrationMonitor.js');
+const configuration = require('../../configuration.js');
 const fs = require('fs');
 
 describe('Orchestration Engine Module', () => {
@@ -75,6 +93,15 @@ describe('Orchestration Engine Module', () => {
       emitOrchestrationEvent: jest.fn(),
       emitNotification: jest.fn(),
     };
+
+    // Setup notifier mock
+    notifier.sendNotification = jest.fn();
+
+    // Setup orchestrationMonitor mock
+    orchestrationMonitor.getJobDefinitionVersion = jest.fn();
+
+    // Setup configuration mock
+    configuration.getConfig = jest.fn().mockReturnValue(global.serverConfig);
 
     // Import orchestrationEngine module (only once after mocks are set up)
     if (!orchestrationEngine) {
@@ -392,6 +419,173 @@ describe('Orchestration Engine Module', () => {
       expect(savedData.job1).toBeDefined();
       expect(savedData.job2).toBeDefined();
       expect(savedData.job2[0].executionId).toBe('exec2');
+    });
+
+    it('should send notification when orchestration fails with jobFailEnabled true', async () => {
+      db.getData.mockResolvedValue({});
+      orchestrationMonitor.getJobDefinitionVersion.mockResolvedValue({
+        id: 'job1',
+        name: 'My Orchestration',
+      });
+      global.serverConfig.server.jobFailEnabled = 'true';
+
+      const executionLog = {
+        jobId: 'job1',
+        executionId: 'exec1',
+        status: 'completed',
+        finalStatus: 'failure',
+        visitedNodes: ['start', 'execute1'],
+        errors: [{ node: 'execute1', message: 'Script failed' }],
+        scriptOutputs: {
+          execute1: {
+            exitCode: 1,
+            stdout: 'Error output',
+            stderr: '',
+          },
+        },
+        endTime: new Date().toISOString(),
+      };
+
+      await orchestrationEngine.saveExecutionResult(executionLog);
+
+      expect(notifier.sendNotification).toHaveBeenCalledWith(
+        'My Orchestration - Orchestration Failed',
+        expect.stringContaining('Node [execute1] failed'),
+        'WARNING',
+        expect.stringContaining('/orchestration/monitor.html?jobId=job1&executionId=exec1')
+      );
+    });
+
+    it('should not send notification when orchestration succeeds', async () => {
+      db.getData.mockResolvedValue({});
+      orchestrationMonitor.getJobDefinitionVersion.mockResolvedValue({
+        id: 'job1',
+        name: 'My Orchestration',
+      });
+      global.serverConfig.server.jobFailEnabled = 'true';
+
+      const executionLog = {
+        jobId: 'job1',
+        executionId: 'exec1',
+        status: 'completed',
+        finalStatus: 'success',
+        visitedNodes: ['start', 'execute1', 'end'],
+        endTime: new Date().toISOString(),
+      };
+
+      await orchestrationEngine.saveExecutionResult(executionLog);
+
+      expect(notifier.sendNotification).not.toHaveBeenCalled();
+    });
+
+    it('should not send notification when jobFailEnabled is false', async () => {
+      db.getData.mockResolvedValue({});
+      orchestrationMonitor.getJobDefinitionVersion.mockResolvedValue({
+        id: 'job1',
+        name: 'My Orchestration',
+      });
+      global.serverConfig.server.jobFailEnabled = 'false';
+
+      const executionLog = {
+        jobId: 'job1',
+        executionId: 'exec1',
+        status: 'completed',
+        finalStatus: 'failure',
+        visitedNodes: ['start', 'execute1'],
+        errors: [{ node: 'execute1', message: 'Script failed' }],
+        endTime: new Date().toISOString(),
+      };
+
+      await orchestrationEngine.saveExecutionResult(executionLog);
+
+      expect(notifier.sendNotification).not.toHaveBeenCalled();
+    });
+
+    it('should include execution ID in notification', async () => {
+      db.getData.mockResolvedValue({});
+      orchestrationMonitor.getJobDefinitionVersion.mockResolvedValue({
+        id: 'job1',
+        name: 'Test Orchestration',
+      });
+      global.serverConfig.server.jobFailEnabled = 'true';
+
+      const executionLog = {
+        jobId: 'job1',
+        executionId: 'abc123def456',
+        status: 'completed',
+        finalStatus: 'failure',
+        visitedNodes: ['start', 'execute1'],
+        errors: [{ node: 'execute1', message: 'Node failed' }],
+        endTime: new Date().toISOString(),
+      };
+
+      await orchestrationEngine.saveExecutionResult(executionLog);
+
+      const callArgs = notifier.sendNotification.mock.calls[0];
+      expect(callArgs[1]).toContain('abc123def456');
+      expect(callArgs[3]).toContain('abc123def456');
+    });
+
+    it('should use exit code in root cause when no errors array', async () => {
+      db.getData.mockResolvedValue({});
+      orchestrationMonitor.getJobDefinitionVersion.mockResolvedValue({
+        id: 'job1',
+        name: 'Test Orchestration',
+      });
+      global.serverConfig.server.jobFailEnabled = 'true';
+
+      const executionLog = {
+        jobId: 'job1',
+        executionId: 'exec1',
+        status: 'completed',
+        finalStatus: 'failure',
+        visitedNodes: ['start', 'execute1'],
+        errors: [],
+        scriptOutputs: {
+          execute1: {
+            exitCode: 2,
+            stdout: 'Failed',
+            stderr: '',
+          },
+        },
+        endTime: new Date().toISOString(),
+      };
+
+      await orchestrationEngine.saveExecutionResult(executionLog);
+
+      const callArgs = notifier.sendNotification.mock.calls[0];
+      expect(callArgs[1]).toContain('exit code 2');
+    });
+
+    it('should handle notification errors gracefully', async () => {
+      db.getData.mockResolvedValue({});
+      orchestrationMonitor.getJobDefinitionVersion.mockResolvedValue({
+        id: 'job1',
+        name: 'Test Orchestration',
+      });
+      global.serverConfig.server.jobFailEnabled = 'true';
+      notifier.sendNotification.mockImplementation(() => {
+        throw new Error('Notification service unavailable');
+      });
+
+      const executionLog = {
+        jobId: 'job1',
+        executionId: 'exec1',
+        status: 'completed',
+        finalStatus: 'failure',
+        visitedNodes: ['start', 'execute1'],
+        errors: [{ node: 'execute1', message: 'Failed' }],
+        endTime: new Date().toISOString(),
+      };
+
+      // Should not throw, should log warning
+      await expect(
+        orchestrationEngine.saveExecutionResult(executionLog)
+      ).resolves.toBeUndefined();
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to send orchestration failure notification')
+      );
     });
   });
 

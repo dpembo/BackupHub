@@ -300,7 +300,7 @@ function deleteFile(filePathToDelete) {
   }
 }
 
-function publishStatusUpdate(status, description, data, jobName, callback, isManual, retryCount = 0) {
+function publishStatusUpdate(status, description, data, jobName, callback, isManual, executionId = null, retryCount = 0) {
   const message = {
     name: AGENT_ID,
     topic: TOPIC_STATUS,
@@ -311,6 +311,7 @@ function publishStatusUpdate(status, description, data, jobName, callback, isMan
     data: data,
     status: status,
     jobName: jobName,
+    executionId: executionId,  // Include execution ID for tracking
     lastStatusReport: new Date().toISOString(),
   };
   pubCount++;
@@ -330,7 +331,7 @@ function publishStatusUpdate(status, description, data, jobName, callback, isMan
       if (retryCount < maxRetries) {
         const retryDelay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s, 8s, 16s, 32s
         debug(DEBUG_LEVEL.TRACE, `Retrying MQTT publish in ${retryDelay}ms (attempt ${retryCount + 1}/${maxRetries})`);
-        setTimeout(() => publishStatusUpdate(status, description, data, jobName, callback, isManual, retryCount + 1), retryDelay);
+        setTimeout(() => publishStatusUpdate(status, description, data, jobName, callback, isManual, executionId, retryCount + 1), retryDelay);
       } else {
         debug(DEBUG_LEVEL.WARN, `MQTT publish failed after ${maxRetries} retries`);
       }
@@ -345,7 +346,7 @@ function publishStatusUpdate(status, description, data, jobName, callback, isMan
         // Connection state mismatch, trigger reconnection and retry
         wsClient.isConnected = false;
         debug(DEBUG_LEVEL.WARN, `WebSocket connection state mismatch, reconnecting...`);
-        publishStatusUpdate(status, description, data, jobName, callback, isManual, retryCount);
+        publishStatusUpdate(status, description, data, jobName, callback, isManual, executionId, retryCount);
       }
     } else {
       wsClient.connect().then(() => {
@@ -357,7 +358,7 @@ function publishStatusUpdate(status, description, data, jobName, callback, isMan
         if (retryCount < maxRetries) {
           const retryDelay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s, 8s, 16s, 32s
           debug(DEBUG_LEVEL.TRACE, `Retrying WebSocket publish in ${retryDelay}ms (attempt ${retryCount + 1}/${maxRetries})`);
-          setTimeout(() => publishStatusUpdate(status, description, data, jobName, callback, isManual, retryCount + 1), retryDelay);
+          setTimeout(() => publishStatusUpdate(status, description, data, jobName, callback, isManual, executionId, retryCount + 1), retryDelay);
         } else {
           debug(DEBUG_LEVEL.WARN, `WebSocket publish failed after ${maxRetries} retries`);
         }
@@ -371,17 +372,17 @@ function getCurrentDateTimeFormatted() {
   return `${now.getFullYear().toString().padStart(4, '0')}-${(now.getMonth() + 1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')}_${now.getHours().toString().padStart(2, '0')}${now.getMinutes().toString().padStart(2, '0')}${now.getSeconds().toString().padStart(2, '0')}`;
 }
 
-function executeBackupCommand(command, commandParams, jobName, callback, manual) {
+function executeBackupCommand(command, commandParams, jobName, callback, manual, executionId = null) {
   jobCount++;
   
   // Validate and sanitize commandParams to prevent shell injection
   const sanitizedParams = String(commandParams || '').replace(/[;&|`$()\\\"'<>]/g, '\\$&');
   
   // Track this job
-  activeJobs.set(jobName, { startTime: Date.now(), status: 'running' });
+  activeJobs.set(jobName, { startTime: Date.now(), status: 'running', executionId: executionId });
   
   status = AGENT_STATUS.RUNNING;
-  publishStatusUpdate('running', `Backup in progress for job [${jobName}]`, null, jobName, undefined, manual);
+  publishStatusUpdate('running', `Backup in progress for job [${jobName}]`, null, jobName, undefined, manual, executionId);
 
   const file = `${workingDir}/${generateRandomFileName()}.sh`;
   const logfile = `${workingDir}/${sanitizeUnixFilename(jobName)}_${getCurrentDateTimeFormatted()}.log`;
@@ -400,7 +401,7 @@ function executeBackupCommand(command, commandParams, jobName, callback, manual)
   childProcess.on('error', (err) => {
     debug(DEBUG_LEVEL.ERROR, `Failed to spawn backup process for [${jobName}]: ${err.message}`);
     activeJobs.delete(jobName);
-    publishStatusUpdate('error', `Backup failed to start: ${err.message}`, null, jobName, undefined, manual);
+    publishStatusUpdate('error', `Backup failed to start: ${err.message}`, null, jobName, undefined, manual, executionId);
   });
 
   let lastOffset = 0;
@@ -425,7 +426,7 @@ function executeBackupCommand(command, commandParams, jobName, callback, manual)
           readStream.on('data', (chunk) => {
             const logData = chunk.toString('utf8');
             lastOffset += chunk.length;
-            publishLogData(logData, jobName, undefined, undefined, undefined, manual);
+            publishLogData(logData, jobName, undefined, undefined, undefined, manual, executionId);
           });
           readStream.on('error', (err) => debug(DEBUG_LEVEL.TRACE, `Read stream error: ${err.message}`));
         }
@@ -436,10 +437,12 @@ function executeBackupCommand(command, commandParams, jobName, callback, manual)
           const stop = new Date().getTime();
           debug(DEBUG_LEVEL.INFO, `Backup completed: ${jobName} [exit code: ${returnCode}]`);
           returnCode !== 0 ? failJobCount++ : successJobCount++;
+          const jobInfo = activeJobs.get(jobName);
+          const executionId = jobInfo ? jobInfo.executionId : null;
           activeJobs.delete(jobName);
           status = AGENT_STATUS.IDLE;
           deleteFile(file);
-          callback(jobName, (stop - start) / 1000, manual);
+          callback(jobName, (stop - start) / 1000, manual, executionId);
         }
       } catch (err) {
         debug(DEBUG_LEVEL.TRACE, `Logfile read error: ${err.message}`);
@@ -455,7 +458,7 @@ function executeBackupCommand(command, commandParams, jobName, callback, manual)
   });
 }
 
-function publishLogData(logData, jobName, eta, returnCode, callback, manual) {
+function publishLogData(logData, jobName, eta, returnCode, callback, manual, executionId = null) {
   const message = {
     name: AGENT_ID,
     server: SERVER,
@@ -465,6 +468,7 @@ function publishLogData(logData, jobName, eta, returnCode, callback, manual) {
     eta: eta,
     returnCode: returnCode,
     data: logData,
+    executionId: executionId,  // Include execution ID for tracking
     lastStatusReport: new Date().toISOString(),
   };
   pubCount++;
@@ -487,9 +491,9 @@ function publishLogData(logData, jobName, eta, returnCode, callback, manual) {
   }
 }
 
-function backupComplete(jobName, eta, manual) {
+function backupComplete(jobName, eta, manual, executionId = null) {
   status = AGENT_STATUS.IDLE;
-  publishLogData("", jobName, eta, returnCode, undefined, manual);
+  publishLogData("", jobName, eta, returnCode, undefined, manual, executionId);
   debug(DEBUG_LEVEL.INFO, `Backup completed in ${eta} seconds`);
 }
 
@@ -533,8 +537,8 @@ async function handleCommand(message) {
   debug(DEBUG_LEVEL.TRACE, "Received Command from BackupHub Server");
   subCount++;
   validateJWTToken(message).then(async decodedPayload => {
-    const { name: agentId, command, manual = false, commandParams = "", jobName } = decodedPayload;
-    debug(DEBUG_LEVEL.TRACE, `Job: [${jobName}] for agent: [${agentId}]`);
+    const { name: agentId, command, manual = false, commandParams = "", jobName, executionId = null } = decodedPayload;
+    debug(DEBUG_LEVEL.TRACE, `Job: [${jobName}] for agent: [${agentId}] with executionId: [${executionId}]`);
     debug(DEBUG_LEVEL.TRACE, `Command: ${command}, Manual: ${manual}, Params: ${commandParams}`);
 
     if (agentId !== AGENT_ID) return;
@@ -545,7 +549,7 @@ async function handleCommand(message) {
       return;
     }
 
-    executeBackupCommand(command, commandParams, jobName, backupComplete, manual);
+    executeBackupCommand(command, commandParams, jobName, backupComplete, manual, executionId);
     pushVerificationNotification = true;
   }).catch(error => {
     debug(DEBUG_LEVEL.ERROR, `Token validation failed: ${error.message}`);

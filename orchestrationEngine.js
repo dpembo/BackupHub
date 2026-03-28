@@ -319,7 +319,8 @@ async function executeJob(jobId, isManual = false, executionId = null, onNodeCom
             parameters,
             jobName,
             undefined,
-            isManual
+            isManual,
+            executionLog.executionId
           );
 
           // Wait for agent response (with 5-minute timeout)
@@ -682,6 +683,58 @@ async function saveExecutionResult(executionLog) {
     
     // Log the execution for reference
     logger.info(`Saved orchestration execution [${jobId}] with status [${executionLog.finalStatus}]`);
+
+    // Send notification if orchestration failed
+    if ((executionLog.finalStatus === 'failure' || executionLog.finalStatus === 'error')) {
+      try {
+        const serverConfig = global.serverConfig || require('./configuration.js').getConfig();
+        if (serverConfig && serverConfig.server && serverConfig.server.jobFailEnabled === 'true') {
+          const notifier = require('./notify.js');
+          const orchestrationMonitor = require('./orchestrationMonitor.js');
+          
+          // Get orchestration job name
+          let jobName = jobId;
+          try {
+            const job = await orchestrationMonitor.getJobDefinitionVersion(jobId, 'current');
+            if (job && job.name) {
+              jobName = job.name;
+            }
+          } catch (err) {
+            logger.debug(`Could not fetch job name for notification: ${err.message}`);
+          }
+
+          // Build root cause description from error info
+          let rootCause = 'Orchestration workflow failed';
+          
+          // Check if there are captured errors
+          if (executionLog.errors && executionLog.errors.length > 0) {
+            const firstError = executionLog.errors[0];
+            rootCause = `Node [${firstError.node}] failed: ${firstError.message}`;
+          } else {
+            // Look for the last execute node that failed
+            const lastExecuteNode = [...executionLog.visitedNodes]
+              .reverse()
+              .find(id => executionLog.scriptOutputs && executionLog.scriptOutputs[id]);
+            
+            if (lastExecuteNode && executionLog.scriptOutputs[lastExecuteNode]) {
+              const nodeOutput = executionLog.scriptOutputs[lastExecuteNode];
+              if (nodeOutput.exitCode !== 0) {
+                rootCause = `Node [${lastExecuteNode}] failed with exit code ${nodeOutput.exitCode}`;
+              }
+            }
+          }
+
+          const notificationTitle = `${jobName} - Orchestration Failed`;
+          const notificationDescription = `${rootCause}\n\nExecution ID: ${executionLog.executionId}\nView details in Orchestration Monitor`;
+          const notificationLink = `/orchestration/monitor.html?jobId=${encodeURIComponent(jobId)}&executionId=${encodeURIComponent(executionLog.executionId)}`;
+
+          notifier.sendNotification(notificationTitle, notificationDescription, 'WARNING', notificationLink);
+          logger.info(`Sent orchestration failure notification for [${jobId}]`);
+        }
+      } catch (notifyErr) {
+        logger.warn(`Failed to send orchestration failure notification: ${notifyErr.message}`);
+      }
+    }
   } catch (err) {
     logger.error(`Failed to save execution result: ${err.message}`);
   }

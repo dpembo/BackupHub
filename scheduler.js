@@ -48,9 +48,9 @@ async function init() {
   }
 }
 
-function publishExecute(agent_id, command, commandParams, jobName, isManual) {
-  logger.info(`Executing Scheduled command on Agent [${agent_id}]`);
-  agentComms.sendCommand(agent_id, mqttTransport.getCommandTopic(), command, commandParams, jobName, undefined, isManual);
+function publishExecute(agent_id, command, commandParams, jobName, isManual, executionId) {
+  logger.info(`Executing Scheduled command on Agent [${agent_id}] with executionId [${executionId}]`);
+  agentComms.sendCommand(agent_id, mqttTransport.getCommandTopic(), command, commandParams, jobName, undefined, isManual, executionId);
 }
 
 /**
@@ -472,6 +472,10 @@ async function runJob(jobName, isManual, inData) {
 
     if (command !== undefined && command !== null && command.length > 0) {
       try {
+        // Generate execution ID for this job run
+        const crypto = require('crypto');
+        const executionId = crypto.randomBytes(8).toString('hex');
+        
         const scriptPath = "./scripts/" + command;
         const data = await fs.readFile(scriptPath, 'utf8');
         logger.debug('Script file content loaded successfully');
@@ -479,7 +483,8 @@ async function runJob(jobName, isManual, inData) {
         if (inData !== undefined && inData !== null) {
           commandParams += inData;
         }
-        publishExecute(schedItem.agent, data, commandParams, jobName, isManual);
+        
+        publishExecute(schedItem.agent, data, commandParams, jobName, isManual, executionId);
       } catch (err) {
         logger.error(`Error reading script file for job [${jobName}]:`, err.message);
         if (serverConfig.server.jobFailEnabled == "true") {

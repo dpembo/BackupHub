@@ -19,10 +19,10 @@ function getSchedule(jobName){
 }
 
 function isOrchestrationNode(jobName){
-  // Pattern: "Orchestration [jobId] Node [nodeId]"
+  // Pattern: "Orchestration [jobId] Execution [executionId] Node [nodeId]"
   // These are individual nodes of an orchestration execution
   // They should not be displayed since we show the parent orchestration group instead
-  return /^Orchestration \[[^\]]+\] Node \[[^\]]+\]$/.test(jobName);
+  return /^Orchestration \[[^\]]+\] Execution \[[^\]]+\] Node \[[^\]]+\]$/.test(jobName);
 } 
 
 function displaySecs(secs) {

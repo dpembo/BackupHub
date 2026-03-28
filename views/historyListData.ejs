@@ -156,7 +156,8 @@ function displaySecs(secs) {
             %>
             <tr class="toggle-row group-<%=groupId%> orch-parent" style="display:none;" data-orch-id="<%=compositeId%>" data-safe-id="<%=safeCompositeId%>">
               <td>
-                <span class="material-icons vertMid" style="color:<%=historyList[i].color%>;font-size:24pt;cursor:pointer;" id="orch-expand-<%=safeCompositeId%>" onclick="event.stopPropagation(); toggleOrchestrationGroup('<%=safeCompositeId%>')">expand_more</span>
+                <span class="material-icons vertMid" style="color:#ff9800;font-size:24pt;cursor:pointer;" id="orch-icon-<%=safeCompositeId%>" onclick="event.stopPropagation(); toggleOrchestrationGroup('<%=safeCompositeId%>')" title="Orchestration">schema</span>
+                <span class="material-icons vertMid" style="color: #ff9800;font-size:24pt; cursor: pointer; display: block; padding-left: 25px; top: -10px; position: relative; cursor:pointer;" id="orch-expand-<%=safeCompositeId%>" onclick="event.stopPropagation(); toggleOrchestrationGroup('<%=safeCompositeId%>')" title="Show/Hide Details">expand_more</span>
               </td>
               <td>
                 <strong><%=historyList[i].jobName%></strong>
@@ -228,8 +229,11 @@ function displaySecs(secs) {
                 <% } %>
               </td>
               <td>
+                <% if(parseInt(historyList[i].returnCode)==0){%>
+                <% classVal="tableIconButton";} else {%>
+                <% classVal="tableIconButtonError";}%>
                 <a href="/orchestration/monitor.html?jobId=<%=encodeURIComponent(historyList[i].jobId)%><% if(historyList[i].executionId) { %>&executionId=<%=encodeURIComponent(historyList[i].executionId)%><% } %>" title="View Orchestration Details" target="_blank">
-                  <span class="material-icons tableIconButton">open_in_new</span>
+                  <span class="<%=classVal%> material-icons">open_in_new</span>
                 </a>
               </td>
             </tr>
@@ -270,14 +274,11 @@ function displaySecs(secs) {
                     <% if(parseInt(childNode.returnCode)==0){%>
                       <span title="Success - Exit code <%=childNode.returnCode%>" class="successIcons material-icons">check_circle</span>
                     <% } else {%>
-                      <span title="Error - Exit code: <%=childNode.returnCode%>" class="errorIcons material-icons">flag_circle</span>
+                      <span title="Failure - Exit code: <%=childNode.returnCode%>" class="errorIcons material-icons">flag_circle</span>
                     <% } %>
                   </td>
                   <td>
-                    <pre style="display:none" id="logdetail-orch-<%=i%>-<%=childIdx%>"><%=childNode.log%></pre>
-                    <a href="#modal-orch-<%=i%>-<%=childIdx%>" onclick="openModal('<%=childNode.icon%>','<%=childNode.color%>','<%=childNode.jobName%>','logdetail-orch-<%=i%>-<%=childIdx%>')" title="View Node Output Log">
-                      <span class="material-icons tableIconButton vertTop">description</span>
-                    </a>
+                    <!-- No individual log viewer for orchestration subnodes - view logs via parent orchestration group -->
                   </td>
                 </tr>
               <% }); %>
@@ -313,7 +314,7 @@ function displaySecs(secs) {
                 runType="disc_full";runDesc="Mount Threshold Exceeded";
               }
               %>
-              <span title="<%=runDesc%>" class="<%=icons%> material-icons"><%=runType%></span>
+              <span title="<%=runDesc%>" class="material-icons"><%=runType%></span><i><%=icons%> <%=runType%></i>
 
             </td>
             <% 

@@ -17,7 +17,7 @@ function getCurrentStack(skipFrames = 1) {
 }
 
 
-function sendCommand(agent_id,topic,command,commandParams,jobName,commsType,manual){
+function sendCommand(agent_id,topic,command,commandParams,jobName,commsType,manual,executionId){
 
     if(manual===undefined||manual===null)manual=false;
 
@@ -33,6 +33,7 @@ function sendCommand(agent_id,topic,command,commandParams,jobName,commsType,manu
         command: command,
         commandParams: commandParams,
         jobName: jobName,
+        executionId: executionId || null,  // Include execution ID in message
     }
     var token = passman.createJWTToken(message,1);
 

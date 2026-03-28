@@ -37,9 +37,12 @@
       div.className="card-content logView logmax";
     }
 
-    function fetchScheduleData(inId) {
+    function fetchScheduleData(inId, executionId = null) {
       document.getElementById("refreshindicator").style.display="inline-block";
-      const apiUrl = '/scheduleInfo/data/'+inId;
+      let apiUrl = '/scheduleInfo/data/'+inId;
+      if (executionId) {
+        apiUrl += '?executionId=' + encodeURIComponent(executionId);
+      }
 
       fetch(apiUrl)
         .then(response => {
@@ -62,18 +65,104 @@
     }
 
     function updateScreen(inData){
+      // Add defensive check for agent data
+      if (!inData || !inData.agent) {
+        console.error('Error: Missing agent data in response');
+        document.getElementById("refreshindicator").style.display="none";
+        document.getElementById('loader-container').style.display="none";
+        alert('Error: Agent data not found. The agent may no longer be available.');
+        return;
+      }
+      
       document.getElementById('schedule-jobname').innerHTML=inData.schedule.jobName;
       document.getElementById('schedule-jobicon').innerHTML=inData.schedule.icon;
       document.getElementById('schedule-jobicon').style.color=inData.schedule.color;
       document.getElementById('schedule-agent').innerHTML=inData.agent.name;
+      
+      // Show error message if agent is unavailable
+      if (inData.agent.errorMessage) {
+        document.getElementById('schedule-log').innerHTML = '<span style="color:red;font-weight:bold;">ERROR: ' + inData.agent.errorMessage + '</span>';
+      }
+      
       document.getElementById('schedule-desc').innerHTML=inData.schedule.description;
       document.getElementById('schedule-agentstatus').innerHTML=inData.agent.status;
+      
+      // Handle agent offline/not found error
+      if (inData.agent.errorMessage) {
+        var statusElem = document.getElementById('cardStatusIndicatorScheduleInfo');
+        statusElem.innerHTML="close";
+        statusElem.className="red-text material-icons";
+        statusElem.title=inData.agent.errorMessage;
+        document.getElementById("refreshindicator").style.display="none";
+        document.getElementById('loader-container').style.display="none";
+        document.getElementById('pagedata').style.display="";
+        return;
+      }
+      
+      // Handle historical execution mode
+      if (inData.executionMode === 'historical_not_found') {
+        document.getElementById('schedule-lastrun').innerHTML="Historical execution not found";
+        document.getElementById('schedule-lastrunduration').innerHTML="-";
+        document.getElementById('schedule-jobstarted').innerHTML="-";
+        document.getElementById('schedule-log').innerHTML="Historical execution record not found in history database";
+        var statusElem = document.getElementById('cardStatusIndicatorScheduleInfo');
+        statusElem.innerHTML="error";
+        statusElem.className="red-text material-icons";
+        statusElem.title="Not Found";
+        document.getElementById("refreshindicator").style.display="none";
+        document.getElementById('loader-container').style.display="none";
+        document.getElementById('pagedata').style.display="";
+        return;
+      }
+      
+      // Handle historical execution mode (found)
+      if (inData.executionMode === 'historical') {
+        // Show historical data
+        if(inData.hist.histLastRun!=null){
+          document.getElementById('schedule-lastrun').innerHTML=inData.hist.histLastRun.runDate.replace("T", " ").split('.')[0];
+          document.getElementById('schedule-lastrunduration').innerHTML=displaySecs(inData.hist.histLastRun.runTime);
+          document.getElementById('schedule-jobstarted').innerHTML="(Historical)";
+          document.getElementById('schedule-log').innerHTML=inData.hist.histLastRun.log || "No log data";
+        }
+        var statusElem = document.getElementById('cardStatusIndicatorScheduleInfo');
+        // Show success/fail icon based on return code, even for historical
+        if(inData.hist.histLastRun && inData.hist.histLastRun.returnCode==0){
+          statusElem.innerHTML="check_circle";
+          statusElem.className="successIcons material-icons";
+          statusElem.title="Success (Historical)";
+        }
+        else{
+          statusElem.innerHTML="flag_circle";
+          statusElem.className="red-text material-icons";
+          var returnCode = inData.hist.histLastRun ? inData.hist.histLastRun.returnCode : 'unknown';
+          statusElem.title="Failure (Return Code: " + returnCode + ") - Historical";
+        }
+        document.getElementById('jobInProgressDiv').style.visibility="hidden";
+        stopProgressUpdateTimer();
+        document.getElementById("refreshindicator").style.display="none";
+        document.getElementById('loader-container').style.display="none";
+        document.getElementById('pagedata').style.display="";
+        return;
+      }
+      
+      // Current execution mode
+      // Show last run data if available, otherwise show "(Current Run)"
       if(inData.hist.histLastRun!=null){
         document.getElementById('schedule-lastrun').innerHTML=inData.hist.histLastRun.runDate.replace("T", " ").split('.')[0];
         document.getElementById('schedule-lastrunduration').innerHTML=displaySecs(inData.hist.histLastRun.runTime);
       }
+      else if(inData.agent.status!="running"){
+        // No history yet but job just completed - show current data
+        document.getElementById('schedule-lastrun').innerHTML="(Current Run)";
+        document.getElementById('schedule-lastrunduration').innerHTML=inData.stats ? displaySecs(inData.stats.current.eta) : "-";
+      }
+      
       document.getElementById('schedule-averageduration').innerHTML=inData.hist.histAvgRuntimeSecs;
-      document.getElementById('schedule-jobstarted').innerHTML=inData.agent.jobStarted.replace('T',' ').split('.')[0];
+      if (inData.agent.jobStarted) {
+        document.getElementById('schedule-jobstarted').innerHTML=inData.agent.jobStarted.replace('T',' ').split('.')[0];
+      } else {
+        document.getElementById('schedule-jobstarted').innerHTML="-";
+      }
       
       var statusElem = document.getElementById('cardStatusIndicatorScheduleInfo');
       if(inData.agent.status=="running"){
@@ -88,6 +177,10 @@
         if(inData.hist.histLastRun!=null){
           document.getElementById('schedule-log').innerHTML=inData.hist.histLastRun.log;
         }
+        else if(inData.log!=null && inData.log.length > 0){
+          // Fallback: if no history yet but current logs available, use those
+          document.getElementById('schedule-log').innerHTML=inData.log;
+        }
         else{
           document.getElementById('schedule-log').innerHTML="NO HISTORY DATA FOUND";
         }
@@ -101,16 +194,16 @@
         if(inData.stats.current.returnCode==0){
           statusElem.innerHTML="check_circle";
           statusElem.className="successIcons material-icons";
-          statusElem.title="Success";
+          statusElem.title="Success (Return Code: 0)";
         }
         else{
           statusElem.innerHTML="flag_circle";
           statusElem.className="red-text material-icons";
-          statusElem.title="Error (" + inData.stats.current.returnCode + ")";
+          statusElem.title="Failure (Return Code: " + inData.stats.current.returnCode + ")";
         }
       }
       
-      document.getElementById("refreshindicator").style.display="none";
+      // Show the page content and hide initial loader (but keep refreshindicator visible for current mode)
       document.getElementById('loader-container').style.display="none";
       document.getElementById('pagedata').style.display="";
     }
@@ -118,6 +211,7 @@
     function calculatePercent(inData){
       var barWidth="400";
       if(inData==null)return;
+      if(!inData.agent || !inData.agent.jobStarted) return;
       var start = new Date(inData.agent.jobStarted);
       var startedMs = start.getTime();
       var curr = new Date().getTime();
@@ -162,7 +256,7 @@
     function startProgressUpdateTimer(){
       if(progressUpdateIntervalId !== null) return; // Already running
       progressUpdateIntervalId = setInterval(() => {
-        if(currentScheduleData && currentScheduleData.agent.status == "running"){
+        if(currentScheduleData && currentScheduleData.agent && currentScheduleData.agent.status == "running"){
           calculatePercent(currentScheduleData);
           checkScroll();
         }
@@ -211,10 +305,53 @@
 
     function runOnLoad(){
       var index = getParameterValue("index", currentURL);
-      fetchScheduleData(index);
+      var jobname = getParameterValue("jobname", currentURL);
+      var executionId = getParameterValue("executionId", currentURL);
+      var errorMessage = getParameterValue("message", currentURL);
+      
+      // If jobname is provided instead of index, look it up via name endpoint
+      if (jobname && !index) {
+        fetchScheduleDataByName(jobname, executionId);
+      } else {
+        fetchScheduleData(index, executionId);
+      }
+      
+      // Display any error message from URL query parameter
+      if (errorMessage) {
+        setTimeout(() => {
+          document.getElementById('schedule-log').innerHTML = '<span style="color:red;font-weight:bold;">' + decodeURIComponent(errorMessage) + '</span>';
+          document.getElementById("refreshindicator").style.display="none";
+        }, 100);
+      }
+    }
+
+    function fetchScheduleDataByName(jobname, executionId = null) {
+      document.getElementById("refreshindicator").style.display="inline-block";
+      let apiUrl = '/scheduleInfo/data/name?jobname=' + encodeURIComponent(jobname);
+      if (executionId) {
+        apiUrl += '&executionId=' + encodeURIComponent(executionId);
+      }
+
+      fetch(apiUrl)
+        .then(response => {
+          if (!response.ok) {
+            throw new Error(`Network response was not ok: ${response.status}`);
+          }
+          return response.json();
+        })
+        .then(data => {
+          currentScheduleData = data;
+          updateScreen(data);
+          // Initialize websocket listeners after we have the schedule data
+          initializeWebSocket(data.index);
+          return data;
+        })
+        .catch(error => {
+          console.error('There was a problem fetching the data:', error);
+          document.getElementById("refreshindicator").style.display="none";
+        });
     }
   </script>
-  <script src="/js/utils.js"></script>
 </head>
 
 <body onload="runOnLoad()">

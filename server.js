@@ -353,57 +353,91 @@ function dynamicSort(property) {
   }
 }
 
-async function getSchedulerData(index)
+async function getSchedulerData(index, executionId = null)
 {
-  logger.info("Getting Schedule Info with index: " + index);
+  logger.info("Getting Schedule Info with index: " + index + (executionId ? ` and executionId: ${executionId}` : ''));
   //var redir=req.query.redir;
   //var refresh = req.query["refresh"];
   //if (refresh === undefined) refresh = 0;
   var schedule = scheduler.getSchedules(index);
 
-  //return logEvent.name + "_" + logEvent.jobName + "_" + type;
-  var key1 = schedule.agent + "_" + schedule.jobName + "_" + "stats";
-  var key2 = schedule.agent + "_" + schedule.jobName + "_" + "log";
-
-  var stats = null;
-  var log = null;
-  try {
-    stats = await db.simpleGetData(key1);
-  }
-  catch(err){
-    logger.warn("Unable to find stats data");
-    logger.warn(JSON.stringify(err));
-  }
-
-  try {
-    log = await db.simpleGetData(key2);
-  }
-  catch(err){
-    logger.warn("Unable to find log data");
-    logger.warn(JSON.stringify(err));
-  }  
-  
-  logger.debug("Stats:\n" + stats);
-  logger.debug("Log  :\n" + log);
-  if(stats!=null){
-    stats.current.etaDisplay = dateTimeUtils.displaySecs(stats.current.eta);
-    stats.etaRollingAvgDisplay = dateTimeUtils.displaySecs(stats.etaRollingAvg);
-  }
-  else{
-    if(stats !== undefined && stats!==null && (stats.etaRollingAvg == undefined || stats.etaRollingAvg ==null)) stats.etaRollingAvg=0;
-  }
-
   var data={};
   data.scripts = scripts;
   data.agent=agents.getAgent(schedule.agent);
+  
+  // Check if agent exists, provide helpful error info
+  if (!data.agent) {
+    logger.warn(`Agent '${schedule.agent}' not found for schedule '${schedule.jobName}'`);
+    data.agent = {
+      name: schedule.agent,
+      status: 'offline',
+      errorMessage: `Agent '${schedule.agent}' is not registered or offline`
+    };
+  }
+  
   data.schedule = schedule;
   data.index = index;
-  data.stats = stats;
-  data.log = log;
   data.hist = {};
+
+  // If executionId provided, look up specific historical execution
+  if (executionId) {
+    logger.info(`Looking up historical execution [${executionId}] for job [${schedule.jobName}]`);
+    const allHistory = hist.getItems();
+    const historyItem = allHistory.find(item => item.jobName === schedule.jobName && item.executionId === executionId);
+    
+    if (historyItem) {
+      logger.info(`Found historical execution [${executionId}]`);
+      data.hist.histLastRun = historyItem;
+      data.log = historyItem.log;
+      data.stats = null;  // No live stats for historical lookups
+      data.executionMode = 'historical';
+    } else {
+      logger.warn(`Historical execution [${executionId}] not found for job [${schedule.jobName}]`);
+      data.executionMode = 'historical_not_found';
+    }
+  } else {
+    // Current mode - get live stats
+    data.executionMode = 'current';
+    
+    //return logEvent.name + "_" + logEvent.jobName + "_" + type;
+    var key1 = schedule.agent + "_" + schedule.jobName + "_" + "stats";
+    var key2 = schedule.agent + "_" + schedule.jobName + "_" + "log";
+
+    var stats = null;
+    var log = null;
+    try {
+      stats = await db.simpleGetData(key1);
+    }
+    catch(err){
+      logger.warn("Unable to find stats data");
+      logger.warn(JSON.stringify(err));
+    }
+
+    try {
+      log = await db.simpleGetData(key2);
+    }
+    catch(err){
+      logger.warn("Unable to find log data");
+      logger.warn(JSON.stringify(err));
+    }  
+    
+    logger.debug("Stats:\n" + stats);
+    logger.debug("Log  :\n" + log);
+    if(stats!=null){
+      stats.current.etaDisplay = dateTimeUtils.displaySecs(stats.current.eta);
+      stats.etaRollingAvgDisplay = dateTimeUtils.displaySecs(stats.etaRollingAvg);
+    }
+    else{
+      if(stats !== undefined && stats!==null && (stats.etaRollingAvg == undefined || stats.etaRollingAvg ==null)) stats.etaRollingAvg=0;
+    }
+
+    data.stats = stats;
+    data.log = log;
+    data.hist.histLastRun = hist.getLastRun(schedule.jobName);
+  }
+  
   data.hist.histAvgRuntime = hist.getAverageRuntime(schedule.jobName);
   data.hist.histAvgRuntimeSecs = dateTimeUtils.displaySecs(hist.getAverageRuntime(schedule.jobName));
-  data.hist.histLastRun = hist.getLastRun(schedule.jobName);
   return data;
 }
 //______________________________________________________________________________________________________
@@ -1048,6 +1082,104 @@ app.delete('/rest/notifications/:index', User.isAuthenticated, (req, res) => {
   res.sendStatus(200);
 });
 
+// ================================================================
+// RUNNING JOBS REST API - CRUD ENDPOINTS
+// ================================================================
+
+/**
+ * Get all running jobs
+ */
+app.get('/rest/running', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const user = req.session.user;
+  if (!user) {
+    return res.redirect('/register.html?not+authenticated');
+  }
+  logger.debug('Fetching all running jobs');
+  
+  const runningJobs = running.getItems();
+  res.json({ 
+    success: true, 
+    count: runningJobs.length,
+    jobs: runningJobs 
+  });
+}));
+
+/**
+ * Delete a running job by index
+ */
+app.delete('/rest/running/:index', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const user = req.session.user;
+  if (!user) {
+    return res.redirect('/register.html?not+authenticated');
+  }
+  const index = parseInt(req.params.index);
+  logger.info(`Deleting running job at index: ${index}`);
+  
+  try {
+    running.removeItemByIndex(index);
+    res.json({ success: true, message: `Running job at index ${index} removed` });
+  } catch (err) {
+    logger.error(`Failed to delete running job at index ${index}: ${err.message}`);
+    res.status(400).json({ success: false, message: `Error deleting running job: ${err.message}` });
+  }
+}));
+
+/**
+ * Delete a running job by job name
+ */
+app.delete('/rest/running/byName/:jobName', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const user = req.session.user;
+  if (!user) {
+    return res.redirect('/register.html?not+authenticated');
+  }
+  const jobName = req.params.jobName;
+  logger.info(`Deleting running job: ${jobName}`);
+  
+  try {
+    running.removeItem(jobName);
+    res.json({ success: true, message: `Running job [${jobName}] removed` });
+  } catch (err) {
+    logger.error(`Failed to delete running job [${jobName}]: ${err.message}`);
+    res.status(400).json({ success: false, message: `Error deleting running job: ${err.message}` });
+  }
+}));
+
+/**
+ * Delete a running job by execution ID
+ */
+app.delete('/rest/running/byExecutionId/:executionId', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const user = req.session.user;
+  if (!user) {
+    return res.redirect('/register.html?not+authenticated');
+  }
+  const executionId = req.params.executionId;
+  logger.info(`Deleting running job with executionId: ${executionId}`);
+  
+  try {
+    running.removeItemByExecutionId(executionId);
+    res.json({ success: true, message: `Running job with executionId [${executionId}] removed` });
+  } catch (err) {
+    logger.error(`Failed to delete running job with executionId [${executionId}]: ${err.message}`);
+    res.status(400).json({ success: false, message: `Error deleting running job: ${err.message}` });
+  }
+}));
+
+app.delete('/rest/running', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const user = req.session.user;
+  if (!user) {
+    return res.redirect('/register.html?not+authenticated');
+  }
+  logger.info('Deleting all running jobs');
+  
+  try {
+    const result = await running.deleteAll();
+    res.json({ success: true, message: `All running jobs deleted`, deletedCount: result.deletedCount });
+  } catch (err) {
+    logger.error(`Failed to delete all running jobs: ${err.message}`);
+    res.status(400).json({ success: false, message: `Error deleting running jobs: ${err.message}` });
+  }
+}));
+
 app.get('/rest/agent/:id', User.isAuthenticated, (req, res) => {
   const user = req.session.user;
   if (!user) {
@@ -1526,8 +1658,9 @@ app.get('/scheduleInfo/data/name',User.isAuthenticated, async(req, res) => {
   }
   
   const jobname=req.query.jobname;
+  const executionId = req.query.executionId;  // Optional: look up specific execution
   var index = scheduler.getScheduleIndex(jobname);
-  var data = await getSchedulerData(index);
+  var data = await getSchedulerData(index, executionId);
   res.setHeader("Content-Type","Application/JSON");
   res.send(data);
 });
@@ -1539,7 +1672,9 @@ app.get('/scheduleInfo/data/:index',User.isAuthenticated, async(req, res) => {
   }
 
   const index = req.params.index;
-  var data = await  getSchedulerData(index);
+  const executionId = req.query.executionId;  // Optional: look up specific execution
+  
+  var data = await getSchedulerData(index, executionId);
   
   res.setHeader("Content-Type","Application/JSON");
   res.send(data);
@@ -2827,7 +2962,7 @@ app.delete('/rest/users/:username', User.isAuthenticated, asyncHandler(async (re
  * Get value by key from custom data store
  * REQUIRES: User authentication + Sensitive data token
  */
-app.get('/rest/data/:key', validateSensitiveDataToken, User.isAuthenticated, asyncHandler(async (req, res) => {
+app.get('/rest/data/:key', User.isAuthenticated, validateSensitiveDataToken, asyncHandler(async (req, res) => {
   try {
     const value = await db.getData(req.params.key);
     res.json({ key: req.params.key, value });
@@ -2840,7 +2975,7 @@ app.get('/rest/data/:key', validateSensitiveDataToken, User.isAuthenticated, asy
  * Create or update value by key in custom data store
  * REQUIRES: User authentication + Sensitive data token
  */
-app.put('/rest/data/:key', validateSensitiveDataToken, User.isAuthenticated, asyncHandler(async (req, res) => {
+app.put('/rest/data/:key', User.isAuthenticated, validateSensitiveDataToken, asyncHandler(async (req, res) => {
   try {
     await db.putData(req.params.key, req.body.value);
     res.json({ success: true });
@@ -2854,7 +2989,7 @@ app.put('/rest/data/:key', validateSensitiveDataToken, User.isAuthenticated, asy
  * Delete value by key from custom data store
  * REQUIRES: User authentication + Sensitive data token
  */
-app.delete('/rest/data/:key', validateSensitiveDataToken, User.isAuthenticated, asyncHandler(async (req, res) => {
+app.delete('/rest/data/:key', User.isAuthenticated, validateSensitiveDataToken, asyncHandler(async (req, res) => {
   try {
     await db.deleteData(req.params.key);
     res.json({ success: true });

@@ -29,6 +29,12 @@ This document describes the main REST API endpoints exposed by the BackupHub ser
   - [Job History Update](#job-history-update)
   - [Job History Delete](#job-history-delete)
 
+  - [Running Jobs List](#running-jobs-list)
+  - [Running Jobs Delete by Index](#running-jobs-delete-by-index)
+  - [Running Jobs Delete by Name](#running-jobs-delete-by-name)
+  - [Running Jobs Delete by Execution ID](#running-jobs-delete-by-execution-id)
+  - [Running Jobs Delete All](#running-jobs-delete-all)
+
   - [User List](#user-list)
   - [User Get](#user-get)
   - [User Create](#user-create)
@@ -211,6 +217,50 @@ All REST API endpoints require authentication unless otherwise noted. The Backup
 |---|---|---|
 | **Input** | URL param: `index` | `1` |
 | **Output** | JSON with success | `{ "success": true }` |
+
+---
+
+## Running Jobs
+
+#### Running Jobs List
+`GET /rest/running` | Retrieve all currently running jobs.
+
+| Property | Value | Example |
+|---|---|---|
+| **Input** | None | N/A |
+| **Output** | JSON array of running jobs | `{ "success": true, "count": 2, "jobs": [...] }` |
+
+#### Running Jobs Delete by Index
+`DELETE /rest/running/:index` | Delete a running job by its index in the queue.
+
+| Property | Value | Example |
+|---|---|---|
+| **Input** | URL param: `index` | `0` |
+| **Output** | JSON with success message | `{ "success": true, "message": "Running job at index 0 removed" }` |
+
+#### Running Jobs Delete by Name
+`DELETE /rest/running/byName/:jobName` | Delete a running job by its job name.
+
+| Property | Value | Example |
+|---|---|---|
+| **Input** | URL param: `jobName` | `MyBackupJob` |
+| **Output** | JSON with success message | `{ "success": true, "message": "Running job [MyBackupJob] removed" }` |
+
+#### Running Jobs Delete by Execution ID
+`DELETE /rest/running/byExecutionId/:executionId` | Delete a running job by its execution ID.
+
+| Property | Value | Example |
+|---|---|---|
+| **Input** | URL param: `executionId` | `a1b2c3d4e5f6g7h8` |
+| **Output** | JSON with success message | `{ "success": true, "message": "Running job with executionId [a1b2c3d4e5f6g7h8] removed" }` |
+
+#### Running Jobs Delete All
+`DELETE /rest/running` | Delete all running jobs.
+
+| Property | Value | Example |
+|---|---|---|
+| **Input** | None | N/A |
+| **Output** | JSON with success and count | `{ "success": true, "message": "All running jobs deleted", "deletedCount": 5 }` |
 
 ---
 
