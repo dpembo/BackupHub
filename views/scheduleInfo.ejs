@@ -189,6 +189,7 @@
         statusElem.title="Unknown";
         document.getElementById('jobInProgressDiv').style.visibility="hidden";
         stopProgressUpdateTimer();
+        document.getElementById("refreshindicator").style.display="none";
       }
       if(inData.stats!==undefined && inData.stats!==null && inData.agent.status!="running"){
         if(inData.stats.current.returnCode==0){
@@ -301,6 +302,7 @@
 
       socketListenersInitialized = true;
       console.log('Websocket listeners initialized successfully');
+     
     }
 
     function runOnLoad(){
