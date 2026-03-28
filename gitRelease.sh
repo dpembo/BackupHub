@@ -23,7 +23,10 @@ echo "+-----------------------------------------------------+"
 echo " "
 
 # Create a tag for the most recent commit
-curl -X POST -H "Authorization: token $ACCESS_TOKEN" -H "Accept: application/vnd.github.v3+json" https://api/github.com/repos/$ORG_NAME/$REPO_NAME/git/refs -d "{\"ref\": \"refs/tags/$TAG_NAME\", \"sha\": \"$shaId\"}"
+tag_response=$(curl -s -X POST -H "Authorization: token $ACCESS_TOKEN" -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/$ORG_NAME/$REPO_NAME/git/refs -d "{\"ref\": \"refs/tags/$TAG_NAME\", \"sha\": \"$shaId\"}")
+echo "Tag creation response:"
+echo "$tag_response" | jq '.' 2>/dev/null || echo "$tag_response"
+echo " "
 
 echo "+-----------------------------------------------------+"
 echo "| 3. Creating Release                                 |"
