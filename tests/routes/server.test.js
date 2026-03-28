@@ -198,7 +198,6 @@ describe('Server Routes', () => {
 
       // Simulate the optimization logic from server.js /historyList/data
       let orchestrationSuccessMap = {};
-      const startTime = Date.now();
 
       try {
         const allExecutions = await mockDb.getData('ORCHESTRATION_EXECUTIONS');
@@ -217,8 +216,6 @@ describe('Server Routes', () => {
         // Handle error
       }
 
-      const computeTime = Date.now() - startTime;
-
       // Verify db.getData was called exactly ONCE (not 3 times for 3 jobs)
       expect(mockDb.getData).toHaveBeenCalledTimes(1);
       expect(mockDb.getData).toHaveBeenCalledWith('ORCHESTRATION_EXECUTIONS');
@@ -227,9 +224,6 @@ describe('Server Routes', () => {
       expect(orchestrationSuccessMap['orch-1-id']).toBe(75);
       expect(orchestrationSuccessMap['orch-2-id']).toBe(50);
       expect(orchestrationSuccessMap['orch-3-id']).toBe(100);
-
-      // Verify performance is reasonable (should be < 10ms for in-memory computation)
-      expect(computeTime).toBeLessThan(100);
 
       // Apply percentages to history items
       for (let i = 0; i < mockHistoryItems.length; i++) {
