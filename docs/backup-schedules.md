@@ -129,5 +129,13 @@ From here, you can start to explore.  The monitor and dashboard will show your j
 
 You might also want to try and create a script of your own, edit a script, add more agents, ... 
 
+---
 
+## Related Documentation
+
+- [Installation](./installation.md): Setting up BackupHub
+- [Orchestrations](./orchestrations.md): Building complex backup workflows
+- [Settings Configuration](./settings-config.md): Server configuration and backup/restore
+- [User Management](./user-management.md): User accounts and access control
+- [Back to Documentation Index](./README.MD)
 

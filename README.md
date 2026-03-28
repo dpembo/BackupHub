@@ -118,7 +118,15 @@ For agent installation and advanced configuration, see the [Quick Start Guide](h
 - Monitor job status and logs in real-time.
 
 ### Common Tasks & FAQ
-- See [docs/README.MD](docs/README.MD) for advanced usage, troubleshooting, and more.
+For comprehensive documentation on all features, see:
+- **[Installation & Setup](docs/installation.md)** — Getting BackupHub running
+- **[Backup Schedules](docs/backup-schedules.md)** — Creating and managing schedules
+- **[Orchestrations](docs/orchestrations.md)** — Building complex workflows
+- **[User Management](docs/user-management.md)** — User accounts and access control
+- **[Configuration & Settings](docs/settings-config.md)** — Server configuration, backup/restore
+- **[REST API Reference](docs/REST_API_REFERENCE.md)** — Programmatic API access
+- **[Screenshots & UI Reference](docs/screens/)** — Visual guide to the interface
+- **[Full Documentation](docs/README.MD)** — Complete documentation index
 
 
 ## Configuration

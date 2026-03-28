@@ -167,5 +167,15 @@ Then press submit, and your agent will be added
 
 **Congratulations, you've added your first agent!**
 
+---
+
+## Related Documentation
+
+- [Backup Schedules](./backup-schedules.md): Creating and managing schedules
+- [Orchestrations](./orchestrations.md): Building complex backup workflows
+- [Settings Configuration](./settings-config.md): Server and agent configuration
+- [User Management](./user-management.md): User accounts and permissions
+- [REST API Reference](./REST_API_REFERENCE.md): Programmatic access
+- [Back to Documentation Index](./README.MD)
 
 

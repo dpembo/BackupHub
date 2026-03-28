@@ -103,15 +103,72 @@ All REST API endpoints require authentication unless otherwise noted. The Backup
 
 ## Backup (Internal data) Management
 
-
-
 #### Backup Items
-`GET /api/backup/items` | List available backup data items.
+`GET /api/backup/items` | List available backup data items that can be included in a backup.
 
 | Property | Value | Example |
 |---|---|---|
 | **Input** | None | |
-| **Output** | JSON array of backup data items | `["db", "config", "logs"]` |
+| **Output** | JSON object with available backup items | `{ "serverConfig": {...}, "agentsConfig": {...}, "userAccounts": {...} }` |
+
+**Available items:**
+- `serverConfig`: Server Configuration (MQTT, SMTP, WebSocket, Notifications, Thresholds, Icons)
+- `agentsConfig`: Agents Configuration
+- `schedules`: Backup Schedules
+- `jobHistory`: Job Execution History
+- `orchestrationJobs`: Orchestration Job Definitions
+- `orchestrationExecutions`: Orchestration Execution History
+- `agentHistory`: Agent Connection History
+- `userAccounts`: User Accounts (with bcrypt-hashed passwords)
+
+#### Create Backup
+`POST /api/backup/create` | Create a backup zip file with selected items.
+
+| Property | Value | Example |
+|---|---|---|
+| **Input** | JSON body with boolean flags for each item | `{ "serverConfig": true, "userAccounts": true, "jobHistory": false, ... }` |
+| **Output** | Binary zip file attachment | `backuphub-backup-20260328.zip` |
+
+**Request body options:**
+```json
+{
+  "serverConfig": true,
+  "agentsConfig": true,
+  "schedules": true,
+  "jobHistory": true,
+  "orchestrationJobs": true,
+  "orchestrationExecutions": true,
+  "agentHistory": true,
+  "userAccounts": true
+}
+```
+
+#### Restore Backup
+`POST /api/backup/restore` | Restore BackupHub settings and data from a backup zip file.
+
+| Property | Value | Example |
+|---|---|---|
+| **Input** | Multipart form with `backupFile` | Upload `.zip` file created by `/api/backup/create` |
+| **Output** | JSON with restore results | `{ "success": true, "itemsRestored": [...], "warnings": [...] }` |
+
+**Response example:**
+```json
+{
+  "success": true,
+  "itemsRestored": [
+    "Server Configuration",
+    "Agents Configuration",
+    "Backup Schedules",
+    "User Accounts"
+  ],
+  "warnings": [],
+  "recommendations": [
+    "Restart the BackupHub server to ensure all changes take effect."
+  ]
+}
+```
+
+**Important:** After restoring a backup, restart the BackupHub server for all changes to take effect.
 
 
 
@@ -125,6 +182,17 @@ All REST API endpoints require authentication unless otherwise noted. The Backup
 |---|---|---|
 | **Input** | None | |
 | **Output** | JSON array of notifications | `[ { "type": "info", "message": "Backup completed" } ]` |
+
+---
+
+## Related Documentation
+
+- [Installation](./installation.md): Setting up BackupHub
+- [Backup Schedules](./backup-schedules.md): Creating and managing schedules
+- [Orchestrations](./orchestrations.md): Building complex backup workflows
+- [Settings Configuration](./settings-config.md): Server configuration options
+- [User Management](./user-management.md): User accounts and permissions
+- [Back to Documentation Index](./README.MD)
 
 #### Notifications Create
 `POST /rest/notifications` | Create a new notification.
@@ -584,6 +652,17 @@ The following endpoints allow you to read and delete schedule data. All endpoint
 |-------------|---------------|---------|
 | **Input**   | None          |         |
 | **Output**  | JSON result   | `{ "success": true, "message": "All schedules deleted" }` |
+
+---
+
+## Related Documentation
+
+- [Installation](./installation.md): Setting up BackupHub
+- [Backup Schedules](./backup-schedules.md): Creating and managing schedules
+- [Orchestrations](./orchestrations.md): Building complex backup workflows
+- [Settings Configuration](./settings-config.md): Server configuration options
+- [User Management](./user-management.md): User accounts and permissions
+- [Back to Documentation Index](./README.MD)
 
 ---
 
