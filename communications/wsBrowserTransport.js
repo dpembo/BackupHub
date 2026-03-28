@@ -50,9 +50,20 @@ function emitScheduleEvent(scheduleIndex, eventType, data) {
     io.emit(eventName, data);
 }
 
+// Emit an orchestration-specific event to all connected clients
+function emitOrchestrationEvent(jobId, executionId, eventType, data) {
+    if (!io) {
+        logger.warn(`Socket.io not initialized, cannot emit orchestration event`);
+        return;
+    }
+    const eventName = `${eventType}:${jobId}:${executionId}`;
+    logger.debug(`Emitting orchestration event [${eventName}] for node/data update`);
+    io.emit(eventName, data);
+}
+
 function getIO() {
     return io;
 }
 
 
-module.exports = { init, emitNotification, emitScheduleEvent, getIO };
+module.exports = { init, emitNotification, emitScheduleEvent, emitOrchestrationEvent, getIO };

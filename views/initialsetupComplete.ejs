@@ -2,8 +2,8 @@
 <html>
 <head>
   <title>BackupHub | Initial Setup</title>
-  <link rel="stylesheet" href="css/materialize/materialize.css">
-  <link id="maincss" rel="stylesheet" href="css/light.css">
+  <link rel="stylesheet" href="/css/materialize/materialize.css">
+  <link id="maincss" rel="stylesheet" href="/css/light.css">
   <style>
     body {
         
@@ -20,30 +20,32 @@
       padding: 20px;
       border-radius: 10px;
       box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+      background-color: var(--surface-color);
     }
     h1 {
       font-size: 24px;
       margin-bottom: 20px;
       text-align: center;
-      color: #333;
+      color: var(--text-primary);
     }
     label {
       font-size: 14px;
-      color: #666;
+      color: var(--text-muted);
     }
     input[type="text"],
     input[type="password"] {
       border: none;
-      border-bottom: 1px solid #ccc;
+      border-bottom: 1px solid var(--border-color);
       outline: none;
       width: 100%;
       padding: 5px 0;
       font-size: 16px;
       margin-bottom: 20px;
-      color: #333;
+      color: var(--text-primary);
+      background-color: var(--surface-color);
     }
     .btn {
-      background-color: #4caf50;
+      background-color: var(--success-color);
       border: none;
       border-radius: 5px;
       padding: 10px 20px;
@@ -53,13 +55,13 @@
       transition: background-color 0.2s;
     }
     .btn:hover {
-      background-color: #45a049;
+      background-color: var(--success-color-dark);
     }
     .forgot-password {
       text-align: center;
       margin-top: 20px;
       font-size: 14px;
-      color: #666;
+      color: var(--text-muted);
     }
 
     #vNo
@@ -67,7 +69,7 @@
       position: relative;
       top: 242px;
       float: right;
-      color: gray;
+      color: var(--text-muted);
     }
 
     .imgframe {
@@ -101,7 +103,7 @@
     </p>    
     <button class="btn waves-effect waves-light" style="line-height:0px" onclick="next()">Next</button>
   </div>
-  <script src="js/materialize/materialize.js"></script>
+  <script src="/js/materialize/materialize.js"></script>
   <script>
     // Check if the 'message' URL parameter is present
     const urlParams = new URLSearchParams(window.location.search);

@@ -1,0 +1,1506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0"/>
+  
+  <title>BackupHub | Orchestration Builder</title>
+
+  <%- include('./partials/_head'); %>
+  <%- include('./partials/_scripts'); %>
+  
+  <style>
+    body { margin: 0; padding: 0; overflow: hidden; }
+    #orchestration-container { display: flex; height: calc(100vh - 120px); flex-direction: column; overflow: hidden; width: 100%; margin-top: 1px; }
+    #orchestration-header { background: #f5f5f5; padding: 15px 20px; border-bottom: 1px solid #ddd; flex-shrink: 0; position: relative;}
+    #header-buttonss {
+      position: absolute;
+      top: 15px;   /* matches header padding */
+      right: 20px; /* matches header padding */
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    
+    #orchestration-counts{
+      font-size: 13px;
+    }
+
+    #orchestration-main { display: flex; flex: 1; overflow: hidden; }
+    #orchestration-palette { width: 250px; background: white; border-right: 1px solid #ddd; overflow-y: auto; padding: 15px; flex-shrink: 0; }
+    #orchestration-canvas { flex: 1; background: #fafafa; position: relative; overflow: auto; }
+    #orchestration-canvas svg { display: block; width: 100%; height: auto; min-height: 100%; background: #fafafa; }
+    #orchestration-properties { width: 300px; background: white; border-left: 1px solid #ddd; overflow-y: auto; padding: 15px; flex-shrink: 0; position: fixed; right: 0; top: 142px; bottom: 55px; transform: translateX(100%); transition: transform 0.3s ease-in-out; z-index: 50; }
+    #orchestration-properties.show { transform: translateX(0); }
+    #zoom-controls { right: 20px; }
+    #zoom-controls.shift-left { right: 320px; }
+    .palette-item { padding: 10px; margin-bottom: 8px; background: #f9f9f9; border: 1px solid #e0e0e0; border-radius: 4px; cursor: move; user-select: none; display: flex; align-items: center; gap: 8px; font-size: 13px; transition: all 0.2s; }
+    .palette-item:hover { background: #f0f0f0; border-color: #ff9800; }
+    .palette-item i { font-size: 16px; }
+    .palette-section { margin-bottom: 20px; }
+    .palette-section h4 { margin: 5px 0 10px 0; font-size: 12px; color: #666; text-transform: uppercase; font-weight: 600; }
+    #orchestration-footer { background: #f5f5f5; padding: 15px 20px; border-top: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+    .properties-section { margin-bottom: 20px; display: block; visibility: visible; }
+    .properties-section label { font-size: 12px; font-weight: 600; color: #666; display: block; margin-bottom: 8px; text-transform: uppercase; }
+    .properties-section input, .properties-section select { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; box-sizing: border-box; appearance: auto; background-color: white; color: #333; cursor: pointer; display: block; visibility: visible; }
+    .properties-section select:focus { outline: none; border-color: #2196f3; box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.1); }
+    .properties-section input:focus { outline: none; border-color: #2196f3; box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.1); }
+    #prop-condition { display: none; }
+    #prop-condition[style*="display: block"] { display: block !important; visibility: visible; }
+    .delete-btn:hover { background: #d32f2f; }
+    .save-btn { background: #4caf50; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }
+    .save-btn:hover { background: #388e3c; }
+    #orch-name-display { cursor: pointer; border-radius: 4px; transition: background 0.2s; display: flex; flex-direction: column; gap: 1px; }
+    #orch-name-display:hover { background: rgba(33, 150, 243, 0.1); }
+    #orch-name-text { font-size: 16px; font-weight: 600; }
+    #orch-desc-text { font-size: 13px; color: #666; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 400px; cursor: help; }
+    #orch-name-edit { display: none; }
+    .name-edit-mode #orch-name-display { display: none; }
+    .name-edit-mode #orch-name-edit { display: flex; gap: 8px; align-items: flex-start; flex-direction: column; }
+    #orch-name-input { padding: 5px 8px; border: 2px solid #2196f3; border-radius: 4px; font-size: 14px; font-weight: 500; width: 300px; }
+    #orch-desc-input { padding: 5px 8px; border: 2px solid #2196f3; border-radius: 4px; font-size: 13px; width: 300px; height: 50px; resize: vertical; }
+    #orch-name-input:focus { outline: none; box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.2); }
+    #orch-desc-input:focus { outline: none; box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.2); }
+    .orch-edit-buttons { display: flex; gap: 6px; }
+    h3 {line-height: 35% !important;}
+
+        .details-close-btn {
+      position: absolute;
+      top: 0px;
+      right: 15px;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      font-size: 24px;
+      color: var(--text-primary);
+      padding: 5px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+    }
+
+    .details-close-btn:hover {
+      color: var(--error-color, #d32f2f);
+      transform: scale(1.2);
+    }
+
+  </style>
+  
+</head>
+<body>
+  <%- include('./partials/_header'); %>
+  
+  <div id="orchestration-container">
+    <div id="orchestration-header">
+      
+      <h3 style="margin: 0; display: flex; align-items: center; gap: 15px;">
+        <i class="material-icons">schema</i>
+        <div id="orch-name-display" title="Click to edit orchestration name">
+          <span id="orch-name-text">Branded Orchestration Builder</span>
+          <span id="orch-desc-text" title="Orchestration description">No Description</span>
+        </div>
+        <div id="orch-name-edit">
+          <div>
+            <label style="font-size: 11px; color: #999; text-transform: uppercase; display: block; margin-bottom: 4px;">Name</label>
+            <input type="text" id="orch-name-input" placeholder="Orchestration name...">
+          </div>
+          <div>
+            <label style="font-size: 11px; color: #999; text-transform: uppercase; display: block; margin-bottom: 4px;">Description</label>
+            <textarea id="orch-desc-input" placeholder="Optional description..."></textarea>
+          </div>
+          <div class="orch-edit-buttons">
+            <button onclick="saveOrchestrationName()" style="background: #4caf50; color: white; border: none; padding: 6px 14px; border-radius: 3px; cursor: pointer; font-size: 12px;">Save</button>
+            <button onclick="cancelNameEdit()" style="background: #999; color: white; border: none; padding: 6px 14px; border-radius: 3px; cursor: pointer; font-size: 12px;">Cancel</button>
+          </div>
+        </div>
+      </h3>
+      <div id="header-buttonss" style="display: flex; gap: 10px;">
+        <button class="save-btn" style="background: #1976d2;" onclick="listSchedulesForOrchestration()" title="View schedules that use this orchestration">
+          <i class="material-icons" style="font-size: 16px; vertical-align: middle;">list</i>
+          List Schedules
+        </button>
+        <button class="save-btn" style="background: #2196f3;" onclick="runOrchestration()" title="Execute the orchestration">
+          <i class="material-icons" style="font-size: 16px; vertical-align: middle;">play_arrow</i>
+          Run
+        </button>
+        <button class="save-btn" onclick="saveOrchestration()">
+          <i class="material-icons" style="font-size: 16px; vertical-align: middle;">save</i>
+          Save Orchestration
+        </button>
+      </div>
+    </div>
+    
+    <div id="orchestration-main">
+      <!-- Palette -->
+      <div id="orchestration-palette">
+        <div class="palette-section">
+          <h4>Start</h4>
+          <div class="palette-item" draggable="true" data-node-type="start">
+            <i class="material-icons" style="color: #4caf50;">play_arrow</i>
+            <span>Start</span>
+          </div>
+        </div>
+        
+        <div class="palette-section">
+          <h4>Execute Scripts</h4>
+          <div class="palette-item" draggable="true" data-node-type="execute">
+            <i class="material-icons">settings</i>
+            <span>Execute Script</span>
+          </div>
+        </div>
+        
+        <div class="palette-section">
+          <h4>Logic</h4>
+          <div class="palette-item" draggable="true" data-node-type="condition">
+            <i class="material-icons">device_hub</i>
+            <span>Condition</span>
+          </div>
+        </div>
+        
+        <div class="palette-section">
+          <h4>End Nodes</h4>
+          <div class="palette-item" draggable="true" data-node-type="end-success">
+            <i class="material-icons" style="color: #4caf50;">check_circle</i>
+            <span>Success</span>
+          </div>
+          <div class="palette-item" draggable="true" data-node-type="end-failure">
+            <i class="material-icons" style="color: #f44336;">error</i>
+            <span>Failure</span>
+          </div>
+        </div>
+        <div id="orchestration-counts"><hr>
+          <span><strong id="node-count">0</strong> nodes</span> | <span><strong id="edge-count">0</strong> connections</span>
+        </div>
+<!--        
+        <hr />
+        <p style="font-size: 12px; color: #999; margin-top: 20px;">
+          <strong>Drag items</strong> from this palette onto the canvas to build your orchestration.
+        </p>
+-->
+      </div>
+      
+      <!-- Canvas -->
+      <div id="orchestration-canvas">
+        <svg id="orchestration-svg">
+          <defs>
+            <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+              <polygon points="0 0, 10 3, 0 6" fill="#333" />
+            </marker>
+          </defs>
+        </svg>
+      </div>
+      <!-- Zoom Controls (Fixed to viewport) -->
+      <div id="zoom-controls" style="position: fixed; bottom: 80px; background: white; border: 1px solid #ddd; border-radius: 4px; display: flex; gap: 5px; padding: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); z-index: 100; transition: right 0.3s ease-in-out;">
+        <button id="zoom-out" style="width: 32px; height: 32px; border: 1px solid #ddd; background: white; border-radius: 3px; cursor: pointer; font-size: 14px; font-weight: bold; color: #333;" title="Zoom Out">−</button>
+        <div id="zoom-level" style="min-width: 50px; text-align: center; line-height: 32px; font-size: 12px; color: #666; font-weight: 500;">100%</div>
+        <button id="zoom-in" style="width: 32px; height: 32px; border: 1px solid #ddd; background: white; border-radius: 3px; cursor: pointer; font-size: 14px; font-weight: bold; color: #333;" title="Zoom In">+</button>
+        <button id="zoom-reset" style="width: 32px; height: 32px; border: 1px solid #ddd; background: white; border-radius: 3px; cursor: pointer; font-size: 11px; font-weight: bold; color: #333;" title="Reset Zoom">↻</button>
+      </div>
+      
+      <!-- Properties -->
+      <div id="orchestration-properties">
+        <div id="properties-empty" style="text-align: center; color: #999;">
+          <p><i class="material-icons" style="font-size: 48px; display: block; margin-bottom: 10px; color: #ddd;">touch_app</i></p>
+          <p><strong>Select a node</strong> on the canvas to edit its properties</p>
+        </div>
+        <div id="properties-content" style="display: none;">
+          <div class="properties-section">
+            <button onclick="closeDetailsPanel()" class="details-close-btn" id="detailsClose" title="Close">&times;</button>
+            <label>Node Type</label>
+            <p id="prop-type" style="margin: 5px 0; font-size: 13px; color: #333;"></p>
+          </div>
+          
+          <div id="prop-execute" style="display: none;">
+            <div class="properties-section">
+              <label for="prop-script">Script</label>
+              <select id="prop-script"></select>
+            </div>
+            <div class="properties-section">
+              <label for="prop-agent">Target Agent</label>
+              <select id="prop-agent"></select>
+            </div>
+            <div class="properties-section" id="prop-script-info">
+              <div id="prop-script-info-detail"></div>
+            </div>
+            <div class="properties-section">
+              <label for="prop-params">Parameters</label>
+              <textarea id="prop-params" placeholder="Enter command parameters or custom command"></textarea>
+            </div>
+          </div>
+          
+          <div id="prop-condition" style="display: none;">
+            <div class="properties-section">
+              <label for="prop-condition-type">Test Type</label>
+              <select id="prop-condition-type">
+                <option value="return_code">Return Code</option>
+                <option value="output_contains">Output Contains</option>
+                <option value="execution_time">Execution Time (seconds)</option>
+              </select>
+            </div>
+            <div class="properties-section">
+              <label for="prop-condition-operator">Operator</label>
+              <select id="prop-condition-operator">
+                <option value="==">== (equals)</option>
+                <option value="!=">!= (not equals)</option>
+                <option value="&gt;">&gt; (greater than)</option>
+                <option value="!&gt;">!&gt; (not greater than)</option>
+                <option value="&gt;=">&gt;= (greater or equal)</option>
+                <option value="!>=">!&gt;= (not greater or equal)</option>
+                <option value="&lt;">&lt; (less than)</option>
+                <option value="!&lt;">!&lt; (not less than)</option>
+                <option value="&lt;=">&lt;= (less or equal)</option>
+                <option value="!&lt;=">!&lt;= (not less or equal)</option>
+              </select>
+              <small style="color: #999; margin-top: 5px; display: block;">For Output Contains, only equals/not equals are used</small>
+            </div>
+            <div class="properties-section">
+              <label for="prop-condition-value">Value</label>
+              <input type="text" id="prop-condition-value" placeholder="Enter value..." title="For regex, enter a valid regex pattern. For numeric, enter a number.">
+            </div>
+          </div>
+          
+          <div id="prop-end" style="display: none;">
+            <div class="properties-section">
+              <label>End Type</label>
+              <div id="prop-end-type-display" style="padding: 8px; background: #f5f5f5; border-radius: 3px; color: #333; font-weight: 500;"></div>
+            </div>
+          </div>
+          
+          <button class="delete-btn" onclick="deleteSelectedNode()">Delete Node</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <%- include('./partials/_footer'); %>
+  
+  <!-- Orchestration Naming Modal -->
+  <div id="orchestration-naming-modal" class="modal">
+    <div class="modal-content">
+      <h4>Orchestration Name & Description</h4>
+      <p>Provide a descriptive name for this orchestration to help identify it in history logs:</p>
+      <div class="input-field" style="margin-top: 20px;">
+        <input type="text" id="naming-modal-name" placeholder="e.g., Daily Backup Workflow">
+        <label for="naming-modal-name">Orchestration Name *</label>
+        <span class="helper-text" id="naming-helper-text" data-error=""></span>
+      </div>
+      <div class="input-field">
+        <textarea id="naming-modal-desc" placeholder="Optional: Describe what this orchestration does" style="height: 80px; resize: vertical;"></textarea>
+        <label for="naming-modal-desc">Description (Optional)</label>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <a href="#!" class="modal-close waves-effect waves-green btn-flat">Cancel</a>
+      <a href="#!" onclick="confirmOrchestrationName()" id="naming-confirm-button" class="waves-effect waves-green btn-flat" style="color: #4caf50; font-weight: 600;">Save & Continue</a>
+    </div>
+  </div>
+  
+  <!-- List Schedules Modal -->
+  <div id="schedules-list-modal" class="modal" style="max-height: 90vh; max-width: 800px; width: 90%;">
+    <div class="modal-content" style="max-height: 75vh; overflow-y: auto; position: relative;">
+      <button class="modal-close" style="position: absolute; top: 10px; right: 10px; background: none; border: none; cursor: pointer; color: #999; font-size: 28px; padding: 0; line-height: 1;">&times;</button>
+      <h4><i class="material-icons" style="vertical-align: middle; margin-right: 10px;">list</i>Schedules Using This Orchestration</h4>
+      <div id="schedules-list-container">
+        <p style="text-align: center; color: #999;">Loading schedules...</p>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <a href="#!" class="modal-close waves-effect waves-green btn-flat">Close</a>
+    </div>
+  </div>
+  
+  <script>
+    // SVG-based orchestration builder with labeled exit ports for conditions
+    
+    const CANVAS = {
+      width: 1200,
+      height: 800,
+      nodeWidth: 200,
+      nodeHeight: 60,
+      portRadius: 6,
+      verticalSpacing: 150
+    };
+    
+    // Helper function to get CSS variable values with fallback
+    function getCSSVariable(varName, fallback) {
+      const value = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+      return value || fallback;
+    }
+    
+    let svg = null;
+    let edgeLayer = null;
+    let nodeLayer = null;
+    let selectedNode = null;
+    let orchestrationId = '<%= jobId %>'.trim();
+    if (!orchestrationId) orchestrationId = null;
+    let availableScripts = [];
+    let availableAgents = [];
+    let orchestrationName = '';
+    let orchestrationDescription = '';
+    let pendingSave = false;
+    
+    // Data structures
+    let nodes = {};
+    let edges = [];
+    let nodeIdCounter = 0;
+    let edgeIdCounter = 0;
+    
+    // State
+    let isDraggingNode = null;
+    let isDrawingEdge = false;
+    let tempEdgeLine = null;
+    let tempEdgeStartPort = null;
+    let zoomLevel = 1;
+    
+    $(document).ready(function() {
+      console.log('Orchestra Builder loaded, orchestrationId:', orchestrationId);
+      // Initialize Materialize modal
+      $('.modal').modal();
+      initializeSVG();
+      loadScripts();
+      loadAgents();
+      if (orchestrationId) {
+        console.log('Loading existing orchestration:', orchestrationId);
+        loadOrchestration();
+      } else {
+        console.log('New orchestration - no ID specified');
+      }
+      setupDragAndDrop();
+      setupZoomControls();
+      // Setup name display click handler
+      document.getElementById('orch-name-display').addEventListener('click', enterNameEditMode);
+      
+      // Setup theme change listener to re-render nodes when theme toggles
+      const stylesheetLink = document.getElementById('maincss');
+      if (stylesheetLink) {
+        const observer = new MutationObserver(() => {
+          // Add a small delay to ensure CSS variables are updated
+          setTimeout(() => {
+            if (Object.keys(nodes).length > 0) {
+              renderAllNodes();
+              renderAllEdges();
+            }
+          }, 50);
+        });
+        observer.observe(stylesheetLink, { attributes: true, attributeFilter: ['href'] });
+      }
+    });
+    
+    function initializeSVG() {
+      svg = document.getElementById('orchestration-svg');
+      svg.setAttribute('width', CANVAS.width);
+      svg.setAttribute('height', CANVAS.height);
+      svg.setAttribute('viewBox', `0 0 ${CANVAS.width} ${CANVAS.height}`);
+      svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+      
+      // Get or create layers
+      let edgeLyr = svg.querySelector('#edge-layer');
+      if (!edgeLyr) {
+        edgeLyr = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        edgeLyr.setAttribute('id', 'edge-layer');
+        svg.appendChild(edgeLyr);
+      }
+      edgeLayer = edgeLyr;
+      
+      let nodeLyr = svg.querySelector('#node-layer');
+      if (!nodeLyr) {
+        nodeLyr = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        nodeLyr.setAttribute('id', 'node-layer');
+        svg.appendChild(nodeLyr);
+      }
+      nodeLayer = nodeLyr;
+      
+      // Add canvas interaction
+      svg.addEventListener('click', onSVGClick);
+      svg.addEventListener('mousemove', onSVGMouseMove);
+      svg.addEventListener('mouseup', onSVGMouseUp);
+    }
+    
+    function setupDragAndDrop() {
+      const paletteItems = document.querySelectorAll('.palette-item');
+      
+      paletteItems.forEach(item => {
+        item.addEventListener('dragstart', function(e) {
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('nodeType', this.dataset.nodeType);
+        });
+      });
+      
+      const canvas = document.getElementById('orchestration-canvas');
+      canvas.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+      });
+      
+      canvas.addEventListener('drop', function(e) {
+        e.preventDefault();
+        const nodeType = e.dataTransfer.getData('nodeType');
+        
+        // Check if trying to add more than one start node
+        if (nodeType === 'start') {
+          const existingStartNode = Object.values(nodes).find(n => n.type === 'start');
+          if (existingStartNode) {
+            alert('Only one Start node is allowed per orchestration');
+            return;
+          }
+        }
+        
+        // Calculate SVG coordinates from canvas event
+        const rect = svg.getBoundingClientRect();
+        const svgX = ((e.clientX - rect.left) / rect.width) * CANVAS.width;
+        const svgY = ((e.clientY - rect.top) / rect.height) * CANVAS.height;
+        
+        createNode(nodeType, svgX, svgY);
+      });
+    }
+    
+    function setupZoomControls() {
+      document.getElementById('zoom-in').addEventListener('click', function() {
+        zoomLevel = Math.min(zoomLevel + 0.1, 3);
+        applyZoom();
+      });
+      
+      document.getElementById('zoom-out').addEventListener('click', function() {
+        zoomLevel = Math.max(zoomLevel - 0.1, 0.5);
+        applyZoom();
+      });
+      
+      document.getElementById('zoom-reset').addEventListener('click', function() {
+        zoomLevel = 1;
+        applyZoom();
+      });
+    }
+    
+    function applyZoom() {
+      svg.style.transform = `scale(${zoomLevel})`;
+      svg.style.transformOrigin = '0 0';
+      document.getElementById('zoom-level').textContent = Math.round(zoomLevel * 100) + '%';
+    }
+    
+    // Helper function to get dynamic port position accounting for variable node width
+    function getPortPosition(node, portId) {
+      const port = node.ports.find(p => p.id === portId);
+      if (!port) return null;
+      
+      // Measure label width to calculate dynamic box width
+      const tempText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      tempText.setAttribute('font-family', 'Arial, sans-serif');
+      tempText.setAttribute('font-size', '14');
+      tempText.setAttribute('font-weight', '500');
+      tempText.textContent = node.label;
+      nodeLayer.appendChild(tempText);
+      const textWidth = tempText.getComputedTextLength();
+      nodeLayer.removeChild(tempText);
+      
+      const minWidth = 200;
+      const nodeWidth = Math.max(minWidth, 18 + 8 + textWidth + 16);
+      
+      // Calculate dynamic port x position
+      let portX = port.x;
+      if (node.type === 'execute') {
+        portX = nodeWidth / 2;
+      } else if (node.type === 'condition') {
+        const baseOffset = 30;
+        if (port.id === 'true') {
+          portX = nodeWidth / 2 - baseOffset;
+        } else if (port.id === 'false') {
+          portX = nodeWidth / 2 + baseOffset;
+        }
+      }
+      
+      return {
+        x: node.x + portX - nodeWidth / 2,
+        y: node.y + port.y - CANVAS.nodeHeight / 2
+      };
+    }
+    
+    function createNode(type, x = 100, y = 100) {
+      nodeIdCounter++;
+      const id = 'node_' + nodeIdCounter;
+      
+      let label = 'Node';
+      let icon = 'device_hub';
+      let ports = [];
+      
+      if (type === 'start') {
+        label = 'Start';
+        icon = 'play_arrow';
+        ports = [{ id: 'out', label: 'next', x: CANVAS.nodeWidth / 2, y: CANVAS.nodeHeight }];
+      } else if (type === 'execute') {
+        label = 'Execute';
+        icon = 'settings';
+        ports = [{ id: 'out', label: 'next', x: CANVAS.nodeWidth / 2, y: CANVAS.nodeHeight }];
+      } else if (type === 'condition') {
+        label = 'Condition';
+        icon = 'device_hub';
+        // Condition nodes have labeled exit ports
+        ports = [
+          { id: 'true', label: 'true', x: CANVAS.nodeWidth / 2 - 30, y: CANVAS.nodeHeight },
+          { id: 'false', label: 'false', x: CANVAS.nodeWidth / 2 + 30, y: CANVAS.nodeHeight }
+        ];
+      } else if (type === 'end-success') {
+        label = 'Success';
+        icon = 'check_circle';
+        ports = [];
+      } else if (type === 'end-failure') {
+        label = 'Failure';
+        icon = 'error';
+        ports = [];
+      }
+      
+      nodes[id] = {
+        id: id,
+        type: type,
+        label: label,
+        icon: icon,
+        x: x,
+        y: y,
+        ports: ports,
+        data: {}
+      };
+      
+      renderNode(id);
+      updateStats();
+    }
+    
+    function renderNode(nodeId) {
+      const node = nodes[nodeId];
+      if (!node) return;
+      
+      // Remove old rendering if exists
+      const oldGrp = nodeLayer.querySelector(`[data-node-id="${nodeId}"]`);
+      if (oldGrp) oldGrp.remove();
+      
+      // Create group
+      const grp = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      grp.setAttribute('data-node-id', nodeId);
+      grp.setAttribute('class', 'node');
+      grp.style.cursor = 'move';
+      
+      // Calculate dynamic width based on label text
+      // Create temp text to measure width
+      const tempText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      tempText.setAttribute('font-family', 'Arial, sans-serif');
+      tempText.setAttribute('font-size', '14');
+      tempText.setAttribute('font-weight', '500');
+      tempText.textContent = node.label;
+      nodeLayer.appendChild(tempText);
+      const textWidth = tempText.getComputedTextLength();
+      nodeLayer.removeChild(tempText);
+      
+      // Calculate node width: icon(18) + left pad(8) + text width + right pad(16)
+      const minWidth = 200; // Minimum width
+      const calculatedWidth = Math.max(minWidth, 18 + 8 + textWidth + 16);
+      const nodeWidth = calculatedWidth;
+      
+      // Draw box with palette-like styling
+      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      rect.setAttribute('x', node.x - nodeWidth / 2);
+      rect.setAttribute('y', node.y - CANVAS.nodeHeight / 2);
+      rect.setAttribute('width', nodeWidth);
+      rect.setAttribute('height', CANVAS.nodeHeight);
+      rect.setAttribute('fill', getCSSVariable('--surface-secondary', '#f9f9f9'));
+      rect.setAttribute('stroke', selectedNode === nodeId ? getCSSVariable('--warning-color', '#ff9800') : getCSSVariable('--border-color', '#e0e0e0'));
+      rect.setAttribute('stroke-width', selectedNode === nodeId ? '2' : '1');
+      rect.setAttribute('rx', '4');
+      grp.appendChild(rect);
+      
+      // Draw icon using Material Icons font
+      const icon = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      icon.setAttribute('x', node.x - nodeWidth / 2 + 12);
+      icon.setAttribute('y', node.y);
+      icon.setAttribute('font-family', 'Material Icons');
+      icon.setAttribute('font-size', '18');
+      icon.setAttribute('pointer-events', 'none');
+      icon.setAttribute('text-anchor', 'middle');
+      icon.setAttribute('dominant-baseline', 'middle');
+      
+      // Set icon color based on node type
+      if (node.type === 'start') {
+        icon.setAttribute('fill', getCSSVariable('--success-color', '#4caf50'));
+      } else if (node.type === 'end-success') {
+        icon.setAttribute('fill', getCSSVariable('--success-color', '#4caf50'));
+      } else if (node.type === 'end-failure') {
+        icon.setAttribute('fill', getCSSVariable('--error-color', '#f44336'));
+      } else {
+        icon.setAttribute('fill', getCSSVariable('--text-muted', '#999'));
+      }
+      
+      // Material Icons font mapping
+      const iconMap = {
+        'play_arrow': 'play_arrow',
+        'settings': 'settings',
+        'device_hub': 'device_hub',
+        'check_circle': 'check_circle',
+        'error': 'error'
+      };
+      icon.textContent = iconMap[node.icon] || 'device_hub';
+      grp.appendChild(icon);
+      
+      // Draw label (positioned to right of icon)
+      const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      text.setAttribute('x', node.x - nodeWidth / 2 + 36);
+      text.setAttribute('y', node.y);
+      text.setAttribute('text-anchor', 'start');
+      text.setAttribute('dominant-baseline', 'middle');
+      text.setAttribute('fill', getCSSVariable('--text-primary', '#333'));
+      text.setAttribute('font-size', '14');
+      text.setAttribute('font-weight', '500');
+      text.setAttribute('pointer-events', 'none');
+      text.textContent = node.label;
+      grp.appendChild(text);
+      
+      // Draw ports with adjusted positions based on dynamic width
+      node.ports.forEach(port => {
+        const portGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        portGroup.setAttribute('data-port', port.id);
+        portGroup.style.cursor = 'crosshair';
+        
+        // Calculate dynamic port x position based on node type
+        let portX = port.x;
+        if (node.type === 'execute') {
+          // Center port at bottom-center
+          portX = nodeWidth / 2;
+        } else if (node.type === 'condition') {
+          // Condition ports: left and right of center
+          const baseOffset = 30;
+          if (port.id === 'true') {
+            portX = nodeWidth / 2 - baseOffset;
+          } else if (port.id === 'false') {
+            portX = nodeWidth / 2 + baseOffset;
+          }
+        }
+        
+        // Port circle
+        const portCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        portCircle.setAttribute('cx', node.x + portX - nodeWidth / 2);
+        portCircle.setAttribute('cy', node.y + port.y - CANVAS.nodeHeight / 2);
+        portCircle.setAttribute('r', CANVAS.portRadius);
+        portCircle.setAttribute('fill', getCSSVariable('--surface-color', '#fff'));
+        portCircle.setAttribute('stroke', getCSSVariable('--border-color', '#333'));
+        portCircle.setAttribute('stroke-width', '2');
+        portGroup.appendChild(portCircle);
+        
+        // Port label
+        const portLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        portLabel.setAttribute('x', node.x + portX - nodeWidth / 2);
+        portLabel.setAttribute('y', node.y + port.y - CANVAS.nodeHeight / 2 + 20);
+        portLabel.setAttribute('text-anchor', 'middle');
+        portLabel.setAttribute('font-size', '11');
+        portLabel.setAttribute('fill', getCSSVariable('--text-muted', '#666'));
+        portLabel.setAttribute('pointer-events', 'none');
+        portLabel.textContent = port.label;
+        portGroup.appendChild(portLabel);
+        
+        portGroup.addEventListener('mousedown', (e) => startDrawEdge(e, nodeId, port.id));
+        grp.appendChild(portGroup);
+      });
+      
+      // Node interaction
+      grp.addEventListener('mousedown', (e) => {
+        if (e.target.tagName === 'circle') return; // Don't handle port clicks here
+        isDraggingNode = nodeId;
+        selectedNode = nodeId;
+        updatePropertiesPanel();
+        renderAllNodes();
+      });
+      
+      grp.addEventListener('click', (e) => {
+        e.stopPropagation();
+        selectedNode = nodeId;
+        updatePropertiesPanel();
+        renderAllNodes();
+      });
+      
+      nodeLayer.appendChild(grp);
+    }
+    
+    function renderAllNodes() {
+      nodeLayer.querySelectorAll('[data-node-id]').forEach(el => el.remove());
+      Object.keys(nodes).forEach(nodeId => renderNode(nodeId));
+      renderAllEdges();
+    }
+    
+    function renderAllEdges() {
+      edgeLayer.innerHTML = '';
+      edges.forEach(edge => renderEdge(edge));
+    }
+    
+    function renderEdge(edge) {
+      const fromNode = nodes[edge.from];
+      const toNode = nodes[edge.to];
+      
+      if (!fromNode || !toNode) return;
+      
+      const fromPort = fromNode.ports.find(p => p.id === edge.fromPort);
+      const startPos = getPortPosition(fromNode, edge.fromPort);
+      const startX = startPos.x;
+      const startY = startPos.y;
+      
+      const endX = toNode.x;
+      const endY = toNode.y - CANVAS.nodeHeight / 2;
+      
+      // Draw cubic bezier curve
+      const midY = (startY + endY) / 2;
+      const pathData = `M ${startX} ${startY} C ${startX} ${midY}, ${endX} ${midY}, ${endX} ${endY}`;
+      
+      // Determine edge color dynamically based on type
+      let edgeColor = getCSSVariable('--primary-color', '#2196f3');
+      if (edge.fromPort === 'true') {
+        edgeColor = getCSSVariable('--success-color', '#4caf50');
+      } else if (edge.fromPort === 'false') {
+        edgeColor = getCSSVariable('--error-color', '#f44336');
+      }
+      
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      line.setAttribute('d', pathData);
+      line.setAttribute('stroke', edgeColor);
+      line.setAttribute('stroke-width', '2');
+      line.setAttribute('fill', 'none');
+      line.setAttribute('marker-end', 'url(#arrowhead)');
+      edgeLayer.appendChild(line);
+      
+      // Draw label
+      if (edge.label) {
+        const labelText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        labelText.setAttribute('x', (startX + endX) / 2);
+        labelText.setAttribute('y', midY - 8);
+        labelText.setAttribute('text-anchor', 'middle');
+        labelText.setAttribute('font-size', '11');
+        labelText.setAttribute('fill', edgeColor);
+        labelText.setAttribute('font-weight', 'bold');
+        labelText.textContent = edge.label;
+        edgeLayer.appendChild(labelText);
+      }
+    }
+    
+    function startDrawEdge(e, fromNodeId, portId) {
+      e.stopPropagation();
+      e.preventDefault();
+      
+      isDrawingEdge = true;
+      tempEdgeStartPort = { nodeId: fromNodeId, portId: portId };
+      
+      const node = nodes[fromNodeId];
+      const startPos = getPortPosition(node, portId);
+      const startX = startPos.x;
+      const startY = startPos.y;
+      
+      tempEdgeLine = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      tempEdgeLine.setAttribute('stroke', getCSSVariable('--warning-color', '#ff9800'));
+      tempEdgeLine.setAttribute('stroke-width', '2');
+      tempEdgeLine.setAttribute('fill', 'none');
+      tempEdgeLine.setAttribute('stroke-dasharray', '5,5');
+      
+      const pathData = `M ${startX} ${startY} L ${startX} ${startY}`;
+      tempEdgeLine.setAttribute('d', pathData);
+      edgeLayer.appendChild(tempEdgeLine);
+      
+      document.addEventListener('mousemove', updateTempEdgeLine);
+    }
+    
+    function updateTempEdgeLine(e) {
+      if (!isDrawingEdge || !tempEdgeLine || !tempEdgeStartPort) return;
+      
+      const startNode = nodes[tempEdgeStartPort.nodeId];
+      const startPos = getPortPosition(startNode, tempEdgeStartPort.portId);
+      const startX = startPos.x;
+      const startY = startPos.y;
+      
+      const rect = svg.getBoundingClientRect();
+      const x = ((e.clientX - rect.left) / rect.width) * CANVAS.width;
+      const y = ((e.clientY - rect.top) / rect.height) * CANVAS.height;
+      
+      const pathData = `M ${startX} ${startY} L ${x} ${y}`;
+      tempEdgeLine.setAttribute('d', pathData);
+    }
+    
+    function onSVGMouseUp(e) {
+      if (!isDrawingEdge || !tempEdgeStartPort) {
+        isDrawingEdge = false;
+        if (tempEdgeLine) tempEdgeLine.remove();
+        tempEdgeLine = null;
+        tempEdgeStartPort = null;
+        isDraggingNode = null;
+        document.removeEventListener('mousemove', updateTempEdgeLine);
+        return;
+      }
+      
+      // Check if dropped on another node
+      const rect = svg.getBoundingClientRect();
+      const x = ((e.clientX - rect.left) / rect.width) * CANVAS.width;
+      const y = ((e.clientY - rect.top) / rect.height) * CANVAS.height;
+      
+      let targetNode = null;
+      for (let nodeId in nodes) {
+        const node = nodes[nodeId];
+        if (nodeId === tempEdgeStartPort.nodeId) continue;
+        
+        const dist = Math.sqrt(Math.pow(x - node.x, 2) + Math.pow(y - node.y, 2));
+        if (dist < CANVAS.nodeHeight + 20) {
+          targetNode = nodeId;
+          break;
+        }
+      }
+      
+      isDrawingEdge = false;
+      if (tempEdgeLine) tempEdgeLine.remove();
+      tempEdgeLine = null;
+      
+      if (targetNode) {
+        createEdge(tempEdgeStartPort.nodeId, targetNode, tempEdgeStartPort.portId);
+      }
+      
+      tempEdgeStartPort = null;
+      document.removeEventListener('mousemove', updateTempEdgeLine);
+      renderAllEdges();
+    }
+    
+    function onSVGMouseMove(e) {
+      if (isDraggingNode) {
+        const rect = svg.getBoundingClientRect();
+        const x = ((e.clientX - rect.left) / rect.width) * CANVAS.width;
+        const y = ((e.clientY - rect.top) / rect.height) * CANVAS.height;
+        
+        nodes[isDraggingNode].x = x;
+        nodes[isDraggingNode].y = y;
+        renderAllNodes();
+      }
+    }
+    
+    function onSVGClick(e) {
+      if (e.target === svg || (e.target.tagName === 'g' && !e.target.hasAttribute('data-node-id'))) {
+        closeDetailsPanel();
+      }
+    }
+
+    function closeDetailsPanel(){
+      selectedNode = null;
+      document.getElementById('orchestration-properties').classList.remove('show');
+      document.getElementById('zoom-controls').classList.remove('shift-left');
+      updatePropertiesPanel();
+      renderAllNodes();
+    }
+    
+    function createEdge(fromId, toId, fromPort) {
+      // Enforce single connection per port: remove any existing edge from this port
+      edges = edges.filter(e => !(e.from === fromId && e.fromPort === fromPort));
+      
+      edgeIdCounter++;
+      const label = fromPort === 'out' ? 'next' : fromPort;
+      
+      edges.push({
+        id: 'edge_' + edgeIdCounter,
+        from: fromId,
+        fromPort: fromPort,
+        to: toId,
+        label: label,
+        color: fromPort === 'true' ? '#4caf50' : (fromPort === 'false' ? '#f44336' : '#2196f3')
+      });
+      
+      updateStats();
+      renderAllEdges();
+    }
+    
+    function deleteSelectedNode() {
+      if (!selectedNode) return;
+      
+      edges = edges.filter(e => e.from !== selectedNode && e.to !== selectedNode);
+      delete nodes[selectedNode];
+      selectedNode = null;
+      updatePropertiesPanel();
+      renderAllNodes();
+      updateStats();
+    }
+    
+    function updatePropertiesPanel() {
+      const propsEmpty = document.getElementById('properties-empty');
+      const propsContent = document.getElementById('properties-content');
+      const propsPanel = document.getElementById('orchestration-properties');
+      
+      if (!selectedNode || !nodes[selectedNode]) {
+        propsEmpty.style.display = 'block';
+        propsContent.style.display = 'none';
+        propsPanel.classList.remove('show');
+        document.getElementById('zoom-controls').classList.remove('shift-left');
+        return;
+      }
+      
+      const node = nodes[selectedNode];
+      propsEmpty.style.display = 'none';
+      propsContent.style.display = 'block';
+      propsPanel.classList.add('show');
+      document.getElementById('zoom-controls').classList.add('shift-left');
+      
+      document.getElementById('prop-type').textContent = node.type.charAt(0).toUpperCase() + node.type.slice(1);
+      
+      document.getElementById('prop-execute').style.display = node.type === 'execute' ? 'block' : 'none';
+      document.getElementById('prop-condition').style.display = node.type === 'condition' ? 'block' : 'none';
+      document.getElementById('prop-end').style.display = node.type.startsWith('end') ? 'block' : 'none';
+      
+      if (node.type === 'execute') {
+        const scriptSelect = document.getElementById('prop-script');
+        const paramsField = document.getElementById('prop-params');
+        
+        // Build script select options
+        scriptSelect.innerHTML = '<option value="">Select a script...</option>';
+        availableScripts.forEach(script => {
+          const option = document.createElement('option');
+          // Handle both object format {id, name, filename} and string format
+          const scriptId = typeof script === 'string' ? script : (script.filename || script.id);
+          const scriptDisplay = typeof script === 'string' ? script : (script.name || script.filename || script.id);
+          option.value = scriptId;
+          option.textContent = scriptDisplay;
+          if (node.data.script === scriptId) option.selected = true;
+          
+          // Add hover behavior to preview script info in the panel
+          option.addEventListener('mouseenter', function() {
+            if (scriptId) {
+              fetchScriptInfo(scriptId);
+            }
+          });
+          
+          scriptSelect.appendChild(option);
+        });
+        
+        // Set parameters value
+        paramsField.value = node.data.parameters || '';
+        
+        // Show current script info on focus
+        scriptSelect.addEventListener('focus', function() {
+          if (node.data.script) {
+            fetchScriptInfo(node.data.script);
+          }
+        });
+        
+        scriptSelect.onchange = function() {
+          node.data.script = this.value;
+          node.label = 'Execute: ' + (this.value ? this.value.split('/').pop() : 'Script');
+          if (this.value) {
+            fetchScriptInfo(this.value);
+          } else {
+            document.getElementById('prop-script-info-detail').innerHTML = '';
+          }
+          renderNode(selectedNode);
+        };
+        
+        // Fetch and display info for currently selected script
+        if (node.data.script) {
+          fetchScriptInfo(node.data.script);
+        }
+        
+        paramsField.onchange = function() {
+          node.data.parameters = this.value;
+        };
+        
+        paramsField.oninput = function() {
+          node.data.parameters = this.value;
+        };
+        
+        // Setup agent selection
+        const agentSelect = document.getElementById('prop-agent');
+        agentSelect.innerHTML = '<option value="">Select a target agent...</option>';
+        availableAgents.forEach(agent => {
+          const option = document.createElement('option');
+          option.value = agent.id;
+          const statusIcon = agent.status === 'online' ? '✅' : '❌';
+          option.textContent = `${statusIcon} ${agent.name}`;
+          if (node.data.agent === agent.id) option.selected = true;
+          agentSelect.appendChild(option);
+        });
+        
+        agentSelect.onchange = function() {
+          node.data.agent = this.value;
+        };
+      } else if (node.type === 'condition') {
+        document.getElementById('prop-condition-type').value = node.data.conditionType || 'return_code';
+        document.getElementById('prop-condition-operator').value = node.data.operator || '==';
+        document.getElementById('prop-condition-value').value = node.data.conditionValue || '';
+        
+        document.getElementById('prop-condition-type').onchange = function() {
+          node.data.conditionType = this.value;
+        };
+        document.getElementById('prop-condition-operator').onchange = function() {
+          node.data.operator = this.value;
+        };
+        document.getElementById('prop-condition-value').onchange = function() {
+          node.data.conditionValue = this.value;
+        };
+        document.getElementById('prop-condition-value').oninput = function() {
+          node.data.conditionValue = this.value;
+        };
+      } else if (node.type === 'end-success') {
+        document.getElementById('prop-end-type-display').textContent = 'Success';
+      } else if (node.type === 'end-failure') {
+        document.getElementById('prop-end-type-display').textContent = 'Failure';
+      }
+    }
+    
+    function extractHTMLParams(data) {
+      const startTag = '#start-params';
+      const endTag = '#end-params';
+      
+      // Find the positions of the start and end tags
+      const startIndex = data.indexOf(startTag);
+      const endIndex = data.indexOf(endTag);
+      
+      // If both tags are found and the start tag comes before the end tag
+      if (startIndex !== -1 && endIndex !== -1 && startIndex < endIndex) {
+        // Extract the HTML content between the tags
+        let htmlContent = data.substring(startIndex + startTag.length, endIndex);
+        // Remove the hash symbols at the beginning of each line specifically
+        htmlContent = htmlContent.replace(/^#/gm, '');
+        return htmlContent;
+      } else {
+        // Return an empty string or some other value to indicate that the tags were not found
+        return '';
+      }
+    }
+    
+    function fetchScriptInfo(scriptPath) {
+      const url = '/rest/script/' + scriptPath;
+      fetch(url)
+        .then(response => {
+          if (!response.ok) {
+            throw new Error('Network response was not ok');
+          }
+          return response.text();
+        })
+        .then(data => {
+          document.getElementById('prop-script-info-detail').innerHTML = extractHTMLParams(data);
+        })
+        .catch(error => {
+          console.error('Error fetching script info:', error);
+          document.getElementById('prop-script-info-detail').innerHTML = '';
+        });
+    }
+    
+    function loadScripts() {
+      $.ajax({
+        url: '/rest/orchestration/scripts',
+        type: 'GET',
+        success: function(scripts) {
+          availableScripts = scripts || [];
+        }
+      });
+    }
+    
+    function loadAgents() {
+      $.ajax({
+        url: '/rest/orchestration/agents',
+        type: 'GET',
+        success: function(agents) {
+          availableAgents = agents || [];
+        }
+      });
+    }
+    
+    function loadOrchestration() {
+      $.ajax({
+        url: '/rest/orchestration/jobs/' + encodeURIComponent(orchestrationId),
+        type: 'GET',
+        success: function(orch) {
+          console.log('Loaded orchestration:', orch);
+          
+          if (!orch) {
+            console.error('Empty response from server');
+            return;
+          }
+          
+          if (orch.nodes && orch.nodes.length > 0) {
+            console.log('Loading', orch.nodes.length, 'nodes');
+            orch.nodes.forEach(n => {
+              nodeIdCounter = Math.max(nodeIdCounter, parseInt(n.id.split('_')[1]) || 0);
+              
+              let type = n.type;
+              let icon = 'device_hub';
+              let ports = [];
+              
+              if (type === 'start') {
+                icon = 'play_arrow';
+                ports = [{ id: 'out', label: 'next', x: CANVAS.nodeWidth / 2, y: CANVAS.nodeHeight }];
+              } else if (type === 'execute') {
+                icon = 'settings';
+                ports = [{ id: 'out', label: 'next', x: CANVAS.nodeWidth / 2, y: CANVAS.nodeHeight }];
+              } else if (type === 'condition') {
+                icon = 'device_hub';
+                ports = [
+                  { id: 'true', label: 'true', x: CANVAS.nodeWidth / 2 - 30, y: CANVAS.nodeHeight },
+                  { id: 'false', label: 'false', x: CANVAS.nodeWidth / 2 + 30, y: CANVAS.nodeHeight }
+                ];
+              } else if (type === 'end-success') {
+                icon = 'check_circle';
+              } else if (type === 'end-failure') {
+                icon = 'error';
+              }
+              
+              nodes[n.id] = {
+                id: n.id,
+                type: type,
+                label: n.label || 'Node',
+                icon: icon,
+                x: n.x || 100,
+                y: n.y || 100,
+                ports: ports,
+                data: n.data || {}
+              };
+            });
+          }
+          
+          if (orch.edges && orch.edges.length > 0) {
+            console.log('Loading', orch.edges.length, 'edges');
+            orch.edges.forEach(e => {
+              edgeIdCounter = Math.max(edgeIdCounter, parseInt(e.id.split('_')[1]) || 0);
+              edges.push({
+                id: e.id,
+                from: e.from,
+                fromPort: e.fromPort,
+                to: e.to,
+                label: e.label,
+                color: e.color || '#2196f3'
+              });
+            });
+          }
+          
+          // Load name and description
+          if (orch.name) {
+            orchestrationName = orch.name;
+            document.getElementById('orch-name-text').textContent = orchestrationName;
+          }
+          if (orch.description) {
+            orchestrationDescription = orch.description;
+          }
+          updateDescriptionDisplay();
+          
+          // Re-render all nodes to attach event handlers and connections
+          renderAllNodes();
+          updateStats();
+          console.log('Orchestration loaded - nodes:', Object.keys(nodes).length, 'edges:', edges.length);
+        },
+        error: function(xhr, status, error) {
+          console.error('Failed to load orchestration:', error, xhr);
+          alert('Failed to load orchestration: ' + error);
+        }
+      });
+    }
+    
+    function saveOrchestration() {
+      // If we don't have a name yet, show the naming modal
+      if (!orchestrationName.trim()) {
+        pendingSave = true;
+        document.getElementById('naming-modal-name').value = '';
+        document.getElementById('naming-modal-desc').value = '';
+        document.getElementById('naming-helper-text').innerHTML = '';
+        document.getElementById('naming-modal-name').classList.remove('invalid');
+        var modal = M.Modal.getInstance(document.getElementById('orchestration-naming-modal'));
+        modal.open();
+        return;
+      }
+      
+      // Proceed with save
+      performSave();
+    }
+    
+    function performSave() {
+      const nodeArray = Object.values(nodes).map(n => ({
+        id: n.id,
+        label: n.label,
+        type: n.type,
+        icon: n.icon,
+        x: n.x,
+        y: n.y,
+        data: n.data
+      }));
+      
+      const edgeArray = edges.map(e => ({
+        id: e.id,
+        from: e.from,
+        fromPort: e.fromPort,
+        to: e.to,
+        label: e.label,
+        color: e.color
+      }));
+      
+      const orchestration = {
+        jobId: orchestrationId || 'new_' + Date.now(),
+        name: orchestrationName,
+        description: orchestrationDescription,
+        nodes: nodeArray,
+        edges: edgeArray
+      };
+      
+      const url = orchestrationId ? '/rest/orchestration/jobs/' + encodeURIComponent(orchestrationId) : '/rest/orchestration/jobs';
+      const method = orchestrationId ? 'PUT' : 'POST';
+      
+      $.ajax({
+        url: url,
+        type: method,
+        contentType: 'application/json',
+        data: JSON.stringify(orchestration),
+        success: function(result) {
+          orchestrationId = result.job.id;
+          alert('Orchestration saved successfully!');
+          window.location.href = '/orchestrationList.html';
+        },
+        error: function(err) {
+          alert('Error saving orchestration: ' + err.statusText);
+        }
+      });
+    }
+    
+    function runOrchestration() {
+      // Check if orchestration has been saved
+      if (!orchestrationId) {
+        alert('Please save the orchestration before running it');
+        return;
+      }
+      
+      // Show confirmation and run
+      const confirmRun = confirm(`Execute "${orchestrationName}"?\n\nThe orchestration will start immediately.`);
+      if (!confirmRun) return;
+      
+      // Disable the button during execution
+      const runButton = event.target.closest('button');
+      runButton.disabled = true;
+      runButton.style.opacity = '0.6';
+      
+      $.ajax({
+        url: '/rest/orchestration/jobs/' + encodeURIComponent(orchestrationId) + '/execute',
+        type: 'POST',
+        contentType: 'application/json',
+        success: function(result) {
+          if (result.success && result.executionId) {
+            alert('Orchestration execution started!\n\nExecution ID: ' + result.executionId);
+            // Open monitor in new tab
+            window.open('/orchestration/monitor.html?jobId=' + encodeURIComponent(orchestrationId) + '&executionId=' + encodeURIComponent(result.executionId), '_blank');
+            // Re-enable button
+            runButton.disabled = false;
+            runButton.style.opacity = '1';
+          } else {
+            alert('Failed to start orchestration execution');
+            // Re-enable button on failure
+            runButton.disabled = false;
+            runButton.style.opacity = '1';
+          }
+        },
+        error: function(err) {
+          alert('Error executing orchestration: ' + (err.responseJSON ? err.responseJSON.error : err.statusText));
+          runButton.disabled = false;
+          runButton.style.opacity = '1';
+        }
+      });
+    }
+    
+    function confirmOrchestrationName() {
+      const nameInput = document.getElementById('naming-modal-name');
+      const name = nameInput.value.trim();
+      const desc = document.getElementById('naming-modal-desc').value.trim();
+      
+      if (!name) {
+        document.getElementById('naming-helper-text').innerHTML = 'Please provide a name for the orchestration';
+        nameInput.classList.add('invalid');
+        return;
+      }
+      
+      orchestrationName = name;
+      orchestrationDescription = desc;
+      
+      // Update header display
+      document.getElementById('orch-name-text').textContent = orchestrationName;
+      updateDescriptionDisplay();
+      
+      // Close modal
+      var modal = M.Modal.getInstance(document.getElementById('orchestration-naming-modal'));
+      modal.close();
+      
+      // If this was triggered by a save action, proceed with save
+      if (pendingSave) {
+        pendingSave = false;
+        performSave();
+      }
+    }
+    
+    function enterNameEditMode() {
+      document.getElementById('orch-name-display').parentElement.classList.add('name-edit-mode');
+      const nameInput = document.getElementById('orch-name-input');
+      const descInput = document.getElementById('orch-desc-input');
+      nameInput.value = orchestrationName;
+      descInput.value = orchestrationDescription;
+      nameInput.focus();
+      nameInput.select();
+    }
+    
+    function saveOrchestrationName() {
+      const nameInput = document.getElementById('orch-name-input');
+      const descInput = document.getElementById('orch-desc-input');
+      const name = nameInput.value.trim();
+      const desc = descInput.value.trim();
+      
+      if (!name) {
+        alert('Please provide a name for the orchestration');
+        return;
+      }
+      
+      orchestrationName = name;
+      orchestrationDescription = desc;
+      
+      // Update display
+      document.getElementById('orch-name-text').textContent = orchestrationName;
+      const descEl = document.getElementById('orch-desc-text');
+      descEl.textContent = orchestrationDescription || 'No Description';
+      descEl.setAttribute('title', orchestrationDescription || 'No Description');
+      
+      document.getElementById('orch-name-display').parentElement.classList.remove('name-edit-mode');
+    }
+    
+    function cancelNameEdit() {
+      document.getElementById('orch-name-display').parentElement.classList.remove('name-edit-mode');
+    }
+    
+    function updateDescriptionDisplay() {
+      const descEl = document.getElementById('orch-desc-text');
+      descEl.textContent = orchestrationDescription || 'No Description';
+      descEl.setAttribute('title', orchestrationDescription || 'No Description');
+    }
+    
+    function listSchedulesForOrchestration() {
+      // If orchestration hasn't been saved yet, show a message
+      if (!orchestrationId) {
+        M.toast({html: 'Please save the orchestration first'});
+        return;
+      }
+      
+      // Fetch schedules that use this orchestration
+      $.ajax({
+        url: `/api/schedules/by-orchestration/${encodeURIComponent(orchestrationId)}`,
+        type: 'GET',
+        dataType: 'json',
+        success: function(data) {
+          displaySchedulesList(data.schedules || []);
+          const modal = M.Modal.getInstance(document.getElementById('schedules-list-modal'));
+          if (modal) {
+            modal.open();
+          } else {
+            M.Modal.init(document.getElementById('schedules-list-modal')).open();
+          }
+        },
+        error: function(xhr, status, error) {
+          console.error('Failed to fetch schedules:', error);
+          M.toast({html: 'Failed to fetch schedules'});
+        }
+      });
+    }
+    
+    function displaySchedulesList(schedules) {
+      const container = document.getElementById('schedules-list-container');
+      
+      if (!schedules || schedules.length === 0) {
+        container.innerHTML = '<p style="text-align: center; color: #999;">No schedules are using this orchestration</p>';
+        return;
+      }
+      
+      let html = '<div style="overflow-x: auto;"><table style="width: 100%; border-collapse: collapse;">';
+      html += '<thead style="background: #f5f5f5; border-bottom: 2px solid #ddd;">';
+      html += '<tr><th style="padding: 12px 8px; text-align: left; font-weight: 600;"></th>';
+      html += '<th style="padding: 12px 8px; text-align: left; font-weight: 600;">Schedule Name</th>';
+      html += '<th style="padding: 12px 8px; text-align: left; font-weight: 600;">Schedule</th>';
+      html += '<th style="padding: 12px 8px; text-align: center; font-weight: 600;">Actions</th></tr></thead><tbody>';
+      
+      schedules.forEach(function(schedule, idx) {
+        const bgColor = idx % 2 === 0 ? 'white' : '#fafafa';
+        const scheduleDisplay = formatScheduleDisplay(schedule);
+        const icon = schedule.icon || 'schedule';
+        const color = schedule.color || '#999';
+        
+        html += `<tr style="background: ${bgColor}; border-bottom: 1px solid #eee;">`;
+        html += `<td style="padding: 12px 8px; text-align: center;"><i class="material-icons" style="color: ${escapeHtml(color)}; font-size: 20px;">${escapeHtml(icon)}</i></td>`;
+        html += `<td style="padding: 12px 8px; font-weight: 500;">${escapeHtml(schedule.jobName)}</td>`;
+        html += `<td style="padding: 12px 8px; font-size: 0.9em; color: #666;">${scheduleDisplay}</td>`;
+        html += `<td style="padding: 12px 8px; text-align: center;">`;
+        html += `<a href="#" onclick="event.preventDefault(); editScheduleFromList('${escapeHtml(schedule.jobName)}')" title="Edit schedule" style="color: #2196f3; text-decoration: none; margin-right: 10px;">`;
+        html += `<i class="material-icons" style="font-size: 18px; vertical-align: middle;">edit</i></a>`;
+        html += `</td></tr>`;
+      });
+      
+      html += '</tbody></table></div>';
+      container.innerHTML = html;
+    }
+    
+    function formatScheduleDisplay(schedule) {
+      const type = schedule.scheduleType || 'once';
+      const time = schedule.scheduleTime || '00:00';
+      const dayOfWeek = schedule.dayOfWeek || 0;
+      const dayInMonth = schedule.dayInMonth || 1;
+      
+      const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      
+      switch(type) {
+        case 'daily':
+          return `Daily at ${time}`;
+        case 'weekly':
+          return `${daysOfWeek[dayOfWeek]} at ${time}`;
+        case 'monthly':
+          return `${getOrdinalDay(dayInMonth)} of Month at ${time}`;
+        case 'once':
+        default:
+          return 'Once';
+      }
+    }
+    
+    function getOrdinalDay(day) {
+      const j = day % 10;
+      const k = day % 100;
+      if (j === 1 && k !== 11) return day + 'st';
+      if (j === 2 && k !== 12) return day + 'nd';
+      if (j === 3 && k !== 13) return day + 'rd';
+      return day + 'th';
+    }
+    
+    function editScheduleFromList(jobName) {
+      // Close the modal
+      const modal = M.Modal.getInstance(document.getElementById('schedules-list-modal'));
+      if (modal) {
+        modal.close();
+      }
+      
+      // Navigate to scheduler with the job name
+      window.location.href = `/scheduler.html?jobname=${encodeURIComponent(jobName)}&redir=${encodeURIComponent('/orchestrationBuilder.html?id=' + encodeURIComponent(orchestrationId))}`;
+    }
+    
+    function escapeHtml(text) {
+      const map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+      };
+      return text.replace(/[&<>"']/g, function(m) { return map[m]; });
+    }
+    
+    function updateStats() {
+      document.getElementById('node-count').textContent = Object.keys(nodes).length;
+      document.getElementById('edge-count').textContent = edges.length;
+      updatePaletteState();
+    }
+    
+    function updatePaletteState() {
+      const startNode = document.querySelector('[data-node-type="start"]');
+      const hasStartNode = Object.values(nodes).some(n => n.type === 'start');
+      
+      if (hasStartNode) {
+        startNode.style.opacity = '0.5';
+        startNode.style.cursor = 'not-allowed';
+        startNode.style.pointerEvents = 'none';
+        startNode.title = 'Only one Start node allowed';
+      } else {
+        startNode.style.opacity = '1';
+        startNode.style.cursor = 'grab';
+        startNode.style.pointerEvents = 'auto';
+        startNode.title = '';
+      }
+    }
+  </script>
+</body>
+</html>

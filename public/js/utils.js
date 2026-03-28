@@ -175,7 +175,7 @@ function setNotificationData(data) {
         html += '<span class="notify-title notify-title-' + icon + '">' + notification.title + '</span><span class="circle"></span>';
         html += '<span class="notify-time" title="' + notification.runDate + '">' + displaySecsFromDate(notification.runDate) + '</span>';
         html += '</div>';       
-        html += '<div class="notify-text">' + notification.description + '</div>';
+        html += '<div class="notify-text">' + notification.description.replace(/\n/g, '<br>') + '</div>';
         html += '<div class="notify-actions">';
         html += `<span class="notify-link" onclick="document.location.href='${notification.url}'"><span title="Goto Detail" class="material-icons vertMid">remove_red_eye</span></span>`;
         html += '<span class="notify-delete" onclick="deleteNotification('+count+')"><span title="Delete Notification" class="material-icons vertMid">delete</span></span>';

@@ -1,7 +1,7 @@
 const status_topic = 'backup/agent/status';
 const command_topic = 'backup/agent/command';
 
-function processMessage(topic, message,protocol) {
+async function processMessage(topic, message,protocol) {
     logger.debug(`Received message on Protocol: '${protocol}' with topic '${topic}': ${message.toString()}`);
     var obj = JSON.parse(message);
     var agentKnown = agents.getAgent(obj.name);
@@ -40,7 +40,7 @@ function processMessage(topic, message,protocol) {
       if (topic == "backup/agent/status" && obj.status == "running") {
         logger.debug(">>>>>> RUNNING\n" + JSON.stringify(obj));
         agents.updateAgentStatus(obj.name, obj.status, obj.description, null,obj.jobName, new Date(),message,protocol);
-        var item = running.createItem(obj.jobName, obj.lastStatusReport,obj.manual);   
+        var item = running.createItem(obj.jobName, obj.lastStatusReport, obj.manual, obj.executionId);   
         running.add(item);
       }
   
@@ -74,7 +74,7 @@ function processMessage(topic, message,protocol) {
       if (obj.status == "eta_submission") {
         var runTime = obj.eta;
         var runningItm = running.getItemByName(obj.jobName);
-        var startTime = runningItm.startTime;
+        var startTime = runningItm ? runningItm.startTime : null;
         logger.info("Received ETA event");
         //add log to db
         if (obj.returnCode !== null && obj.returnCode == "0") {
@@ -90,15 +90,61 @@ function processMessage(topic, message,protocol) {
           body += "\nTime Running : " + obj.eta;
           body += "\nReturn Code  : " + obj.returnCode;
 
-          if(serverConfig.server.jobFailEnabled=="true")notifier.sendNotification(obj.jobName + "- job failed", JSON.stringify(obj), "WARNING", "/history.html");
+          // Only send notification for regular jobs - orchestration node failures are handled at orchestration.saveExecutionResult()
+          const isOrchestrationNode = obj.jobName && obj.jobName.includes('Orchestration [');
+          if(serverConfig.server.jobFailEnabled=="true" && !isOrchestrationNode) {
+            const detailUrl = obj.executionId ? `/scheduleInfo.html?jobname=${encodeURIComponent(obj.jobName)}&executionId=${encodeURIComponent(obj.executionId)}` : "/history.html";
+            notifier.sendNotification(obj.jobName + "- job failed", body, "WARNING", detailUrl);
+          }
         }
         logger.debug("Adding History record for: " + JSON.stringify(obj));
+        
+        // Signal orchestration engine if this is an orchestration job
+        if (obj.jobName && obj.jobName.includes('Orchestration [')) {
+          try {
+            logger.debug(`[ORCHESTRATION] Received eta_submission for orchestration job [${obj.jobName}]`);
+            const orchestrationEngine = require('./orchestrationEngine.js');
+            
+            // Fetch the log from database using the same key structure as updateLogRecord
+            let logOutput = '';
+            try {
+              const logKey = `${obj.name}_${obj.jobName}_log`;
+              logger.debug(`[ORCHESTRATION] Fetching log with key: [${logKey}]`);
+              const logData = await db.getData(logKey);
+              logOutput = logData || '';
+              logger.debug(`[ORCHESTRATION] Fetched log (${logOutput.length} bytes) for job [${obj.jobName}]`);
+              logger.debug(`[ORCHESTRATION] Log content first 100 chars: ${logOutput.substring(0, 100)}`);
+              
+              // Clear the log from the database to prevent mixing with future runs if same job ID is reused
+              try {
+                await db.deleteData(logKey);
+                logger.debug(`[ORCHESTRATION] Cleared log data for key [${logKey}]`);
+              } catch (deleteErr) {
+                logger.debug(`[ORCHESTRATION] Could not clear log (non-critical): ${deleteErr.message}`);
+              }
+            } catch (logErr) {
+              logger.debug(`[ORCHESTRATION] No log data found for job [${obj.jobName}]: ${logErr.message}`);
+            }
+            
+            orchestrationEngine.signalScriptCompletion(obj.jobName, {
+              exitCode: parseInt(obj.returnCode || 0),
+              stdout: logOutput,
+              stderr: ''
+            });
+            logger.debug(`[ORCHESTRATION] Signaled orchestration completion for job [${obj.jobName}]`);
+          } catch (err) {
+            logger.error(`[ORCHESTRATION] Failed to signal orchestration completion: ${err.message}`);
+          }
+        }
+        
         updateStatusRecords(obj, startTime);
         running.removeItem(obj.jobName);
         agents.updateAgentStatus(obj.name, "online", `Job [${obj.name}] completed`,null,null,null,message,protocol,null);
         
-        // Emit schedule update to notify frontend that job completed
-        emitScheduleUpdate(obj.jobName);
+        // Emit schedule update to notify frontend that job completed (skip for orchestration jobs)
+        if (!obj.jobName || !obj.jobName.includes('Orchestration [')) {
+          emitScheduleUpdate(obj.jobName);
+        }
       }
     }
     else {
@@ -147,8 +193,11 @@ function processMessage(topic, message,protocol) {
             logger.debug(`No Log record found - creating with key [${key}]`);
             resp = await db.simplePutData(key,obj.data);
             logger.debug(`Data created successfully for Key [${key}], Response [${resp}], Data \n${obj.data}`);
-            // Emit websocket event for schedule log update
-            emitScheduleLogUpdate(obj.jobName, obj.data);
+            if (!obj.jobName || !obj.jobName.includes('Orchestration [')) {
+              emitScheduleLogUpdate(obj.jobName, obj.data);
+            } else {
+              emitOrchestrationNodeLogUpdate(obj.jobName, obj.data);
+            }
         }
         catch (insertErr){
           logger.error(`Unknown Issue creating new entry for key [${key}] to DB`);
@@ -170,8 +219,11 @@ function processMessage(topic, message,protocol) {
         logger.debug(``)
         resp = await db.simplePutData(key,data);
         logger.debug(`Data upadated successfully Key [${key}], Response [${resp}], Data \n${data}`);
-        // Emit websocket event for schedule log update
-        emitScheduleLogUpdate(obj.jobName, data);
+        if (!obj.jobName || !obj.jobName.includes('Orchestration [')) {
+          emitScheduleLogUpdate(obj.jobName, data);
+        } else {
+          emitOrchestrationNodeLogUpdate(obj.jobName, data);
+        }
       }
       catch (error){
         logger.error(`unable to add [${key}] to DB`);
@@ -180,6 +232,27 @@ function processMessage(topic, message,protocol) {
       }
     }
 
+  }
+
+  function emitOrchestrationNodeLogUpdate(jobName, logData) {
+    try {
+      // jobName format: "Orchestration [jobId] Execution [executionId] Node [nodeId]"
+      const match = jobName.match(/^Orchestration\s+\[(.+?)\]\s+Execution\s+\[(.+?)\]\s+Node\s+\[(.+?)\]/);
+      if (!match) return;
+      const jobId = match[1];
+      const executionId = match[2];
+      const nodeId = match[3];
+      if (!executionId) return;
+      const wsBrowserTransport = require('./communications/wsBrowserTransport.js');
+      const io = wsBrowserTransport.getIO();
+      if (io) {
+        const eventName = `orchestrationNodeLog:${jobId}:${executionId}:${nodeId}`;
+        io.emit(eventName, { nodeId, log: logData });
+        logger.debug(`[emitOrchestrationNodeLogUpdate] Emitted ${eventName} (${logData.length} bytes)`);
+      }
+    } catch (error) {
+      logger.debug(`[emitOrchestrationNodeLogUpdate] Error: ${error.message}`);
+    }
   }
 
   function emitScheduleLogUpdate(jobName, logData) {
@@ -223,13 +296,13 @@ function processMessage(topic, message,protocol) {
         var stats = null;
         var log = null;
         try {
-          stats = await db.simpleGetData(key1);
+          stats = await db.getData(key1);
         } catch(err) {
           logger.warn(`[emitScheduleUpdate] Unable to find stats data for ${key1}`);
         }
         
         try {
-          log = await db.simpleGetData(key2);
+          log = await db.getData(key2);
         } catch(err) {
           logger.warn(`[emitScheduleUpdate] Unable to find log data for ${key2}`);
         }
@@ -300,7 +373,7 @@ function processMessage(topic, message,protocol) {
             logger.debug(`No stats record found - creating with key [${key}]`);
             resp = await db.simplePutData(key,stats);
             logger.debug(`stats data created successfully for Key [${key}], Response [${resp}], Data \n${obj.data}`);
-            addHistoryRecord(obj,startDate);
+            await addHistoryRecord(obj,startDate);
         }
         catch (insertErr){
           logger.error(`Unknown Issue creating new stats entry for key [${key}] to DB`);
@@ -334,7 +407,7 @@ function processMessage(topic, message,protocol) {
         logger.debug(`Updating stats record with key [${key}], data [${data}]`);
         resp = await db.simplePutData(key,stats);
         logger.debug(`stats data updated successfully for Key [${key}], Response [${resp}], Data \n${obj.data}`);
-        addHistoryRecord(obj,startDate);
+        await addHistoryRecord(obj,startDate);
       }
       catch (insertErr){
         logger.error(`Unknown Issue creating new stats entry for key [${key}] to DB`);
@@ -352,22 +425,68 @@ function processMessage(topic, message,protocol) {
     var key2 = getDbKey(obj,"log");
     var stats = null;
     var log = null;
-    try {
-        stats = await db.simpleGetData(key1);
+    var returnCode = 0; // Default to success if stats not available
+    
+    // Extract executionId from message object or orchestration job name
+    let executionId = obj.executionId || null;
+    let orchestrationJobId = null;
+    let orchestrationNodeId = null;
+    
+    // Check if this is an orchestration node
+    const orchestrationMatch = obj.jobName.match(/^Orchestration\s+\[(.+?)\]\s+Execution\s+\[(.+?)\]\s+Node\s+\[(.+?)\]$/);
+    if (orchestrationMatch) {
+      orchestrationJobId = orchestrationMatch[1];
+      executionId = orchestrationMatch[2];
+      orchestrationNodeId = orchestrationMatch[3];
+      
+      logger.debug(`[ORCHESTRATION] Detected orchestration node - jobId: ${orchestrationJobId}, executionId: ${executionId}, nodeId: ${orchestrationNodeId}`);
+      
+      // Fetch log from ORCHESTRATION_EXECUTIONS instead of regular log database
+      try {
+        const orchestrationExecutions = await db.getData('ORCHESTRATION_EXECUTIONS');
+        if (orchestrationExecutions[orchestrationJobId]) {
+          const execution = orchestrationExecutions[orchestrationJobId].find(exec => exec.executionId === executionId);
+          if (execution && execution.scriptOutputs && execution.scriptOutputs[orchestrationNodeId]) {
+            const nodeOutput = execution.scriptOutputs[orchestrationNodeId];
+            log = nodeOutput.stdout || "";
+            // Use exit code from orchestration if available
+            if (nodeOutput.exitCode !== undefined) {
+              returnCode = nodeOutput.exitCode;
+            }
+            logger.debug(`[ORCHESTRATION] Successfully retrieved log for node ${orchestrationNodeId}`);
+          }
+        }
+      } catch (err) {
+        logger.debug(`[ORCHESTRATION] Unable to fetch log from ORCHESTRATION_EXECUTIONS: ${err.message}`);
+      }
+    }
+    
+    // If not orchestration or log not found via orchestration, try regular log database
+    if (!log) {
+      try {
         log = await db.simpleGetData(key2);
-        var histObj = hist.createHistoryItem(obj.jobName,startDate,stats.current.returnCode,stats.current.eta,log,obj.manual);
-        logger.debug("Adding History obj: " + JSON.stringify(histObj));
-        hist.add(histObj);
+        log = log || "";
+      } catch(err){
+        logger.debug("Unable to find log data for key: " + key2);
+        log = "";
+      }
     }
-    catch(err){
-        logger.debug("Unable to find stats/log data");
-        logger.debug(JSON.stringify(err));
-        logger.debug("Creating a blank history item");
-        var histObj = hist.createHistoryItem(obj.jobName,new Date(),9999,0,"");
-        logger.debug("Adding blank History obj: " + JSON.stringify(histObj));
-        hist.add(histObj);
-
+    
+    // If return code not set by orchestration, try to get from stats
+    if (returnCode === 0) {
+      try {
+        stats = await db.simpleGetData(key1);
+        returnCode = stats.current.returnCode;
+      } catch(err){
+        logger.debug("Unable to find stats data for key: " + key1);
+      }
     }
+    
+    // Calculate actual runtime in seconds from startDate to now
+    var runTime = Math.round((Date.now() - new Date(startDate).getTime()) / 1000);
+    var histObj = hist.createHistoryItem(obj.jobName,startDate,returnCode,runTime,log,obj.manual,executionId);
+    logger.debug("Adding History obj: " + JSON.stringify(histObj));
+    hist.add(histObj);
   }
 
   //Get a db key

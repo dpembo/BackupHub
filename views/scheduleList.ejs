@@ -133,6 +133,31 @@ function addDateSuffix(date) {
       styling: 'jqueryui'
       });
   }
+
+  function runClassicSchedule(scheduleIndex) {
+    document.location.href = "/runSchedule.html?index=" + scheduleIndex;
+  }
+
+  function runOrchestrationSchedule(orchestrationId, scheduleIndex) {
+    $.ajax({
+      url: `/rest/orchestration/jobs/${encodeURIComponent(orchestrationId)}/execute`,
+      type: 'POST',
+      headers: {
+        'X-CSRF-Token': '<%= csrf %>'
+      },
+      success: function(data) {
+        if (data.success && data.executionId) {
+          window.location.href = `/orchestration/monitor.html?jobId=${encodeURIComponent(orchestrationId)}&executionId=${encodeURIComponent(data.executionId)}`;
+        } else {
+          M.toast({ html: 'Failed to start orchestration execution' });
+        }
+      },
+      error: function(xhr, status, error) {
+        console.error('Failed to execute orchestration:', error);
+        M.toast({ html: 'Failed to execute orchestration' });
+      }
+    });
+  }
    
     
   
@@ -178,7 +203,7 @@ function addDateSuffix(date) {
             <th><b class="sortableHeader">Success(%)</b></th>
             <!--<th><b class="black-text">Command</b></th>-->
             <th><b class="sortableHeader">Agent</b></th>
-            <th><b class="sortableHeader">Actions</b></th>
+            <th style="min-width:150px"><b class="sortableHeader">Actions</b></th>
             
           </tr> 
           
@@ -236,7 +261,11 @@ function addDateSuffix(date) {
                   <a title="edit" href="/scheduler.html?index=<%= i %>"><i class="material-icons <%=btnClass%> vertMid">edit</i></a>
                   <a title="clone" href="/scheduler.html?copyIndex=<%= i %>"><i class="material-icons <%=btnClass%> vertMid">content_copy</i></a>
                   <a id="openModalButton<%=i%>" onclick="openModal('<%=schedules[i].jobName%>',<%=i%>);" title="delete" href="#<%=schedules[i].jobName%>"><i class="<%=btnClass%> material-icons vertMid">delete</i></a>
-                  <a title="Run now" href="/runSchedule.html?index=<%= i %>"><i class="material-icons <%=btnClass%> vertMid">play_circle</i></a>
+                  <% if(schedules[i].scheduleMode === 'orchestration') { %>
+                    <a title="Run now" onclick="runOrchestrationSchedule('<%= schedules[i].orchestrationId %>', <%= i %>)" style="cursor: pointer;"><i class="material-icons <%=btnClass%> vertMid">play_circle</i></a>
+                  <% } else { %>
+                    <a title="Run now" onclick="runClassicSchedule(<%= i %>)" style="cursor: pointer;"><i class="material-icons <%=btnClass%> vertMid">play_circle</i></a>
+                  <% } %>
                 
                 </td>
 

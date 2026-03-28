@@ -1,6 +1,19 @@
 /* Dark Css */
 @import url("light.css");
 
+/* CSS Variables for Dark Mode */
+:root {
+  --text-primary: #ffffff;
+  --text-muted: #b0bec5;
+  --surface-color: #263238;
+  --surface-secondary: #37474f;
+  --border-color: #455a64;
+  --primary-color: #64b5f6;
+  --error-color: #ef5350;
+  --success-color: #81c784;
+  --success-color-dark: #66bb6a;
+  --warning-color: #ffb74d;
+}
 
 /* __________________________________________________________________________ */
 
@@ -79,12 +92,13 @@ header {
 }
 
 body {
-  background-color: #37474f; /* Darker blue-grey background */
-  color: #ffffff; /* White text */
+  background-color: var(--surface-secondary); /* Dark mode background */
+  color: var(--text-primary); /* Dark mode text */
 }
 
 input {
-  color:#ffffff;
+  color: var(--text-primary);
+}
 }
 
 textarea{
@@ -184,6 +198,144 @@ div.modal-footer a{
 
 .scriptEditorHeader{
   background-color: #37474f !important;
+}
+
+/* ========== ORCHESTRATION BUILDER - DARK MODE OVERRIDES ========== */
+#orchestration-header {
+  background: #37474f !important;
+  border-bottom: 1px solid #455a64 !important;
+}
+
+#orchestration-palette {
+  background: #263238 !important;
+  border-right: 1px solid #455a64 !important;
+  color: #ffffff !important;
+}
+
+#orchestration-canvas {
+  background: #37474f !important;
+}
+
+#orchestration-canvas svg {
+  background: #37474f !important;
+}
+
+#orchestration-properties {
+  background: #263238 !important;
+  border-left: 1px solid #455a64 !important;
+  color: #ffffff !important;
+}
+
+#orchestration-footer {
+  background: #37474f !important;
+  border-top: 1px solid #455a64 !important;
+}
+
+.palette-item {
+  background: #37474f !important;
+  border: 1px solid #455a64 !important;
+  color: #ffffff !important;
+}
+
+.palette-item:hover {
+  background: #455a64 !important;
+  border-color: #ff9800 !important;
+}
+
+.palette-section h4 {
+  color: #ffffff !important;
+}
+
+.node-properties-section {
+  background: #37474f !important;
+  border: 1px solid #455a64 !important;
+  color: #ffffff !important;
+}
+
+#prop-end-type-display {
+  background: #455a64 !important;
+  color: #ffffff !important;
+}
+
+#zoom-controls {
+  background: #263238 !important;
+  border: 1px solid #455a64 !important;
+}
+
+#zoom-out, #zoom-in, #zoom-reset {
+  background: #37474f !important;
+  border: 1px solid #455a64 !important;
+  color: #ffffff !important;
+}
+
+#orch-name-display {
+  background: #37474f !important;
+  color: #ffffff !important;
+}
+
+#orch-name-display:hover {
+  background: rgba(100, 181, 246, 0.2) !important;
+}
+
+.save-btn {
+  background: #4caf50 !important;
+  color: white !important;
+}
+
+.save-btn:hover {
+  background: #388e3c !important;
+}
+
+.delete-btn {
+  background: #f44336 !important;
+  color: white !important;
+}
+
+.delete-btn:hover {
+  background: #d32f2f !important;
+}
+
+/* ========== ORCHESTRATION MONITOR - DARK MODE OVERRIDES ========== */
+.details-section {
+  background: var(--surface-color) !important;
+  color: var(--text-primary) !important;
+  border-left: 1px solid var(--border-color) !important;
+}
+
+.details-section h6,
+.details-section label {
+  color: var(--text-primary) !important;
+}
+
+.diagram-section {
+  background: var(--surface-color) !important;
+}
+
+.node-status-badge {
+  background: var(--surface-secondary) !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--border-color) !important;
+}
+
+.status-badge.success {
+  background: #c8e6c9 !important;
+  color: #1b5e20 !important;
+}
+
+.status-badge.failure {
+  background: #ffcdd2 !important;
+  color: #b71c1c !important;
+}
+
+.status-badge.running {
+  background: #ffe0b2 !important;
+  color: #e65100 !important;
+}
+
+.status-badge.pending {
+  background: #e0e0e0 !important;
+  color: #424242 !important;
+}
 }
 
 /* Login */

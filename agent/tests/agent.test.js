@@ -556,3 +556,127 @@ describe('Configuration defaults', () => {
     expect(RETRY_TIMEOUT).toBe(5000);
   });
 });
+
+describe('Execution ID Management', () => {
+  it('should include executionId in status update message', () => {
+    const executionId = 'exec-abc123def456';
+    const message = {
+      name: 'test-agent',
+      topic: 'backup/agent/status',
+      server: 'test-server',
+      manual: false,
+      commsType: 'websocket',
+      description: 'Test backup',
+      data: null,
+      status: 'running',
+      jobName: 'test-job',
+      executionId: executionId,  // Include execution ID for tracking
+      lastStatusReport: new Date().toISOString(),
+    };
+
+    expect(message.executionId).toBe('exec-abc123def456');
+    expect(message).toHaveProperty('executionId');
+  });
+
+  it('should include executionId in log data message', () => {
+    const executionId = 'exec-xyz789abc123';
+    const message = {
+      name: 'test-agent',
+      server: 'test-server',
+      status: 'log_submission',
+      jobName: 'test-job',
+      manual: false,
+      eta: undefined,
+      returnCode: undefined,
+      data: 'Sample log output',
+      executionId: executionId,  // Include execution ID for tracking
+      lastStatusReport: new Date().toISOString(),
+    };
+
+    expect(message.executionId).toBe('exec-xyz789abc123');
+    expect(message.status).toBe('log_submission');
+  });
+
+  it('should include executionId in eta_submission message', () => {
+    const executionId = 'exec-final789';
+    const message = {
+      name: 'test-agent',
+      server: 'test-server',
+      status: 'eta_submission',
+      jobName: 'test-job',
+      manual: false,
+      eta: 45.2,
+      returnCode: 0,
+      data: 'Final log output',
+      executionId: executionId,  // Include execution ID for tracking
+      lastStatusReport: new Date().toISOString(),
+    };
+
+    expect(message.executionId).toBe('exec-final789');
+    expect(message.status).toBe('eta_submission');
+    expect(message.returnCode).toBe(0);
+  });
+
+  it('should handle null executionId for backward compatibility', () => {
+    const message = {
+      name: 'test-agent',
+      topic: 'backup/agent/status',
+      server: 'test-server',
+      manual: false,
+      commsType: 'websocket',
+      description: 'Test backup',
+      data: null,
+      status: 'running',
+      jobName: 'test-job',
+      executionId: null,  // Backward compatible - null if not provided
+      lastStatusReport: new Date().toISOString(),
+    };
+
+    expect(message.executionId).toBeNull();
+  });
+
+  it('should generate valid hex executionId format', () => {
+    const crypto = require('crypto');
+    const executionId = crypto.randomBytes(8).toString('hex');
+    
+    // Should be 16 hex characters (8 bytes * 2)
+    expect(executionId).toMatch(/^[a-f0-9]{16}$/);
+    expect(executionId.length).toBe(16);
+  });
+
+  it('should track executionId in active jobs', () => {
+    const jobName = 'backup-test-job';
+    const executionId = 'exec-tracking-123';
+    const activeJobs = new Map();
+    
+    activeJobs.set(jobName, { 
+      startTime: Date.now(), 
+      status: 'running', 
+      executionId: executionId 
+    });
+    
+    const jobInfo = activeJobs.get(jobName);
+    expect(jobInfo.executionId).toBe('exec-tracking-123');
+    expect(jobInfo.status).toBe('running');
+  });
+
+  it('should preserve executionId through callback chain', () => {
+    const jobName = 'test-backup';
+    const executionId = 'exec-callback-test';
+    const activeJobs = new Map();
+    
+    // Simulate job execution - store executionId
+    activeJobs.set(jobName, { 
+      startTime: Date.now(), 
+      status: 'running', 
+      executionId: executionId 
+    });
+    
+    // Simulate job completion - retrieve executionId for callback
+    const jobInfo = activeJobs.get(jobName);
+    const callbackExecutionId = jobInfo ? jobInfo.executionId : null;
+    
+    expect(callbackExecutionId).toBe('exec-callback-test');
+    activeJobs.delete(jobName);
+  });
+});

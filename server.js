@@ -94,6 +94,8 @@ agentHistory = require ("./agentHistory.js");
 db = require("./db.js");
 nodeschedule = require('node-schedule');
 scheduler = require ("./scheduler.js");
+orchestration = require("./orchestration.js");
+orchestrationEngine = require("./orchestrationEngine.js");
 //const moment = require('moment-timezone');
 
 agentComms = require ("./communications/agentCommunication.js");
@@ -351,57 +353,91 @@ function dynamicSort(property) {
   }
 }
 
-async function getSchedulerData(index)
+async function getSchedulerData(index, executionId = null)
 {
-  logger.info("Getting Schedule Info with index: " + index);
+  logger.info("Getting Schedule Info with index: " + index + (executionId ? ` and executionId: ${executionId}` : ''));
   //var redir=req.query.redir;
   //var refresh = req.query["refresh"];
   //if (refresh === undefined) refresh = 0;
   var schedule = scheduler.getSchedules(index);
 
-  //return logEvent.name + "_" + logEvent.jobName + "_" + type;
-  var key1 = schedule.agent + "_" + schedule.jobName + "_" + "stats";
-  var key2 = schedule.agent + "_" + schedule.jobName + "_" + "log";
-
-  var stats = null;
-  var log = null;
-  try {
-    stats = await db.simpleGetData(key1);
-  }
-  catch(err){
-    logger.warn("Unable to find stats data");
-    logger.warn(JSON.stringify(err));
-  }
-
-  try {
-    log = await db.simpleGetData(key2);
-  }
-  catch(err){
-    logger.warn("Unable to find log data");
-    logger.warn(JSON.stringify(err));
-  }  
-  
-  logger.debug("Stats:\n" + stats);
-  logger.debug("Log  :\n" + log);
-  if(stats!=null){
-    stats.current.etaDisplay = dateTimeUtils.displaySecs(stats.current.eta);
-    stats.etaRollingAvgDisplay = dateTimeUtils.displaySecs(stats.etaRollingAvg);
-  }
-  else{
-    if(stats !== undefined && stats!==null && (stats.etaRollingAvg == undefined || stats.etaRollingAvg ==null)) stats.etaRollingAvg=0;
-  }
-
   var data={};
   data.scripts = scripts;
   data.agent=agents.getAgent(schedule.agent);
+  
+  // Check if agent exists, provide helpful error info
+  if (!data.agent) {
+    logger.warn(`Agent '${schedule.agent}' not found for schedule '${schedule.jobName}'`);
+    data.agent = {
+      name: schedule.agent,
+      status: 'offline',
+      errorMessage: `Agent '${schedule.agent}' is not registered or offline`
+    };
+  }
+  
   data.schedule = schedule;
   data.index = index;
-  data.stats = stats;
-  data.log = log;
   data.hist = {};
+
+  // If executionId provided, look up specific historical execution
+  if (executionId) {
+    logger.info(`Looking up historical execution [${executionId}] for job [${schedule.jobName}]`);
+    const allHistory = hist.getItems();
+    const historyItem = allHistory.find(item => item.jobName === schedule.jobName && item.executionId === executionId);
+    
+    if (historyItem) {
+      logger.info(`Found historical execution [${executionId}]`);
+      data.hist.histLastRun = historyItem;
+      data.log = historyItem.log;
+      data.stats = null;  // No live stats for historical lookups
+      data.executionMode = 'historical';
+    } else {
+      logger.warn(`Historical execution [${executionId}] not found for job [${schedule.jobName}]`);
+      data.executionMode = 'historical_not_found';
+    }
+  } else {
+    // Current mode - get live stats
+    data.executionMode = 'current';
+    
+    //return logEvent.name + "_" + logEvent.jobName + "_" + type;
+    var key1 = schedule.agent + "_" + schedule.jobName + "_" + "stats";
+    var key2 = schedule.agent + "_" + schedule.jobName + "_" + "log";
+
+    var stats = null;
+    var log = null;
+    try {
+      stats = await db.simpleGetData(key1);
+    }
+    catch(err){
+      logger.warn("Unable to find stats data");
+      logger.warn(JSON.stringify(err));
+    }
+
+    try {
+      log = await db.simpleGetData(key2);
+    }
+    catch(err){
+      logger.warn("Unable to find log data");
+      logger.warn(JSON.stringify(err));
+    }  
+    
+    logger.debug("Stats:\n" + stats);
+    logger.debug("Log  :\n" + log);
+    if(stats!=null){
+      stats.current.etaDisplay = dateTimeUtils.displaySecs(stats.current.eta);
+      stats.etaRollingAvgDisplay = dateTimeUtils.displaySecs(stats.etaRollingAvg);
+    }
+    else{
+      if(stats !== undefined && stats!==null && (stats.etaRollingAvg == undefined || stats.etaRollingAvg ==null)) stats.etaRollingAvg=0;
+    }
+
+    data.stats = stats;
+    data.log = log;
+    data.hist.histLastRun = hist.getLastRun(schedule.jobName);
+  }
+  
   data.hist.histAvgRuntime = hist.getAverageRuntime(schedule.jobName);
   data.hist.histAvgRuntimeSecs = dateTimeUtils.displaySecs(hist.getAverageRuntime(schedule.jobName));
-  data.hist.histLastRun = hist.getLastRun(schedule.jobName);
   return data;
 }
 //______________________________________________________________________________________________________
@@ -427,6 +463,7 @@ app.use(session({
 }));
 
 app.use(bodyParser.urlencoded({ extended: false }));
+app.use(bodyParser.json());
 
 // Generate CSRF tokens for all requests but don't validate
 app.use((req, res, next) => {
@@ -474,6 +511,43 @@ const validateCsrf = (req, res, next) => {
   logger.debug(`[CSRF] CSRF token validation PASSED for ${req.method} ${req.path}`);
   next();
 };
+
+// ============================================================================
+// SENSITIVE API TOKEN - For protecting critical data endpoints (/rest/data/*)
+// ============================================================================
+// Generate a token for sensitive data APIs on first startup
+const crypto = require('crypto');
+let sensitiveDataToken = null;
+
+function initializeSensitiveDataToken() {
+  if (!sensitiveDataToken) {
+    sensitiveDataToken = crypto.randomBytes(32).toString('hex');
+    console.log('\n');
+    console.log('='.repeat(80));
+    console.log('SENSITIVE DATA API TOKEN (save this in a safe place):');
+    console.log(`Token: ${sensitiveDataToken}`);
+    console.log('Use as header: X-Data-Token: <token>');
+    console.log('Or as URL param: ?dataToken=<token>');
+    console.log('='.repeat(80));
+    console.log('\n');
+  }
+  return sensitiveDataToken;
+}
+
+// Middleware to validate sensitive data API token
+const validateSensitiveDataToken = (req, res, next) => {
+  const token = initializeSensitiveDataToken();
+  const providedToken = req.headers['x-data-token'] || req.headers['x-sensitive-token'] || req.query.dataToken;
+  
+  if (!providedToken || providedToken !== token) {
+    logger.warn(`[SENSITIVE-API] Unauthorized access attempt to ${req.method} ${req.path} - invalid or missing token`);
+    return res.status(403).json({ success: false, message: 'Invalid or missing sensitive data token. Check server console for token.' });
+  }
+  
+  logger.debug(`[SENSITIVE-API] Authorized access to ${req.method} ${req.path}`);
+  next();
+};
+
 
 // Routes
 // Login route: Redirect to registration if no user is registered
@@ -1008,6 +1082,104 @@ app.delete('/rest/notifications/:index', User.isAuthenticated, (req, res) => {
   res.sendStatus(200);
 });
 
+// ================================================================
+// RUNNING JOBS REST API - CRUD ENDPOINTS
+// ================================================================
+
+/**
+ * Get all running jobs
+ */
+app.get('/rest/running', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const user = req.session.user;
+  if (!user) {
+    return res.redirect('/register.html?not+authenticated');
+  }
+  logger.debug('Fetching all running jobs');
+  
+  const runningJobs = running.getItems();
+  res.json({ 
+    success: true, 
+    count: runningJobs.length,
+    jobs: runningJobs 
+  });
+}));
+
+/**
+ * Delete a running job by index
+ */
+app.delete('/rest/running/:index', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const user = req.session.user;
+  if (!user) {
+    return res.redirect('/register.html?not+authenticated');
+  }
+  const index = parseInt(req.params.index);
+  logger.info(`Deleting running job at index: ${index}`);
+  
+  try {
+    running.removeItemByIndex(index);
+    res.json({ success: true, message: `Running job at index ${index} removed` });
+  } catch (err) {
+    logger.error(`Failed to delete running job at index ${index}: ${err.message}`);
+    res.status(400).json({ success: false, message: `Error deleting running job: ${err.message}` });
+  }
+}));
+
+/**
+ * Delete a running job by job name
+ */
+app.delete('/rest/running/byName/:jobName', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const user = req.session.user;
+  if (!user) {
+    return res.redirect('/register.html?not+authenticated');
+  }
+  const jobName = req.params.jobName;
+  logger.info(`Deleting running job: ${jobName}`);
+  
+  try {
+    running.removeItem(jobName);
+    res.json({ success: true, message: `Running job [${jobName}] removed` });
+  } catch (err) {
+    logger.error(`Failed to delete running job [${jobName}]: ${err.message}`);
+    res.status(400).json({ success: false, message: `Error deleting running job: ${err.message}` });
+  }
+}));
+
+/**
+ * Delete a running job by execution ID
+ */
+app.delete('/rest/running/byExecutionId/:executionId', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const user = req.session.user;
+  if (!user) {
+    return res.redirect('/register.html?not+authenticated');
+  }
+  const executionId = req.params.executionId;
+  logger.info(`Deleting running job with executionId: ${executionId}`);
+  
+  try {
+    running.removeItemByExecutionId(executionId);
+    res.json({ success: true, message: `Running job with executionId [${executionId}] removed` });
+  } catch (err) {
+    logger.error(`Failed to delete running job with executionId [${executionId}]: ${err.message}`);
+    res.status(400).json({ success: false, message: `Error deleting running job: ${err.message}` });
+  }
+}));
+
+app.delete('/rest/running', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const user = req.session.user;
+  if (!user) {
+    return res.redirect('/register.html?not+authenticated');
+  }
+  logger.info('Deleting all running jobs');
+  
+  try {
+    const result = await running.deleteAll();
+    res.json({ success: true, message: `All running jobs deleted`, deletedCount: result.deletedCount });
+  } catch (err) {
+    logger.error(`Failed to delete all running jobs: ${err.message}`);
+    res.status(400).json({ success: false, message: `Error deleting running jobs: ${err.message}` });
+  }
+}));
+
 app.get('/rest/agent/:id', User.isAuthenticated, (req, res) => {
   const user = req.session.user;
   if (!user) {
@@ -1143,13 +1315,13 @@ app.get('/runList/data',User.isAuthenticated, (req, res) => {
 });
 
 
-app.get('/historyList/data',User.isAuthenticated, (req, res) => {
+app.get('/historyList/data',User.isAuthenticated, async (req, res) => {
 
   var format = "json"
   if(req.query.format !==undefined && req.query.format!=null)format = req.query.format;
 
   logger.info(`Format is ${format}`);
-  var historyList = hist.getItemsUsingTZ();
+  var historyList = await hist.getItemsGroupedByOrchestration();
   var runningList = running.getItems();
   var schedules = scheduler.getSchedules();
 
@@ -1159,21 +1331,71 @@ app.get('/historyList/data',User.isAuthenticated, (req, res) => {
   logger.debug("----");
   logger.debug(schedules);
   logger.debug("----");*/
-  for(var x=0;x<historyList.length;x++)
-  {
-    var workJob = historyList[x].jobName;
+  
+  // Apply icons and colors from schedules
+  function applyScheduleStyle(item) {
+    var workJob = item.jobName;
     for(var y=0;y<schedules.length;y++){
       if(workJob == schedules[y].jobName){
-        historyList[x].icon=schedules[y].icon;
-        historyList[x].color=schedules[y].color;
+        item.icon=schedules[y].icon;
+        item.color=schedules[y].color;
+        item.description=schedules[y].description;
         break;
       }
     }
-    if(!historyList[x].icon ||  historyList[x].icon.trim()===''){
-      historyList[x].icon="remove_circle";
-      historyList[x].color="#AAAAAA";
+    if(!item.icon ||  item.icon.trim()===''){
+      item.icon = item.isOrchestration ? "hub" : "remove_circle";
+      item.color = item.isOrchestration ? "#2196F3" : "#AAAAAA";
+    }
+  }
+  
+  // Pre-fetch orchestration success percentages to avoid N+1 queries
+  // Get all execution history once and compute percentages in-memory
+  let orchestrationSuccessMap = {};
+  try {
+    const allExecutions = await db.getData('ORCHESTRATION_EXECUTIONS');
+    if (allExecutions) {
+      for (const jobId in allExecutions) {
+        const executions = allExecutions[jobId] || [];
+        if (executions.length > 0) {
+          const successCount = executions.filter(e => e.finalStatus === 'success').length;
+          orchestrationSuccessMap[jobId] = Math.round((successCount / executions.length) * 100);
+        } else {
+          orchestrationSuccessMap[jobId] = '-';
+        }
+      }
+    }
+  } catch (err) {
+    logger.warn(`Error pre-fetching orchestration execution history: ${err.message}`);
+  }
+  
+  for(var x=0;x<historyList.length;x++)
+  {
+    applyScheduleStyle(historyList[x]);
+    
+    // Also apply styles to child nodes if this is an orchestration item
+    if (historyList[x].children) {
+      for (var c = 0; c < historyList[x].children.length; c++) {
+        applyScheduleStyle(historyList[x].children[c]);
+      }
+      
+      // Calculate total runtime from children for orchestration items
+      var totalRunTime = 0;
+      historyList[x].children.forEach(function(child) {
+        if (child.runTime) totalRunTime += parseInt(child.runTime) || 0;
+      });
+      historyList[x].runTime = totalRunTime;
     }
     
+    // Set default runTime if not present (for sorting)
+    if (historyList[x].runTime === undefined) {
+      historyList[x].runTime = 0;
+    }
+    
+    // Use pre-computed success percentage (calculated once before loop)
+    if (historyList[x].isOrchestration) {
+      historyList[x].successPercentage = orchestrationSuccessMap[historyList[x].jobId] || '-';
+    }
   }
 
   var refresh = req.query["refresh"];
@@ -1184,6 +1406,8 @@ app.get('/historyList/data',User.isAuthenticated, (req, res) => {
   logger.info("GetHistoryListData: " + sort + " " + order);
   let sortedData;
 
+  // Note: getItemsGroupedByOrchestration already returns data sorted by date (newest first)
+  // Adjusting sort logic for grouped data
   if (sort === 'jobName') {
     sortedData = [...historyList].sort((a, b) => {
       if (order === 'asc') {
@@ -1207,8 +1431,8 @@ app.get('/historyList/data',User.isAuthenticated, (req, res) => {
       return order === 'asc' ? a.returnCode - b.returnCode : b.returnCode - a.returnCode;
     });
   } else {
-    // Handle sorting by default (jobName) if the provided sort parameter is invalid
-    sortedData = [...historyList].sort((a, b) => a.jobName.localeCompare(b.jobName));
+    // Default sort already by newest first
+    sortedData = [...historyList];
   }
  
   //var index=req.query.index;
@@ -1233,6 +1457,23 @@ app.get('/historyList/data',User.isAuthenticated, (req, res) => {
     res.send(data)
   }
 });
+
+app.delete('/rest/history/clear', User.isAuthenticated, asyncHandler(async (req, res) => {
+  logger.info('Clearing all history items');
+  try {
+    await hist.clearHistory();
+    res.json({ 
+      success: true, 
+      message: 'History cleared successfully' 
+    });
+  } catch (err) {
+    logger.error('Error clearing history: ' + err.message);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to clear history: ' + err.message 
+    });
+  }
+}));
 
 app.get('/history.html',User.isAuthenticated, (req, res) => {
 
@@ -1354,7 +1595,7 @@ app.get('/scriptEditor.html',User.isAuthenticated, (req, res) => {
   });
 });
 
-app.get('/scheduler.html',User.isAuthenticated, (req, res) => {
+app.get('/scheduler.html',User.isAuthenticated, async (req, res) => {
   logger.info("Scheduler.html");
   var index=req.query.index;
   var copyIndex=req.query.copyIndex;
@@ -1383,7 +1624,12 @@ app.get('/scheduler.html',User.isAuthenticated, (req, res) => {
   refreshScripts();
 
   //Get the schedule
-  
+  let orchestrations = {};
+  try {
+    orchestrations = await db.getData('ORCHESTRATION_JOBS') || {};
+  } catch (err) {
+    logger.debug('Unable to fetch orchestrations for scheduler:', err.message);
+  }
 
   res.render('scheduler',{
     scripts: scripts,
@@ -1398,7 +1644,8 @@ app.get('/scheduler.html',User.isAuthenticated, (req, res) => {
     day:day,
     time:time,
     icons:serverConfig.job_icons,
-    internal: internal
+    internal: internal,
+    orchestrations: orchestrations
   });
 });
 
@@ -1412,8 +1659,9 @@ app.get('/scheduleInfo/data/name',User.isAuthenticated, async(req, res) => {
   }
   
   const jobname=req.query.jobname;
+  const executionId = req.query.executionId;  // Optional: look up specific execution
   var index = scheduler.getScheduleIndex(jobname);
-  var data = await getSchedulerData(index);
+  var data = await getSchedulerData(index, executionId);
   res.setHeader("Content-Type","Application/JSON");
   res.send(data);
 });
@@ -1425,7 +1673,9 @@ app.get('/scheduleInfo/data/:index',User.isAuthenticated, async(req, res) => {
   }
 
   const index = req.params.index;
-  var data = await  getSchedulerData(index);
+  const executionId = req.query.executionId;  // Optional: look up specific execution
+  
+  var data = await getSchedulerData(index, executionId);
   
   res.setHeader("Content-Type","Application/JSON");
   res.send(data);
@@ -1489,12 +1739,33 @@ app.get('/scheduleInfo.html',User.isAuthenticated, async(req, res) => {
 
 app.post('/scheduler.html', validateCsrf, User.isAuthenticated, (req, res) => {
   
-  let { jobName, colour,  description, scheduleType, scheduleTime,dayOfWeek,
-    dayInMonth,agentselect, agentcommand,commandparams,index,redir,icon } = req.body;
+  let { jobName, colour, description, scheduleType, scheduleTime, dayOfWeek,
+    dayInMonth, agentselect, agentcommand, commandparams, index, redir, icon, scheduleMode, orchestrationId } = req.body;
     jobName = sanitizeHtml(jobName);
     colour = sanitizeHtml(colour);
-    scheduler.upsertSchedule(index, jobName, colour,  description, scheduleType, scheduleTime,dayOfWeek,
-      dayInMonth,agentselect, agentcommand,commandparams,icon); 
+    
+    // Normalize and validate scheduleMode to allow-list
+    scheduleMode = scheduleMode === 'orchestration' ? 'orchestration' : 'classic';
+    
+    // Sanitize orchestrationId
+    if (orchestrationId) {
+      orchestrationId = sanitizeHtml(orchestrationId);
+    }
+    
+    // Validate based on schedule mode
+    if (scheduleMode === 'orchestration') {
+      if (!orchestrationId || orchestrationId.length === 0) {
+        return res.status(400).send('Error: Orchestration ID is required for orchestration schedules');
+      }
+    } else {
+      // Classic mode validation
+      if (!agentselect || agentselect.length === 0) {
+        return res.status(400).send('Error: Agent is required for classic schedules');
+      }
+    }
+    
+    scheduler.upsertSchedule(index, jobName, colour, description, scheduleType, scheduleTime, dayOfWeek,
+      dayInMonth, agentselect, agentcommand, commandparams, icon, scheduleMode, orchestrationId); 
 
   if(redir===undefined || redir === null || redir.length<=0)redir="/scheduleList.htm";
   res.redirect(redir);
@@ -1568,25 +1839,113 @@ app.get('/runSchedule.html',User.isAuthenticated, asyncHandler(async (req, res) 
     schedule = scheduler.getSchedule(jobname);
   }
   
-  // Check if agent is online before attempting to run
-  if (schedule) {
-    const agent = agents.getAgent(schedule.agent);
-    
-    if (agent) {
-      if (agent.status !== "online") {
-        errorMessage = `Agent '${schedule.agent}' is ${agent.status} - cannot execute job`;
+  // Handle orchestration mode
+  if (schedule && schedule.scheduleMode === 'orchestration') {
+    try {
+      const orchestrationId = schedule.orchestrationId;
+      if (!orchestrationId) {
+        errorMessage = "Orchestration not configured for this schedule";
+      } else {
+        // Generate execution ID immediately (same as orchestrationEngine does)
+        const crypto = require('crypto');
+        const executionId = crypto.randomBytes(8).toString('hex');
+        
+        // Create a stub execution record (NOT saved to permanent history yet)
+        // This is cached in-memory so monitor can find it immediately
+        const stubExecution = {
+          jobId: orchestrationId,
+          executionId: executionId,
+          orchestrationVersion: 1,
+          startTime: new Date().toISOString(),
+          endTime: null,
+          status: 'running',
+          currentNode: null,
+          visitedNodes: [],
+          scriptOutputs: {},
+          conditionEvaluations: {},
+          nodeMetrics: {},
+          errors: [],
+          finalStatus: null,
+          manual: true,
+          isStub: true  // Mark as temporary stub execution
+        };
+        
+        // Cache the stub in-memory (not in permanent history)
+        saveInProgressExecution(orchestrationId, executionId, stubExecution);
+        logger.info(`Created in-progress execution for [${orchestrationId}] with ID [${executionId}]`);
+        
+        // Get the orchestration job to get its name for the running queue
+        let orchestrationName = orchestrationId; // fallback to orchestrationId
+        try {
+          const job = await orchestration.getJob(orchestrationId);
+          if (job && job.name) {
+            orchestrationName = job.name;
+          }
+        } catch (err) {
+          logger.warn(`Could not get orchestration name for [${orchestrationId}]: ${err.message}`);
+        }
+        
+        // Add to running queue so it shows in running list with link to monitor
+        const runningItem = running.createItem(orchestrationName, new Date().toISOString(), 'manual');
+        runningItem.orchestrationId = orchestrationId;
+        runningItem.executionId = executionId;
+        running.add(runningItem);
+        logger.info(`Added orchestration to running queue: [${orchestrationName}] with execution [${executionId}]`);
+        
+        // Create callback to update cache as nodes complete
+        const onNodeComplete = (executionLog) => {
+          updateInProgressExecution(orchestrationId, executionId, executionLog);
+        };
+        
+        // Start orchestration execution asynchronously (fire-and-forget)
+        // Pass executionId so engine uses the same ID for websocket events
+        // Pass onNodeComplete callback to update cache as nodes complete
+        // Don't await - redirect immediately so user sees monitor view right away
+        orchestration.executeJob(orchestrationId, true, executionId, onNodeComplete).then(async (executionLog) => {
+          updateInProgressExecution(orchestrationId, executionId, executionLog);
+          // Execute in background, save results when complete
+          await orchestration.saveExecutionResult(executionLog);
+          // Clear the stub from cache - actual execution is now in history
+          clearInProgressExecution(orchestrationId, executionId);
+          // Remove from running queue by executionId for consistency with REST endpoint
+          running.removeItemByExecutionId(executionId);
+          logger.info(`Orchestration [${orchestrationId}] execution completed with status: ${executionLog.finalStatus}`);
+        }).catch((err) => {
+          logger.error(`Background orchestration execution failed: ${err.message}`);
+          // Clear the stub on error too
+          clearInProgressExecution(orchestrationId, executionId);
+          // Remove from running queue on error by executionId
+          running.removeItemByExecutionId(executionId);
+        });
+        
+        // Redirect to monitor view immediately with the execution ID
+        redir = `/orchestration/monitor.html?jobId=${encodeURIComponent(orchestrationId)}&executionId=${encodeURIComponent(executionId)}`;
       }
-    } else {
-      errorMessage = `Agent '${schedule.agent}' does not exist`;
+    } catch (err) {
+      logger.error(`Error starting orchestration: ${err.message}`);
+      errorMessage = `Failed to start orchestration: ${err.message}`;
     }
-  }
-  
-  // Only attempt to run if no pre-check errors
-  if (!errorMessage) {
-    var status = await scheduler.manualJobRun(index,jobname);
-    logger.info(`Job execution status: ${status}`)
-    if(status!="ok") {
-      errorMessage = "Job execution failed";
+  } else {
+    // Classic mode: Check if agent is online before attempting to run
+    if (schedule && schedule.scheduleMode !== 'orchestration') {
+      const agent = agents.getAgent(schedule.agent);
+      
+      if (agent) {
+        if (agent.status !== "online") {
+          errorMessage = `Agent '${schedule.agent}' is ${agent.status} - cannot execute job`;
+        }
+      } else {
+        errorMessage = `Agent '${schedule.agent}' does not exist`;
+      }
+    }
+    
+    // Only attempt to run if no pre-check errors
+    if (!errorMessage) {
+      var status = await scheduler.manualJobRun(index,jobname);
+      logger.info(`Job execution status: ${status}`)
+      if(status!="ok") {
+        errorMessage = "Job execution failed";
+      }
     }
   }
   
@@ -1633,29 +1992,21 @@ app.get('/rest/jobs',User.isAuthenticated, (req, res) => {
   res.send(JSON.stringify(config, null, "  "));
 });
 
-app.get('/',User.isAuthenticated, (request, response) => {
+app.get('/',User.isAuthenticated, async (request, response) => {
 
   var historyList = hist.getItemsUsingTZ();
   var runningList = running.getItemsUsingTZ();
   var agentsDict = agents.getDict();
-  var chartData = hist.getChartDataSet(7);
+  var chartData = await hist.getChartDataSet(7);
 
   var username = request.session.user.username;
   if(username===undefined || username===null)username="User";
 
   var runningCount = runningList.length;
-  var successCount = 0;
-  var failCount = 0;
-
-  for(var i=0;i<historyList.length;i++)
-  {
-    if(parseInt(historyList[i].returnCode)==0){
-      successCount++
-    }
-    else{
-      failCount++;
-    }
-  }
+  
+  // Calculate success/fail from chart data (includes both regular jobs and orchestrations)
+  var successCount = chartData.success.reduce((a, b) => a + b, 0);
+  var failCount = chartData.fail.reduce((a, b) => a + b, 0);
 
   //scheduler.getTodaysScheduleCount();
   
@@ -1673,7 +2024,7 @@ app.get('/',User.isAuthenticated, (request, response) => {
     mqttConnected: mqttTransport.isMQTTConnected(),
     todayJobs: scheduler.getTodaysScheduleCount(),
     scheduleHistory: scheduler.getLast7DaysScheduleCount(),
-    todayJobsRun: hist.getTodaysRun()
+    todayJobsRun: await hist.getTodaysRun()
   });
 });
 
@@ -2191,6 +2542,708 @@ function markOffline()
 }
 
 // ============================================================================
+// ORCHESTRATION JOBS - REST API ENDPOINTS
+// ============================================================================
+
+/**
+ * Get list of all orchestration jobs
+ */
+app.get('/rest/orchestration/jobs', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const jobs = await orchestration.getAllJobs();
+  res.json(jobs);
+}));
+
+/**
+ * Get a specific orchestration job
+ */
+app.get('/rest/orchestration/jobs/:jobId', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const job = await orchestration.getJob(req.params.jobId);
+  res.json(job);
+}));
+
+/**
+ * Create or update an orchestration job
+ */
+app.post('/rest/orchestration/jobs', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const { jobId, name, description, nodes, edges } = req.body;
+  
+  if (!jobId || !name) {
+    return res.status(400).json({ error: 'Job ID and name are required' });
+  }
+  
+  const job = await orchestration.saveJob(jobId, {
+    name,
+    description,
+    nodes,
+    edges
+  });
+  
+  res.json({ success: true, job });
+}));
+
+/**
+ * Update an existing orchestration job
+ */
+app.put('/rest/orchestration/jobs/:jobId', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const { name, description, nodes, edges } = req.body;
+  const { jobId } = req.params;
+  
+  const job = await orchestration.saveJob(jobId, {
+    name,
+    description,
+    nodes,
+    edges
+  });
+  
+  res.json({ success: true, job });
+}));
+
+/**
+ * Delete an orchestration job
+ */
+app.delete('/rest/orchestration/jobs/:jobId', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const { jobId } = req.params;
+  
+  await orchestration.deleteJob(jobId);
+  res.json({ success: true, message: `Orchestration job [${jobId}] deleted` });
+}));
+
+/**
+ * Execute an orchestration job
+ */
+app.post('/rest/orchestration/jobs/:jobId/execute', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const { jobId } = req.params;
+  
+  logger.info(`Executing orchestration job [${jobId}]`);
+  
+  // Generate execution ID immediately (same as orchestrationEngine does)
+  const crypto = require('crypto');
+  const executionId = crypto.randomBytes(8).toString('hex');
+  
+  // Get the orchestration job to get its name for the running queue
+  let orchestrationName = jobId; // fallback to jobId
+  try {
+    const job = await orchestration.getJob(jobId);
+    if (job && job.name) {
+      orchestrationName = job.name;
+    }
+  } catch (err) {
+    logger.warn(`Could not get orchestration name for [${jobId}]: ${err.message}`);
+  }
+  
+  // Create a stub execution record (NOT saved to permanent history yet)
+  // This is cached in-memory so monitor can find it immediately
+  const stubExecution = {
+    jobId: jobId,
+    executionId: executionId,
+    orchestrationVersion: 1,
+    startTime: new Date().toISOString(),
+    endTime: null,
+    status: 'running',
+    currentNode: null,
+    visitedNodes: [],
+    scriptOutputs: {},
+    conditionEvaluations: {},
+    nodeMetrics: {},
+    errors: [],
+    finalStatus: null,
+    manual: true,
+    isStub: true  // Mark as temporary stub execution
+  };
+  
+  // Cache the stub in-memory (not in permanent history)
+  saveInProgressExecution(jobId, executionId, stubExecution);
+  logger.info(`Created in-progress execution for [${jobId}] with ID [${executionId}]`);
+  
+  // Add to running queue so it shows in running list with link to monitor
+  const runningItem = running.createItem(orchestrationName, new Date().toISOString(), 'manual');
+  runningItem.orchestrationId = jobId;
+  runningItem.executionId = executionId;
+  running.add(runningItem);
+  logger.info(`Added orchestration to running queue: [${orchestrationName}] with execution [${executionId}]`);
+  
+  // Create callback to update cache as nodes complete
+  const onNodeComplete = (executionLog) => {
+    updateInProgressExecution(jobId, executionId, executionLog);
+  };
+  
+  // Start orchestration execution asynchronously (fire-and-forget)
+  // Pass executionId so engine uses the same ID for websocket events
+  // Pass onNodeComplete callback to update cache as nodes complete
+  // Don't await - return immediately so client redirects right away
+  orchestration.executeJob(jobId, true, executionId, onNodeComplete).then(async (executionLog) => {
+    updateInProgressExecution(jobId, executionId, executionLog);
+    // Execute in background, save results when complete
+    await orchestration.saveExecutionResult(executionLog);
+    // Clear the stub from cache - actual execution is now in history
+    clearInProgressExecution(jobId, executionId);
+    // Remove from running queue
+    running.removeItemByExecutionId(executionId);
+    logger.info(`Orchestration [${jobId}] execution completed with status: ${executionLog.finalStatus}`);
+  }).catch((err) => {
+    logger.error(`Background orchestration execution failed: ${err.message}`);
+    // Clear the stub on error too
+    clearInProgressExecution(jobId, executionId);
+    // Remove from running queue on error as well
+    running.removeItemByExecutionId(executionId);
+  });
+  
+  // Return immediately with executionId
+  res.json({ 
+    success: true, 
+    executionId: executionId
+  });
+}));
+
+/**
+ * Get execution history for a job
+ */
+app.get('/rest/orchestration/jobs/:jobId/executions', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const { jobId } = req.params;
+  
+  const executions = await orchestration.getExecutionHistory(jobId);
+  res.json(executions);
+}));
+
+/**
+ * Get list of available scripts for the palette
+ */
+app.get('/rest/orchestration/scripts', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const scripts = await orchestration.getAvailableScripts();
+  res.json(scripts);
+}));
+
+/**
+ * Get list of available agents for orchestration execution
+ */
+app.get('/rest/orchestration/agents', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const agentDict = agents.getDict();
+  const agentList = Object.entries(agentDict).map(([name, agent]) => ({
+    id: name,
+    name: name,
+    description: agent.description || '',
+    status: agent.status || 'offline',
+    address: agent.address || '',
+    version: agent.version || ''
+  }));
+  res.json(agentList);
+}));
+
+/**
+ * Get all schedules
+ */
+app.get('/rest/schedules', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const schedules = scheduler.getSchedules();
+  res.json(schedules);
+}));
+
+/**
+ * Get a specific schedule by job name
+ */
+app.get('/rest/schedules/:jobName', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const { jobName } = req.params;
+  const schedule = scheduler.getSchedule(jobName);
+  
+  if (!schedule) {
+    return res.status(404).json({ 
+      success: false, 
+      message: `Schedule [${jobName}] not found` 
+    });
+  }
+  
+  res.json(schedule);
+}));
+
+/**
+ * Delete a specific schedule by job name
+ */
+app.delete('/rest/schedules/:jobName', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const { jobName } = req.params;
+  
+  try {
+    await scheduler.deleteSchedule(jobName);
+    res.json({ success: true, message: `Schedule [${jobName}] deleted` });
+  } catch (err) {
+    logger.error(`Error deleting schedule [${jobName}]: ${err.message}`);
+    res.status(400).json({ 
+      success: false, 
+      message: `Failed to delete schedule: ${err.message}` 
+    });
+  }
+}));
+
+/**
+ * Delete all schedules
+ */
+app.delete('/rest/schedules', User.isAuthenticated, asyncHandler(async (req, res) => {
+  try {
+    // Clear all schedules by writing an empty array
+    await db.putData('SCHEDULES_CONFIG', []);
+    scheduler.init(); // Reinitialize scheduler with empty data
+    res.json({ success: true, message: 'All schedules deleted' });
+  } catch (err) {
+    logger.error(`Error deleting all schedules: ${err.message}`);
+    res.status(400).json({ 
+      success: false, 
+      message: `Failed to delete schedules: ${err.message}` 
+    });
+  }
+}));
+
+// =========================
+// NOTIFICATIONS REST API - ADDITIONAL ENDPOINTS
+// =========================
+
+/**
+ * Create a new notification
+ */
+app.post('/rest/notifications', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const { type, title, description, url } = req.body;
+  const runDate = new Date().toISOString();
+  const item = notificationData.createNotificationItem(runDate, type, title, description, url);
+  notificationData.add(item);
+  res.status(201).json({ success: true, item });
+}));
+
+/**
+ * Update a notification by index
+ */
+app.put('/rest/notifications/:index', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const index = parseInt(req.params.index);
+  const { type, title, description, url } = req.body;
+  let items = notificationData.getItems();
+  if (index < 0 || index >= items.length) {
+    return res.status(404).json({ success: false, message: 'Notification not found' });
+  }
+  items[index] = notificationData.createNotificationItem(new Date().toISOString(), type, title, description, url);
+  await notificationData.updateDbPromise();
+  res.json({ success: true, item: items[index] });
+}));
+
+// =========================
+// JOB HISTORY REST API - CRUD ENDPOINTS
+// =========================
+
+/**
+ * Get all job history items
+ */
+app.get('/rest/history', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const items = await hist.getItemsUsingTZ();
+  res.json(items);
+}));
+
+/**
+ * Get a single job history item by index
+ */
+app.get('/rest/history/:index', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const items = await hist.getItemsUsingTZ();
+  const index = parseInt(req.params.index);
+  if (index < 0 || index >= items.length) {
+    return res.status(404).json({ success: false, message: 'History item not found' });
+  }
+  res.json(items[index]);
+}));
+
+/**
+ * Create a new job history item
+ */
+app.post('/rest/history', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const item = req.body;
+  hist.add(item);
+  res.status(201).json({ success: true, item });
+}));
+
+/**
+ * Update a job history item by index
+ */
+app.put('/rest/history/:index', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const items = await hist.getItemsUsingTZ();
+  const index = parseInt(req.params.index);
+  if (index < 0 || index >= items.length) {
+    return res.status(404).json({ success: false, message: 'History item not found' });
+  }
+  items[index] = req.body;
+  await hist.updateDb();
+  res.json({ success: true, item: items[index] });
+}));
+
+/**
+ * Delete a job history item by index
+ */
+app.delete('/rest/history/:index', User.isAuthenticated, asyncHandler(async (req, res) => {
+  let items = await hist.getItemsUsingTZ();
+  const index = parseInt(req.params.index);
+  if (index < 0 || index >= items.length) {
+    return res.status(404).json({ success: false, message: 'History item not found' });
+  }
+  items.splice(index, 1);
+  await hist.updateDb();
+  res.json({ success: true });
+}));
+
+// =========================
+// USER REST API - CRUD ENDPOINTS
+// =========================
+
+/**
+ * List all users
+ */
+app.get('/rest/users', User.isAuthenticated, asyncHandler(async (req, res) => {
+  try {
+    let users = [];
+    for await (const [key, value] of User.db.iterator()) {
+      users.push({ username: value.username, email: value.email });
+    }
+    res.json(users);
+  } catch (err) {
+    logger.error(`Error listing users: ${err.message}`);
+    res.status(500).json({ success: false, message: 'Error listing users' });
+  }
+}));
+
+/**
+ * Get a user by username
+ */
+app.get('/rest/users/:username', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const user = await User.getUserByUsername(req.params.username);
+  if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+  res.json({ username: user.username, email: user.email });
+}));
+
+/**
+ * Create a new user
+ */
+app.post('/rest/users', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const { username, email, password } = req.body;
+  try {
+    await User.createUser(username, email, password);
+    res.status(201).json({ success: true, message: 'User created' });
+  } catch (err) {
+    logger.error(`Error creating user [${username}]: ${err.message}`);
+    res.status(400).json({ success: false, message: `Error creating user: ${err.message}` });
+  }
+}));
+
+/**
+ * Update a user's email or password
+ */
+app.put('/rest/users/:username', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const { email, password } = req.body;
+  try {
+    const user = await User.getUserByUsername(req.params.username);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+    if (email) user.email = email;
+    if (password) await User.updatePassword(req.params.username, password);
+    else await User.updateUser(req.params.username, user);
+    res.json({ success: true });
+  } catch (err) {
+    logger.error(`Error updating user [${req.params.username}]: ${err.message}`);
+    res.status(400).json({ success: false, message: `Error updating user: ${err.message}` });
+  }
+}));
+
+/**
+ * Delete a user
+ */
+app.delete('/rest/users/:username', User.isAuthenticated, asyncHandler(async (req, res) => {
+  try {
+    await User.deleteUser(req.params.username);
+    res.json({ success: true });
+  } catch (err) {
+    logger.error(`Error deleting user [${req.params.username}]: ${err.message}`);
+    res.status(400).json({ success: false, message: `Error deleting user: ${err.message}` });
+  }
+}));
+
+// =========================
+// GENERIC KEY-VALUE DATA REST API
+// =========================
+
+/**
+ * Get value by key from custom data store
+ * REQUIRES: User authentication + Sensitive data token
+ */
+app.get('/rest/data/:key', User.isAuthenticated, validateSensitiveDataToken, asyncHandler(async (req, res) => {
+  try {
+    const value = await db.getData(req.params.key);
+    res.json({ key: req.params.key, value });
+  } catch (err) {
+    res.status(404).json({ success: false, message: 'Key not found' });
+  }
+}));
+
+/**
+ * Create or update value by key in custom data store
+ * REQUIRES: User authentication + Sensitive data token
+ */
+app.put('/rest/data/:key', User.isAuthenticated, validateSensitiveDataToken, asyncHandler(async (req, res) => {
+  try {
+    await db.putData(req.params.key, req.body.value);
+    res.json({ success: true });
+  } catch (err) {
+    logger.error(`Error storing data [${req.params.key}]: ${err.message}`);
+    res.status(400).json({ success: false, message: `Error storing data: ${err.message}` });
+  }
+}));
+
+/**
+ * Delete value by key from custom data store
+ * REQUIRES: User authentication + Sensitive data token
+ */
+app.delete('/rest/data/:key', User.isAuthenticated, validateSensitiveDataToken, asyncHandler(async (req, res) => {
+  try {
+    await db.deleteData(req.params.key);
+    res.json({ success: true });
+  } catch (err) {
+    logger.error(`Error deleting data [${req.params.key}]: ${err.message}`);
+    res.status(400).json({ success: false, message: `Error deleting data: ${err.message}` });
+  }
+}));
+
+/**
+ * Orchestration UI pages
+ */
+app.get('/orchestrationList.html', User.isAuthenticated, asyncHandler(async (req, res) => {
+  res.render('orchestrationList', { csrfToken: req.csrfToken() });
+}));
+
+app.get('/orchestrationBuilder.html', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const jobId = req.query.id; // undefined for new jobs, or specific ID for editing
+  res.render('orchestrationBuilder', { 
+    csrfToken: req.csrfToken(),
+    jobId: jobId || ''
+  });
+}));
+
+// In-memory cache for in-progress orchestration executions
+// These are temporary stub records that get replaced when execution completes
+const inProgressExecutions = {};  // key: `${jobId}:${executionId}`, value: execution stub
+
+// Helper to generate a unique cache key for in-progress executions
+function getInProgressKey(jobId, executionId) {
+  return `${jobId}:${executionId}`;
+}
+
+// Helper to get in-progress execution if it exists
+function getInProgressExecution(jobId, executionId) {
+  const key = getInProgressKey(jobId, executionId);
+  return inProgressExecutions[key];
+}
+
+// Helper to save in-progress execution
+function saveInProgressExecution(jobId, executionId, execution) {
+  const key = getInProgressKey(jobId, executionId);
+  inProgressExecutions[key] = execution;
+  logger.debug(`Cached in-progress execution [${key}]`);
+}
+
+function updateInProgressExecution(jobId, executionId, executionLog) {
+  const cachedExecution = getInProgressExecution(jobId, executionId);
+  if (!cachedExecution || !executionLog) {
+    return;
+  }
+
+  cachedExecution.visitedNodes = executionLog.visitedNodes;
+  cachedExecution.currentNode = executionLog.currentNode;
+  cachedExecution.status = executionLog.status;
+  cachedExecution.finalStatus = executionLog.finalStatus;
+  cachedExecution.endTime = executionLog.endTime;
+  cachedExecution.errors = executionLog.errors;
+  cachedExecution.scriptOutputs = executionLog.scriptOutputs;
+  cachedExecution.conditionEvaluations = executionLog.conditionEvaluations;
+  cachedExecution.nodeMetrics = executionLog.nodeMetrics;
+  saveInProgressExecution(jobId, executionId, cachedExecution);
+}
+
+// Helper to clear in-progress execution
+function clearInProgressExecution(jobId, executionId) {
+  const key = getInProgressKey(jobId, executionId);
+  delete inProgressExecutions[key];
+  logger.debug(`Cleared in-progress execution cache [${key}]`);
+}
+
+/**
+ * Orchestration Monitor/Detail Routes
+ */
+app.get('/orchestration/monitor.html', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const jobId = req.query.jobId;
+  const executionIndex = req.query.executionIndex || 'latest';
+  
+  if (!jobId) {
+    return res.status(400).send('Job ID is required');
+  }
+  
+  res.render('orchestrationMonitor', { 
+    csrfToken: req.csrfToken(),
+    jobId: jobId,
+    executionIndex: executionIndex
+  });
+}));
+
+app.get('/orchestration/execution/details', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const orchestrationMonitor = require('./orchestrationMonitor.js');
+  const jobId = req.query.jobId;
+  let executionIndex = req.query.executionIndex || 'latest';
+  const executionId = req.query.executionId;
+  
+  if (!jobId) {
+    return res.status(400).json({ error: 'Job ID is required' });
+  }
+  
+  // Check if this is an in-progress execution in the cache
+  if (executionId) {
+    const cachedExecution = getInProgressExecution(jobId, executionId);
+    if (cachedExecution) {
+      logger.debug(`Found in-progress execution [${executionId}] in cache, building details`);
+      
+      // Build details from cached stub
+      try {
+        const orchestrationMonitor = require('./orchestrationMonitor.js');
+        const jobDef = await orchestrationMonitor.getJobDefinitionVersion(jobId, 'current');
+        
+        if (!jobDef) {
+          return res.status(404).json({ error: `Orchestration job [${jobId}] not found` });
+        }
+
+        // Fetch live logs from database for in-progress execute nodes
+        const agents = require('./agents.js');
+        for (const node of jobDef.nodes) {
+          if (node.type === 'execute' && node.data && node.data.agent) {
+            const agentId = node.data.agent;
+            const agent = agents.getAgent(agentId);
+            if (agent && (!cachedExecution.scriptOutputs[node.id] || !cachedExecution.scriptOutputs[node.id].stdout)) {
+              // Node is executing or recently completed, try to fetch logs from database
+              const jobName = `Orchestration [${jobId}] Execution [${executionId}] Node [${node.id}]`;
+              const logKey = `${agent.name}_${jobName}_log`;
+              try {
+                // Use simpleGetData to match agent's log storage mechanism
+                const logContent = await db.simpleGetData(logKey);
+                if (logContent) {
+                  // Initialize the scriptOutputs entry if not present
+                  if (!cachedExecution.scriptOutputs[node.id]) {
+                    cachedExecution.scriptOutputs[node.id] = {
+                      script: node.data.script || '',
+                      parameters: node.data.parameters || '',
+                      agent: agentId,
+                      status: 'in-progress'
+                    };
+                  }
+                  // Add/update the stdout with the live logs
+                  cachedExecution.scriptOutputs[node.id].stdout = logContent;
+                  logger.info(`[Orchestration Monitor] Fetched live logs for node [${node.id}] - ${logContent.length} bytes from key [${logKey}]`);
+                }
+              } catch (logErr) {
+                // Log file doesn't exist yet or error reading - that's fine
+                logger.debug(`[Orchestration Monitor] No logs yet for node [${node.id}]: ${logErr.message}`);
+              }
+            }
+          }
+        }
+        
+        // Format nodes with cached execution data (including fetched logs)
+        const formattedNodes = orchestrationMonitor.formatNodeDetails(jobDef.nodes, cachedExecution);
+        const formattedEdges = orchestrationMonitor.formatEdgeDetails(jobDef.edges, cachedExecution, cachedExecution.visitedNodes || []);
+        
+        return res.json({
+          jobId: jobDef.id,
+          jobName: jobDef.name,
+          description: jobDef.description || '',
+          orchestrationVersion: jobDef.version || 1,
+          execution: {
+            startTime: cachedExecution.startTime,
+            endTime: cachedExecution.endTime,
+            status: cachedExecution.status,
+            finalStatus: cachedExecution.finalStatus || 'unknown',
+            duration: cachedExecution.endTime ? 
+              new Date(cachedExecution.endTime) - new Date(cachedExecution.startTime) : null,
+            nodeMetrics: cachedExecution.nodeMetrics || {}
+          },
+          nodes: formattedNodes,
+          edges: formattedEdges,
+          nodeScriptOutputs: cachedExecution.scriptOutputs || {},
+          conditionEvaluations: cachedExecution.conditionEvaluations || {},
+          errors: cachedExecution.errors || [],
+          visitedNodes: cachedExecution.visitedNodes || [],
+          executionIndex: 'in-progress',
+          isInProgress: true
+        });
+      } catch (err) {
+        logger.error(`Error building details for cached execution: ${err.message}`);
+        // Fall through to normal execution history lookup
+      }
+    }
+  }
+  
+  // Normal execution history lookup (for completed executions)
+  // If executionId is provided, resolve it to an index
+  if (executionId && executionIndex === 'latest') {
+    const index = await orchestrationEngine.getExecutionIndexById(jobId, executionId);
+    if (index >= 0) {
+      executionIndex = index;
+    }
+  }
+  
+  const details = await orchestrationMonitor.getExecutionDetails(jobId, executionIndex);
+  res.json(details);
+}));
+
+app.get('/orchestration/node/output', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const orchestrationMonitor = require('./orchestrationMonitor.js');
+  const jobId = req.query.jobId;
+  const nodeId = req.query.nodeId;
+  let executionIndex = req.query.executionIndex || 'latest';
+  const executionId = req.query.executionId;
+  
+  if (!jobId || !nodeId) {
+    return res.status(400).json({ error: 'Job ID and Node ID are required' });
+  }
+  
+  // If executionId is provided, resolve it to an index
+  if (executionId && executionIndex === 'latest') {
+    const index = await orchestrationEngine.getExecutionIndexById(jobId, executionId);
+    if (index >= 0) {
+      executionIndex = index;
+    }
+  }
+  
+  const output = await orchestrationMonitor.getNodeOutput(jobId, nodeId, executionIndex);
+  res.json(output);
+}));
+
+app.get('/api/schedules/by-orchestration/:orchestrationId', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const orchestrationId = req.params.orchestrationId;
+  
+  if (!orchestrationId) {
+    return res.status(400).json({ error: 'Orchestration ID is required' });
+  }
+  
+  // Get all schedules
+  const allSchedules = await scheduler.getSchedules(-1); // Get all (passing -1 might be placeholder, let's use direct access)
+  let matchingSchedules = [];
+  
+  try {
+    // Access schedules from database
+    const schedulesDb = require('./db.js');
+    const schedules = await schedulesDb.getData('SCHEDULES_CONFIG').catch(() => []);
+    
+    if (Array.isArray(schedules)) {
+      matchingSchedules = schedules.filter(schedule => 
+        schedule.scheduleMode === 'orchestration' && 
+        schedule.orchestrationId === orchestrationId
+      );
+    }
+  } catch (err) {
+    logger.warn('Error fetching schedules for orchestration:', err.message);
+    matchingSchedules = [];
+  }
+  
+  res.json({
+    success: true,
+    schedules: matchingSchedules
+  });
+}));
+
+// ============================================================================
 // ERROR HANDLING MIDDLEWARE (must be registered last)
 // ============================================================================
 app.use(errorHandlerMiddleware);
@@ -2298,6 +3351,19 @@ var server = app.listen(port, async function () {
 
     await scheduler.init();
     logger.info('Scheduler initialized successfully');
+    
+    await orchestration.init();
+    logger.info('Orchestration module initialized successfully');
+    
+    // Migrate to versioned format if needed
+    try {
+      const migratedCount = await orchestration.migrateToVersionedFormat();
+      if (migratedCount > 0) {
+        logger.info(`Migrated ${migratedCount} orchestrations to versioned format`);
+      }
+    } catch (err) {
+      logger.error('Error during orchestration versioning migration:', err.message);
+    }
     
     hist.init();
     //debug.Info("initiatilizing notification data");

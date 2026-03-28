@@ -74,6 +74,14 @@ function displaySecs(secs) {
     max-height: 50px; /* Set a suitable max-height for visible rows */
     transform: translateY(0); /* Move to original position */
 }
+
+/* Remove borders from orchestration child rows when expanded */
+tbody tr.orch-expanded,
+tbody tr.orch-expanded td {
+    border: none !important;
+    border-bottom: none !important;
+    border-top: none !important;
+}
   </style>
   <script>
 
@@ -82,7 +90,13 @@ function displaySecs(secs) {
 
 
   function toggleGroup(className) {
-    const rows = document.querySelectorAll(`.toggle-row.${className}`);
+    // Get only PARENT rows (regular jobs and orchestration parents), NOT their children
+    const allRows = document.querySelectorAll(`.toggle-row.${className}`);
+    const rows = Array.from(allRows).filter(row => {
+      // Exclude orchestration child rows - they are handled by orchestration parent toggle
+      return !row.classList.contains('orch-child-expand') && !row.classList.toString().match(/orch-child-/);
+    });
+    
     var elem = document.getElementById("icon-" + className.split("-")[1]);
     if(elem.innerText=="expand_more"){
       elem.innerHTML = "expand_less";
@@ -95,20 +109,50 @@ function displaySecs(secs) {
     rows.forEach(row => {
         if (row.style.display === "none") {
             // Show the row
-            row.style.display = "table-row"; // Use table-row for table structure
+            row.style.display = "table-row";
+            
+            // If showing an orchestration parent, ensure its children stay collapsed
+            if (row.classList.contains('orch-parent')) {
+                const safeId = row.getAttribute('data-safe-id');
+                if (safeId) {
+                    const orchChildren = document.querySelectorAll(`.orch-child-${safeId}`);
+                    orchChildren.forEach(child => {
+                        child.style.display = 'none';
+                        child.classList.remove('show');
+                    });
+                    // Ensure icon shows expand_more
+                    const orchIcon = document.getElementById(`orch-expand-${safeId}`);
+                    if (orchIcon) {
+                        orchIcon.textContent = 'expand_more';
+                    }
+                }
+            }
+            
             requestAnimationFrame(() => {
-                // Set the delay for each row
                 row.style.transitionDelay = `${delay}ms`;
-                row.classList.add('show'); // Trigger the transition
+                row.classList.add('show');
                 if(rows.length>10)delay += 10;
-                else delay += 100; // Increase delay for the next row (adjust as needed)
+                else delay += 100;
             });
         } else {
             // Hide the row
-            row.classList.remove('show'); // Remove transition class
+            row.classList.remove('show');
+            
+            // If hiding an orchestration parent, collapse and hide its children
+            if (row.classList.contains('orch-parent')) {
+                const safeId = row.getAttribute('data-safe-id');
+                if (safeId) {
+                    const orchChildren = document.querySelectorAll(`.orch-child-${safeId}`);
+                    orchChildren.forEach(child => {
+                        child.classList.remove('show');
+                        child.style.display = 'none';
+                    });
+                }
+            }
+            
             row.addEventListener('transitionend', function() {
-                row.style.display = "none"; // Hide after transition
-                row.style.transitionDelay = '0ms'; // Reset delay after hiding
+                row.style.display = "none";
+                row.style.transitionDelay = '0ms';
             }, { once: true });
         }
     });
@@ -309,6 +353,30 @@ function displaySecs(secs) {
                     toggleGroup("group-" + groupId);
                 });
             }
+            
+            // Auto-collapse all orchestration executions on page load (without animation)
+            setTimeout(() => {
+                const orchParents = document.querySelectorAll('.orch-parent');
+                orchParents.forEach(parent => {
+                    const safeId = parent.getAttribute('data-safe-id');
+                    if (safeId) {
+                        const orchChildren = document.querySelectorAll(`.orch-child-${safeId}`);
+                        if (orchChildren.length > 0) {
+                            // Directly hide without animation
+                            orchChildren.forEach(child => {
+                                child.style.display = 'none';
+                                child.classList.remove('show');
+                                child.style.transitionDelay = '0ms';
+                            });
+                            // Update the icon to show expand_more
+                            const icon = document.getElementById(`orch-expand-${safeId}`);
+                            if (icon) {
+                                icon.textContent = 'expand_more';
+                            }
+                        }
+                    }
+                });
+            }, 100);
         })
         .catch(error => {
             console.error('Error fetching data:', error);
@@ -317,7 +385,67 @@ function displaySecs(secs) {
         });
   }
 
+  function toggleOrchestrationGroup(compositeId) {
+    const rows = document.querySelectorAll(`.orch-child-${compositeId}`);
+    const icon = document.getElementById(`orch-expand-${compositeId}`);
+    
+    // Toggle icon
+    if (icon) {
+      const isCurrentlyExpanded = icon.textContent === 'expand_less';
+      icon.textContent = isCurrentlyExpanded ? 'expand_more' : 'expand_less';
+    }
 
+    let delay = 0;
+    
+    rows.forEach(row => {
+        if (row.style.display === "none") {
+            // Show the row with animation
+            row.style.display = "table-row"; // Use table-row for table structure
+            row.classList.add('orch-expanded'); // Add class to hide borders
+            requestAnimationFrame(() => {
+                // Set the delay for each row
+                row.style.transitionDelay = `${delay}ms`;
+                row.classList.add('show'); // Trigger the transition
+                if(rows.length > 10) delay += 10;
+                else delay += 100; // Increase delay for the next row
+            });
+        } else {
+            // Hide the row with animation
+            row.classList.remove('show'); // Remove transition class
+            row.classList.remove('orch-expanded'); // Remove border-hiding class
+            row.addEventListener('transitionend', function() {
+                row.style.display = "none"; // Hide after transition
+                row.style.transitionDelay = '0ms'; // Reset delay after hiding
+            }, { once: true });
+        }
+    });
+  }
+
+  function runOrchestrationFromHistory(jobId) {
+    $.ajax({
+      url: `/rest/orchestration/jobs/${encodeURIComponent(jobId)}/execute`,
+      type: 'POST',
+      headers: {
+        'X-CSRF-Token': $('meta[name="csrf-token"]').attr('content') || document.querySelector('input[name="_csrf"]')?.value
+      },
+      success: function(data) {
+        if (data.success && data.executionId) {
+          M.toast({ html: 'Orchestration started' });
+          // Wait a moment then scroll back to top to see it in running items
+          setTimeout(() => {
+            window.scrollTo(0, 0);
+            fetchRunList('runList');
+          }, 500);
+        } else {
+          M.toast({ html: 'Failed to start orchestration execution' });
+        }
+      },
+      error: function(xhr, status, error) {
+        console.error('Failed to execute orchestration:', error);
+        M.toast({ html: 'Failed to execute orchestration' });
+      }
+    });
+  }
 
   </script>
 </head>
@@ -355,7 +483,7 @@ function displaySecs(secs) {
               <a class="sortableHeader" onclick="fetchList('historyList','status',(order === 'asc' && sort === 'status') ? 'desc' : 'asc');" href="#">Status</a>
               <span id="status-SortIcon" class="material-icons vertMid">&nbsp;</span>
             </th>
-            <th class="shortcol">Actions</th>
+            <th class="shortcol" style="min-width: 90px;">Actions</th>
           </thead>
           <tbody id="runList"></tbody>
           <tbody id="historyList"></tbody>

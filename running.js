@@ -50,13 +50,14 @@ function add(item) {
     updateDb();
 }
 
-function createItem(jobName,startTime,mode){
+function createItem(jobName, startTime, mode, executionId){
     if(mode===undefined)mode=false;
     logger.debug("Creating running item [" + jobName + "]");
     var item = {};
     item.jobName=jobName;
     item.startTime=startTime;
     item.manual=mode;
+    item.executionId=executionId || null;  // Add execution ID
     logger.debug("running Item:\n" + JSON.stringify(item));
     return item;
 }
@@ -137,4 +138,34 @@ function removeItem(jobName)
     }
 }
 
-module.exports = { init, add, getItems,getItemsUsingTZ, getItemByName, searchItemWithName, getItem , createItem, removeItem};
+function removeItemByExecutionId(executionId)
+{
+    logger.debug("Removing Running item with Execution ID [" + executionId + "]");
+    //Find index from executionId
+    var index = -1;
+    for(var i=0;i<historyItems.length;i++){
+        if(historyItems[i].executionId == executionId){
+            index = i;
+            break;
+        }
+    }
+    if (index !== -1) {
+        removeItemByIndex(index);
+    }
+}
+
+/**
+ * Delete all running items
+ * @returns {Promise} resolves after all items are deleted and database is updated
+ */
+async function deleteAll()
+{
+    logger.info("Deleting all running items");
+    const deletedCount = historyItems.length;
+    historyItems = [];
+    await updateDb();
+    logger.info(`Deleted ${deletedCount} running items`);
+    return { success: true, deletedCount: deletedCount };
+}
+
+module.exports = { init, add, getItems,getItemsUsingTZ, getItemByName, searchItemWithName, getItem , createItem, removeItem, removeItemByExecutionId, deleteAll};

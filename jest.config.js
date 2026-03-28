@@ -12,4 +12,6 @@ module.exports = {
     'utils/**/*.js',
   ],
   testTimeout: 10000,
+  forceExit: true,
+  detectOpenHandles: false,
 };

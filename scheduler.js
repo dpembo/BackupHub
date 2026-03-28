@@ -48,9 +48,9 @@ async function init() {
   }
 }
 
-function publishExecute(agent_id, command, commandParams, jobName, isManual) {
-  logger.info(`Executing Scheduled command on Agent [${agent_id}]`);
-  agentComms.sendCommand(agent_id, mqttTransport.getCommandTopic(), command, commandParams, jobName, undefined, isManual);
+function publishExecute(agent_id, command, commandParams, jobName, isManual, executionId) {
+  logger.info(`Executing Scheduled command on Agent [${agent_id}] with executionId [${executionId}]`);
+  agentComms.sendCommand(agent_id, mqttTransport.getCommandTopic(), command, commandParams, jobName, undefined, isManual, executionId);
 }
 
 /**
@@ -195,7 +195,7 @@ function getSchedule(jobName){
     return null;
 }
 
-function getScheduleObject(jobName, colour,  description, scheduleType, scheduleTime,dayOfWeek, dayInMonth,agentselect, agentcommand,commandparams,icon){
+function getScheduleObject(jobName, colour, description, scheduleType, scheduleTime, dayOfWeek, dayInMonth, agentselect, agentcommand, commandparams, icon, scheduleMode, orchestrationId) {
     var schedule = {};
     schedule.jobName = jobName;
     schedule.description = description;
@@ -203,24 +203,35 @@ function getScheduleObject(jobName, colour,  description, scheduleType, schedule
     schedule.dayOfWeek = dayOfWeek;
     schedule.dayInMonth = dayInMonth;
     schedule.scheduleTime = scheduleTime;
-    schedule.command = agentcommand;
-    schedule.commandParams = commandparams;
-    schedule.agent = agentselect;
     schedule.eta = 1;
     schedule.color = colour;
     schedule.icon = icon;
+    schedule.scheduleMode = scheduleMode || 'classic';  // Default to classic for backwards compatibility
+    
+    if (schedule.scheduleMode === 'classic') {
+      schedule.command = agentcommand;
+      schedule.commandParams = commandparams;
+      schedule.agent = agentselect;
+    } else if (schedule.scheduleMode === 'orchestration') {
+      schedule.orchestrationId = orchestrationId;
+      // Clear classic mode fields
+      schedule.command = null;
+      schedule.commandParams = null;
+      schedule.agent = null;
+    }
+    
     return schedule;
 }
 
-function upsertSchedule(index, jobName, colour, description, scheduleType, scheduleTime, dayOfWeek, dayInMonth, agentselect, agentcommand, commandparams, icon) {
-  return _upsertScheduleAsync(index, jobName, colour, description, scheduleType, scheduleTime, dayOfWeek, dayInMonth, agentselect, agentcommand, commandparams, icon);
+function upsertSchedule(index, jobName, colour, description, scheduleType, scheduleTime, dayOfWeek, dayInMonth, agentselect, agentcommand, commandparams, icon, scheduleMode, orchestrationId) {
+  return _upsertScheduleAsync(index, jobName, colour, description, scheduleType, scheduleTime, dayOfWeek, dayInMonth, agentselect, agentcommand, commandparams, icon, scheduleMode, orchestrationId);
 }
 
-async function _upsertScheduleAsync(index, jobName, colour, description, scheduleType, scheduleTime, dayOfWeek, dayInMonth, agentselect, agentcommand, commandparams, icon) {
+async function _upsertScheduleAsync(index, jobName, colour, description, scheduleType, scheduleTime, dayOfWeek, dayInMonth, agentselect, agentcommand, commandparams, icon, scheduleMode, orchestrationId) {
   try {
     logger.debug("Upserting Schedule");
 
-    var schedule = getScheduleObject(jobName, colour, description, scheduleType, scheduleTime, dayOfWeek, dayInMonth, agentselect, agentcommand, commandparams, icon);
+    var schedule = getScheduleObject(jobName, colour, description, scheduleType, scheduleTime, dayOfWeek, dayInMonth, agentselect, agentcommand, commandparams, icon, scheduleMode, orchestrationId);
     logger.info(JSON.stringify(schedule));
     schedule.lastUpdated = new Date().toISOString();
 
@@ -325,6 +336,10 @@ function getSchedules(index){
     if(index===undefined||index===null)
     {
         for(var i=0;i<schedules.length;i++){
+            // Ensure scheduleMode defaults to 'classic' for backwards compatibility
+            if (!schedules[i].scheduleMode) {
+              schedules[i].scheduleMode = 'classic';
+            }
             schedules[i].nextRunDate = displayFormatDate(new Date(getNextRunDate(schedules[i])),true,serverConfig.server.timezone,"YYYY-MM-DDTHH:mm:ss",true); 
              schedules[i].eta=hist.getAverageRuntime(schedules[i].jobName)/60;
             schedules[i].lastUpdated = displayFormatDate(new Date(schedules[i].lastUpdated),false,serverConfig.server.timezone,"YYYY-MM-DDTHH:mm:ss",false);
@@ -338,6 +353,10 @@ function getSchedules(index){
     else
     {
         if(schedules[index]!==undefined && schedules[index]!==null){
+          // Ensure scheduleMode defaults to 'classic' for backwards compatibility
+          if (!schedules[index].scheduleMode) {
+            schedules[index].scheduleMode = 'classic';
+          }
           if(schedules[index].scheduleType=="daily"||schedules[index].scheduleType=="weekly"||schedules[index].scheduleType=="monthly"){
             schedules[index].nextRunDate = displayFormatDate(new Date(getNextRunDate(schedules[index])),true); 
           }
@@ -388,9 +407,36 @@ async function runJob(jobName, isManual, inData) {
     }
 
     logger.info(`Description: ${schedItem.description}`);
-    logger.info(`Agent: ${schedItem.agent}`);
     logger.info(`Mode: ${isManual}`);
 
+    // Handle orchestration schedules
+    if (schedItem.scheduleMode === 'orchestration') {
+      logger.info(`Running orchestration job [${jobName}] with orchestration ID [${schedItem.orchestrationId}]`);
+      
+      try {
+        const orchestration = require('./orchestrationEngine.js');
+        const executionLog = await orchestration.executeJob(schedItem.orchestrationId, isManual);
+        await orchestration.saveExecutionResult(executionLog);
+        
+        logger.info(`Orchestration [${schedItem.orchestrationId}] execution completed with status [${executionLog.finalStatus}]`);
+        return executionLog.finalStatus === 'success' ? 'ok' : 'error';
+      } catch (err) {
+        logger.error(`Error executing orchestration [${schedItem.orchestrationId}]:`, err.message);
+        if (serverConfig.server.jobFailEnabled == "true") {
+          notifier.sendNotification(
+            `Orchestration execution failed [${jobName}]`,
+            `Failed to execute orchestration: ${err.message}`,
+            "ERROR",
+            `/orchestrationList.html`
+          );
+        }
+        return "error";
+      }
+    }
+
+    // Handle classic schedules (script + agent)
+    logger.info(`Agent: ${schedItem.agent}`);
+    
     var agent = agents.getAgent(schedItem.agent);
     if (agent === undefined || agent === null) {
       var message = `Unable to execute job [${jobName}] agent[${schedItem.agent}] does not exist - please correct this job`;
@@ -426,6 +472,10 @@ async function runJob(jobName, isManual, inData) {
 
     if (command !== undefined && command !== null && command.length > 0) {
       try {
+        // Generate execution ID for this job run
+        const crypto = require('crypto');
+        const executionId = crypto.randomBytes(8).toString('hex');
+        
         const scriptPath = "./scripts/" + command;
         const data = await fs.readFile(scriptPath, 'utf8');
         logger.debug('Script file content loaded successfully');
@@ -433,7 +483,8 @@ async function runJob(jobName, isManual, inData) {
         if (inData !== undefined && inData !== null) {
           commandParams += inData;
         }
-        publishExecute(schedItem.agent, data, commandParams, jobName, isManual);
+        
+        publishExecute(schedItem.agent, data, commandParams, jobName, isManual, executionId);
       } catch (err) {
         logger.error(`Error reading script file for job [${jobName}]:`, err.message);
         if (serverConfig.server.jobFailEnabled == "true") {

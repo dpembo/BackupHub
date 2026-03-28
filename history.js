@@ -1,5 +1,6 @@
 
 const dateTimeUtils = require('./utils/dateTimeUtils.js');
+const orchestration = require('./orchestration.js');
 
 const MAX_HISTORY_ITEMS = 150;
 const DBKEY = "JOB_HISTORY";
@@ -74,7 +75,7 @@ function searchItemWithName(searchTerm)
     return null;
 }
 
-function createHistoryItem(jobName, runDate, returnCode, runTime, log, isManual) {
+function createHistoryItem(jobName, runDate, returnCode, runTime, log, isManual, executionId = null) {
     logger.debug("Creating history item [" + jobName + "]");
     if(isManual===undefined)isManual=false;
     var item = {};
@@ -84,6 +85,9 @@ function createHistoryItem(jobName, runDate, returnCode, runTime, log, isManual)
     item.runTime = runTime;
     item.log = log;
     item.manual = isManual;
+    if (executionId) {
+      item.executionId = executionId;  // NEW: Orchestration execution ID for grouping
+    }
     logger.debug("History Item:\n" + JSON.stringify(item));
     return item;
 }
@@ -114,7 +118,7 @@ function getItem(index) {
     return historyItems[index];
 }
 
-function getChartDataSet(numberOfDays) {
+async function getChartDataSet(numberOfDays) {
 
     logger.debug("---- GETTING CHART DATA SET ----");
     // Calculate today's date and seven days ago
@@ -143,8 +147,14 @@ function getChartDataSet(numberOfDays) {
         failPerDay[date] = 0;
     });
 
-    // Iterate through the dataArray
+    // Iterate through regular job history, EXCLUDING orchestration node items
     getItemsUsingTZ().forEach(item => {
+        // Skip orchestration node items - we'll count only the parent execution instead
+        // Pattern: "Orchestration [jobId] Execution [executionId] Node [nodeId]"
+        if (item.jobName && item.jobName.match(/^Orchestration\s+\[.+?\]\s+Execution\s+\[.+?\]\s+Node\s+\[.+?\]/)) {
+            return; // Skip node items, we count parent execution instead
+        }
+
         // Parse runDate and runTime
         var runDate = new Date(item.runDate);
         const runTime = parseInt(item.runTime);
@@ -171,6 +181,43 @@ function getChartDataSet(numberOfDays) {
             failPerDay[formattedDate] += fail;
         }
     });
+
+    // Include parent orchestration execution results (top-level only, not individual nodes)
+    try {
+        const db = require('./db.js');
+        const allOrchExecutions = await db.getData('ORCHESTRATION_EXECUTIONS').catch(() => ({}));
+        
+        if (allOrchExecutions && typeof allOrchExecutions === 'object') {
+            for (const jobId in allOrchExecutions) {
+                const executions = allOrchExecutions[jobId] || [];
+                executions.forEach(execution => {
+                    if (execution.startTime) {
+                        const execDate = new Date(execution.startTime);
+                        if (execDate >= sevenDaysAgo && execDate <= today) {
+                            const formattedDate = moment.tz(execDate, serverConfig.server.timezone).format('YYYY-MM-DD');
+                            
+                            // Add runtime in seconds (from parent execution, not individual nodes)
+                            if (execution.startTime && execution.endTime) {
+                                const duration = (new Date(execution.endTime) - new Date(execution.startTime)) / 1000;
+                                runTimeSumPerDay[formattedDate] += duration;
+                            }
+                            
+                            // Count ONLY the parent execution result, not individual node results
+                            // This ensures each orchestration job execution counts as one success or failure
+                            if (execution.finalStatus === 'success') {
+                                successPerDay[formattedDate]++;
+                            } else if (execution.finalStatus === 'failure' || execution.finalStatus === 'error') {
+                                failPerDay[formattedDate]++;
+                            }
+                        }
+                    }
+                });
+            }
+        }
+    } catch (err) {
+        logger.debug(`Unable to include orchestration data in chart: ${err.message}`);
+        // Continue with regular history data if orchestration data can't be fetched
+    }
 
     // Convert runTimeSumPerDay object into an array of sums
     const runTimeSumArray = lastSevenDays.map(date => runTimeSumPerDay[date]);
@@ -240,7 +287,33 @@ function getSuccessPercentage(inJobName)
     return pct;
 }
 
-function getTodaysRun(){
+async function getOrchestrationSuccessPercentage(jobId)
+{
+    try {
+        // Get execution history for this orchestration job
+        const executions = await orchestration.getExecutionHistory(jobId);
+        
+        if (!executions || executions.length === 0) {
+            return '-';
+        }
+        
+        var successCount = 0;
+        for(var i = 0; i < executions.length; i++) {
+            if(executions[i].finalStatus === 'success') {
+                successCount++;
+            }
+        }
+        
+        var pct = (successCount / executions.length) * 100;
+        pct = Math.round(pct);
+        return pct;
+    } catch (err) {
+        logger.warn(`Error calculating orchestration success percentage for ${jobId}: ${err.message}`);
+        return '-';
+    }
+}
+
+async function getTodaysRun(){
     var today = new Date().toISOString();
     var todayStr = today.split("T")[0];
 
@@ -252,6 +325,12 @@ function getTodaysRun(){
     var manualFail=0;
     var items = getItemsUsingTZ();
     for (var i = items.length - 1; i >= 0; i--) {
+        // Skip orchestration node items - we only count regular jobs and orchestration parent executions
+        // Pattern: "Orchestration [jobId] Execution [executionId] Node [nodeId]"
+        if (items[i].jobName && items[i].jobName.match(/^Orchestration\s+\[.+?\]\s+Execution\s+\[.+?\]\s+Node\s+\[.+?\]/)) {
+            continue; // Skip orchestration nodes
+        }
+
         var runDate = items[i].runDate;
         var runDateStr = runDate.split("T")[0];
 
@@ -269,6 +348,36 @@ function getTodaysRun(){
             }
         }
     }
+
+    // Also include today's orchestration parent execution results
+    try {
+        const allOrchExecutions = await db.getData('ORCHESTRATION_EXECUTIONS').catch(() => ({}));
+        if (allOrchExecutions && typeof allOrchExecutions === 'object') {
+            for (const jobId in allOrchExecutions) {
+                const executions = allOrchExecutions[jobId] || [];
+                executions.forEach(execution => {
+                    if (execution.startTime) {
+                        const execDate = new Date(execution.startTime);
+                        const execDateStr = execDate.toISOString().split("T")[0];
+                        
+                        // Count this execution if it ran today
+                        if (execDateStr === todayStr) {
+                            if (execution.finalStatus === 'success') {
+                                count++;
+                                schedCount++; // Orchestrations are scheduled, not manual
+                            } else if (execution.finalStatus === 'failure' || execution.finalStatus === 'error') {
+                                fail++;
+                                schedFail++;
+                            }
+                        }
+                    }
+                });
+            }
+        }
+    } catch (err) {
+        logger.debug(`Unable to include today's orchestration data in run count: ${err.message}`);
+    }
+
     var result = {};
     result.success=count;
     result.manualCount=manualCount;
@@ -279,4 +388,150 @@ function getTodaysRun(){
     return result;
 }
 
-module.exports = { init, add, getItems, getItemsUsingTZ, getItem, searchItemWithName, createHistoryItem,getChartDataSet,getAverageRuntime, getLastRun,getSuccessPercentage, getTodaysRun };
+/**
+ * Group orchestration node executions under their parent orchestration job
+ * Returns a mixed array of regular history items and grouped orchestration items
+ * Fetches orchestration names from the database for display
+ */
+async function getItemsGroupedByOrchestration() {
+    const items = getItemsUsingTZ();
+    const grouped = [];
+    const orchestrationMap = new Map(); // Map of "${jobId}#${executionId}" -> {parent, nodes}
+    const regularItems = [];
+
+    // Fetch all orchestrations to get their names and descriptions
+    let orchestrationNames = {};
+    let orchestrationDescriptions = {};
+    try {
+        const allOrchestrations = await db.getData('ORCHESTRATION_JOBS');
+        if (allOrchestrations) {
+            for (const [jobId, jobData] of Object.entries(allOrchestrations)) {
+                orchestrationNames[jobId] = jobData.name || `Orchestration [${jobId}]`;
+                orchestrationDescriptions[jobId] = jobData.description || '';
+            }
+        }
+    } catch (err) {
+        logger.debug('Unable to fetch orchestration names: ' + err.message);
+        // Continue without names if database fetch fails
+    }
+
+    // Separate orchestration nodes from regular items
+    for (const item of items) {
+        // Pattern: "Orchestration [jobId] Execution [executionId] Node [nodeId]"
+        const orchestrationMatch = item.jobName.match(/^Orchestration \[([^\]]+)\] Execution \[([^\]]+)\] Node \[([^\]]+)\]$/);
+        
+        if (orchestrationMatch) {
+            const jobId = orchestrationMatch[1];
+            const executionId = orchestrationMatch[2];
+            const nodeId = orchestrationMatch[3];
+            
+            // Use composite key to distinguish multiple executions of the same job
+            const mapKey = `${jobId}#${executionId}`;
+            
+            if (!orchestrationMap.has(mapKey)) {
+                // Get the orchestration display name and description
+                const displayName = orchestrationNames[jobId] || `Orchestration [${jobId}]`;
+                const displayDesc = orchestrationDescriptions[jobId] || '';
+                
+                orchestrationMap.set(mapKey, {
+                    parent: {
+                        jobName: displayName,
+                        description: displayDesc,
+                        jobId: jobId,
+                        executionId: item.executionId,
+                        runDate: item.runDate,
+                        isOrchestration: true,
+                        icon: 'hub',
+                        color: '#2196F3',
+                        children: []
+                    },
+                    nodeMap: new Map()
+                });
+            }
+            
+            const orchData = orchestrationMap.get(mapKey);
+            orchData.nodeMap.set(nodeId, item);
+        } else {
+            regularItems.push(item);
+        }
+    }
+
+    // Merge and sort: newest first
+    // Orchestration items should group by latest execution date
+    // Get orchestration executions to use finalStatus for parent status
+    let orchestrationExecutions = {};
+    try {
+      orchestrationExecutions = await db.getData('ORCHESTRATION_EXECUTIONS');
+    } catch (err) {
+      logger.debug('Unable to fetch orchestration executions for grouping: ' + err.message);
+    }
+
+    const orchestrationItems = Array.from(orchestrationMap.values()).map(data => {
+        const nodeItems = Array.from(data.nodeMap.values());
+        data.parent.children = nodeItems;
+        
+        // Update parent runDate to be the latest among its children
+        if (nodeItems.length > 0) {
+            const latestNode = nodeItems.reduce((latest, current) => 
+                new Date(current.runDate) > new Date(latest.runDate) ? current : latest
+            );
+            data.parent.runDate = latestNode.runDate;
+            
+            // Use finalStatus from ORCHESTRATION_EXECUTIONS if available
+            const jobId = data.parent.jobId;
+            const executionId = data.parent.executionId;
+            let returnCode = 0; // default to success
+            let manual = false; // default to scheduled
+            
+            if (orchestrationExecutions[jobId]) {
+              // Find the execution with matching executionId
+              const execution = orchestrationExecutions[jobId].find(exec => exec.executionId === executionId);
+              if (execution && execution.finalStatus) {
+                // Use finalStatus: 0 for success, 1 for failure/error
+                returnCode = (execution.finalStatus === 'success') ? 0 : 1;
+                // Use manual flag from execution
+                manual = execution.manual || false;
+              } else {
+                // Fallback: calculate from children if execution not found
+                returnCode = nodeItems.some(n => n.returnCode !== 0) ? 1 : 0;
+              }
+            } else {
+              // Fallback: calculate from children if executions not available
+              returnCode = nodeItems.some(n => n.returnCode !== 0) ? 1 : 0;
+            }
+            
+            data.parent.returnCode = returnCode;
+            data.parent.manual = manual;
+        }
+        
+        return data.parent;
+    });
+
+    // Interleave orchestration and regular items, sorted by date (newest first)
+    const allItems = [...regularItems, ...orchestrationItems];
+    allItems.sort((a, b) => {
+        const dateA = new Date(a.runDate);
+        const dateB = new Date(b.runDate);
+        return dateB - dateA; // Newest first
+    });
+
+    return allItems;
+}
+
+/**
+ * Clear all history items from the database
+ * @returns {Promise<void>}
+ */
+async function clearHistory() {
+    try {
+        logger.info("Clearing all history items");
+        historyItems = [];
+        await db.putData(DBKEY, historyItems);
+        logger.info("History cleared successfully");
+    } catch (err) {
+        logger.error("Error clearing history: " + err.message);
+        throw err;
+    }
+}
+
+module.exports = { init, add, getItems, getItemsUsingTZ, getItem, searchItemWithName, createHistoryItem,getChartDataSet,getAverageRuntime, getLastRun,getSuccessPercentage, getOrchestrationSuccessPercentage, getTodaysRun, getItemsGroupedByOrchestration, clearHistory };

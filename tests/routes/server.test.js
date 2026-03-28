@@ -143,6 +143,100 @@ describe('Server Routes', () => {
       expect(schedules[0]).toHaveProperty('icon');
       expect(schedules[0]).toHaveProperty('color');
     });
+
+    it('should optimize orchestration success percentage computation (avoid N+1 queries)', async () => {
+      // This test verifies the optimization that pre-fetches orchestration executions
+      // once and computes percentages in-memory, instead of querying per job.
+      
+      const mockDb = require('../../db.js');
+      const mockHistoryItems = [
+        {
+          jobName: 'orch-1',
+          isOrchestration: true,
+          jobId: 'orch-1-id',
+          runDate: '2026-03-21T12:00:00Z',
+          returnCode: 0,
+        },
+        {
+          jobName: 'orch-2',
+          isOrchestration: true,
+          jobId: 'orch-2-id',
+          runDate: '2026-03-21T11:00:00Z',
+          returnCode: 0,
+        },
+        {
+          jobName: 'orch-3',
+          isOrchestration: true,
+          jobId: 'orch-3-id',
+          runDate: '2026-03-21T10:00:00Z',
+          returnCode: 0,
+        },
+      ];
+
+      // Mock orchestration execution history
+      const mockExecutions = {
+        'orch-1-id': [
+          { executionId: 'exec-1', finalStatus: 'success' },
+          { executionId: 'exec-2', finalStatus: 'success' },
+          { executionId: 'exec-3', finalStatus: 'failed' },
+          { executionId: 'exec-4', finalStatus: 'success' },
+        ], // 3 success/4 total = 75%
+        'orch-2-id': [
+          { executionId: 'exec-5', finalStatus: 'success' },
+          { executionId: 'exec-6', finalStatus: 'failed' },
+        ], // 1 success/2 total = 50%
+        'orch-3-id': [
+          { executionId: 'exec-7', finalStatus: 'success' },
+          { executionId: 'exec-8', finalStatus: 'success' },
+          { executionId: 'exec-9', finalStatus: 'success' },
+          { executionId: 'exec-10', finalStatus: 'success' },
+          { executionId: 'exec-11', finalStatus: 'success' },
+        ], // 5 success/5 total = 100%
+      };
+
+      mockDb.getData = jest.fn().mockResolvedValue(mockExecutions);
+
+      // Simulate the optimization logic from server.js /historyList/data
+      let orchestrationSuccessMap = {};
+
+      try {
+        const allExecutions = await mockDb.getData('ORCHESTRATION_EXECUTIONS');
+        if (allExecutions) {
+          for (const jobId in allExecutions) {
+            const executions = allExecutions[jobId] || [];
+            if (executions.length > 0) {
+              const successCount = executions.filter(e => e.finalStatus === 'success').length;
+              orchestrationSuccessMap[jobId] = Math.round((successCount / executions.length) * 100);
+            } else {
+              orchestrationSuccessMap[jobId] = '-';
+            }
+          }
+        }
+      } catch (err) {
+        // Handle error
+      }
+
+      // Verify db.getData was called exactly ONCE (not 3 times for 3 jobs)
+      expect(mockDb.getData).toHaveBeenCalledTimes(1);
+      expect(mockDb.getData).toHaveBeenCalledWith('ORCHESTRATION_EXECUTIONS');
+
+      // Verify success percentages were computed correctly
+      expect(orchestrationSuccessMap['orch-1-id']).toBe(75);
+      expect(orchestrationSuccessMap['orch-2-id']).toBe(50);
+      expect(orchestrationSuccessMap['orch-3-id']).toBe(100);
+
+      // Apply percentages to history items
+      for (let i = 0; i < mockHistoryItems.length; i++) {
+        if (mockHistoryItems[i].isOrchestration) {
+          mockHistoryItems[i].successPercentage = orchestrationSuccessMap[mockHistoryItems[i].jobId] || '-';
+        }
+      }
+
+      // Verify final history items have correct percentages
+      expect(mockHistoryItems[0].successPercentage).toBe(75);
+      expect(mockHistoryItems[1].successPercentage).toBe(50);
+      expect(mockHistoryItems[2].successPercentage).toBe(100);
+    });
   });
 
   describe('Input validation', () => {

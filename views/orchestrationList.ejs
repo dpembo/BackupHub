@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0"/>
+  
+  <title>BackupHub | Orchestrations</title>
+
+  <%- include('./partials/_head'); %>
+  <%- include('./partials/_scripts'); %>
+  
+  <script>
+    let orchestrations = {};
+    
+    // Helper function to escape HTML special characters
+    function escapeHtml(text) {
+      if (!text) return '';
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+    
+    // Helper function to escape single quotes for use in onclick attributes
+    function escapeQuotes(text) {
+      if (!text) return '';
+      return String(text).replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    }
+    
+    function loadOrchestrations() {
+      $.ajax({
+        url: '/rest/orchestration/jobs',
+        type: 'GET',
+        dataType: 'json',
+        success: function(data) {
+          orchestrations = data;
+          renderOrchestrations();
+        },
+        error: function(xhr, status, error) {
+          console.error('Failed to load orchestrations:', error);
+          M.toast({ html: 'Failed to load orchestrations' });
+        }
+      });
+    }
+    
+    function renderOrchestrations() {
+      const container = $('#orchestrationContainer');
+      container.empty();
+      
+      if (!orchestrations || Object.keys(orchestrations).length === 0) {
+        container.html(`
+          <div style="text-align: center; padding: 60px 20px; color: #999;">
+            <i class="material-icons" style="font-size: 64px; color: #ddd; display: block; margin-bottom: 20px;" title="Orchestration">schema</i>
+            <p>No orchestrations yet</p>
+            <a href="/orchestrationBuilder.html" class="btn waves-effect waves-light orange">
+              <i class="material-icons left">add</i>Create Orchestration
+            </a>
+          </div>
+        `);
+        return;
+      }
+      
+      let tableHtml = `
+        <table>
+          <tr>
+            <th><b class="sortableHeader">Type</b></th>
+            <th><b class="sortableHeader">Name</b></th>
+            <th><b class="sortableHeader">Description</b></th>
+            <th><b class="sortableHeader">Last Updated</b></th>
+            <th><b class="sortableHeader">Actions</b></th>
+          </tr>
+          <tbody>
+      `;
+      
+      Object.entries(orchestrations).forEach(([orchId, orch]) => {
+        const updatedDate = orch.updatedAt ? new Date(orch.updatedAt).toLocaleString() : 'N/A';
+        const description = escapeHtml(orch.description || 'No description');
+        const orchName = escapeHtml(orch.name);
+        const orchNameForOnclick = escapeQuotes(orch.name);
+        
+        tableHtml += `
+          <tr>
+            <td><span class="material-icons" style="color: #ff9800; font-size: 24pt;" title="Orchestration">schema</span></td>
+            <td>${orchName}</td>
+            <td><div style="max-width: 250px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${description}">${description}</div></td>
+            <td>${updatedDate}</td>
+            <td>
+              <a title="edit" href="/orchestrationBuilder.html?id=${encodeURIComponent(orchId)}"><i class="material-icons tableIconButton vertMid">edit</i></a>
+              <a title="delete" onclick="deleteOrchestration('${escapeQuotes(orchId)}', '${orchNameForOnclick}')"><i class="material-icons tableIconButton vertMid" style="cursor: pointer;">delete</i></a>
+              <a title="run" onclick="runOrchestration('${escapeQuotes(orchId)}')"><i class="material-icons tableIconButton vertMid" style="cursor: pointer;">play_circle</i></a>
+            </td>
+          </tr>
+        `;
+      });
+      
+      tableHtml += `
+          </tbody>
+        </table>
+      `;
+      
+      container.html(tableHtml);
+    }
+    
+    function deleteOrchestration(jobId, orchName) {
+      if (!confirm(`Delete orchestration "${orchName}"?`)) {
+        return;
+      }
+      
+      $.ajax({
+        url: `/rest/orchestration/jobs/${encodeURIComponent(jobId)}`,
+        type: 'DELETE',
+        headers: {
+          'X-CSRF-Token': '<%= csrfToken %>'
+        },
+        success: function() {
+          M.toast({ html: 'Orchestration deleted successfully' });
+          loadOrchestrations();
+        },
+        error: function(xhr, status, error) {
+          console.error('Failed to delete:', error);
+          M.toast({ html: 'Failed to delete orchestration' });
+        }
+      });
+    }
+
+    function runOrchestration(jobId) {
+      $.ajax({
+        url: `/rest/orchestration/jobs/${encodeURIComponent(jobId)}/execute`,
+        type: 'POST',
+        headers: {
+          'X-CSRF-Token': '<%= csrfToken %>'
+        },
+        success: function(data) {
+          if (data.success && data.executionId) {
+            window.location.href = `/orchestration/monitor.html?jobId=${encodeURIComponent(jobId)}&executionId=${encodeURIComponent(data.executionId)}`;
+          } else {
+            M.toast({ html: 'Failed to start orchestration execution' });
+          }
+        },
+        error: function(xhr, status, error) {
+          console.error('Failed to execute orchestration:', error);
+          M.toast({ html: 'Failed to execute orchestration' });
+        }
+      });
+    }
+    
+    $(document).ready(function() {
+      loadOrchestrations();
+    });
+  </script>
+</head>
+<body>
+  <%- include('./partials/_header'); %>
+  
+  <div class="section no-pad-bot" id="index-banner">
+    <div class="container wide-table">
+      <div class="row">
+        <div class="col s6">
+          <h5 class="header orange-text">Orchestrations</h5>
+        </div>
+        <div class="col s6" style="text-align: right; padding-top: 20px;">
+          <a class="tableIconButton" title="add" href="/orchestrationBuilder.html"><span class="material-icons vertTop">add</span></a>
+        </div>
+      </div>
+      
+      <div class="scheduleTable">
+        <div id="orchestrationContainer">
+          <div style="text-align: center; padding: 40px;">
+            <div class="preloader-wrapper small active">
+              <div class="spinner-layer spinner-orange-only">
+                <div class="circle-clipper left"><div class="circle"></div></div>
+                <div class="gap-patch"><div class="circle"></div></div>
+                <div class="circle-clipper right"><div class="circle"></div></div>
+              </div>
+            </div>
+            <p>Loading orchestrations...</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <%- include('./partials/_footer'); %>
+</body>
+</html>
