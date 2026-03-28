@@ -9,9 +9,11 @@ BackupHub is a lightweight yet powerful solution for managing and scheduling she
 
 - [Getting Started / Installation](installation.md)
 - [Backup Schedules](backup-schedules.md)
+- [Orchestrations](orchestrations.md)
 - [User Management](user-management.md)
 - [Configuration / Settings](settings-config.md)
 - [Developer Guide](developer-guide.md)
+- [REST API Reference](REST_API_REFERENCE.md)
 - [Screenshots & UI Reference](screens/)
 
 ---
@@ -20,11 +22,13 @@ BackupHub is a lightweight yet powerful solution for managing and scheduling she
 
 - **installation.md** — How to install and set up BackupHub (Docker & manual)
 - **backup-schedules.md** — Creating and managing backup schedules
+- **orchestrations.md** — Building complex workflows with visual orchestration builder
 - **user-management.md** — User setup, login, and password management
-- **settings-config.md** — Server and agent configuration options
+- **settings-config.md** — Server and agent configuration options, backup & restore
+- **REST_API_REFERENCE.md** — API endpoints for programmatic access
 - **screens/** — Visual reference for the UI and features
 
-For more advanced topics, troubleshooting, and contributing, see the [Developer Guide](developer-guide.md).
+For more advanced topics, troubleshooting, and contributing, see the [Developer Guide](Developers/developer-guide.md).
 
 ---
 

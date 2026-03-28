@@ -58,6 +58,10 @@ function getBackupItems() {
       name: 'Agent Connection History',
       description: 'Historical logs of agent connections',
     },
+    userAccounts: {
+      name: 'User Accounts',
+      description: 'All registered user accounts (passwords are bcrypt-hashed)',
+    },
   };
 }
 
@@ -71,6 +75,7 @@ function getBackupItems() {
  * @param {boolean} options.orchestrationJobs - Include orchestration jobs
  * @param {boolean} options.orchestrationExecutions - Include orchestration executions
  * @param {boolean} options.agentHistory - Include agent history
+ * @param {boolean} options.userAccounts - Include user accounts
  * @returns {Promise<Buffer>} - Zip file buffer
  */
 async function createBackup(options = {}) {
@@ -83,6 +88,7 @@ async function createBackup(options = {}) {
       orchestrationJobs = true,
       orchestrationExecutions = true,
       agentHistory = true,
+      userAccounts = true,
     } = options;
 
     logger.info('Starting backup process with options:', options);
@@ -116,6 +122,7 @@ async function createBackup(options = {}) {
           orchestrationJobs,
           orchestrationExecutions,
           agentHistory,
+          userAccounts,
         });
 
         // Finalize only after all files have been appended
@@ -240,6 +247,27 @@ async function addFilesToArchive(archive, options) {
       }
     }
 
+    // Add user accounts (with bcrypt-hashed passwords)
+    if (options.userAccounts) {
+      try {
+        const { Level } = require('level');
+        const userDb = new Level('./data/user.db', { valueEncoding: 'json' });
+        const users = [];
+        for await (const [username, userData] of userDb.iterator({})) {
+          users.push({ username, ...userData });
+        }
+        await userDb.close();
+        if (users.length > 0) {
+          archive.append(JSON.stringify(users, null, 2), {
+            name: `${backupDir}/user-accounts.json`,
+          });
+          logger.debug(`Added ${users.length} user accounts to backup`);
+        }
+      } catch (err) {
+        logger.debug('No user accounts found in database');
+      }
+    }
+
     // Add metadata
     const metadata = {
       backupVersion: '1.0',
@@ -253,6 +281,7 @@ async function addFilesToArchive(archive, options) {
         orchestrationJobs: options.orchestrationJobs,
         orchestrationExecutions: options.orchestrationExecutions,
         agentHistory: options.agentHistory,
+        userAccounts: options.userAccounts,
       },
     };
     archive.append(JSON.stringify(metadata, null, 2), {
@@ -395,6 +424,18 @@ async function restoreBackup(zipBuffer) {
       }
     }
 
+    // Restore user accounts
+    if (metadata.items?.userAccounts) {
+      const usersPath = path.join(backupPath, 'user-accounts.json');
+      if (fsSync.existsSync(usersPath)) {
+        await restoreUserAccounts(usersPath);
+        results.itemsRestored.push('User Accounts');
+        logger.info('User accounts restored');
+      } else {
+        results.warnings.push('User accounts not found in backup');
+      }
+    }
+
     logger.info('Backup restore completed successfully');
     return results;
   } catch (err) {
@@ -502,6 +543,36 @@ async function restoreAgentHistory(historyPath) {
 
   await agentHistoryDb.importAll(historyData);
   logger.info(`Restored ${historyData.length} agent history records`);
+}
+
+/**
+ * Restore user accounts
+ * @private
+ */
+async function restoreUserAccounts(usersPath) {
+  const content = await fs.readFile(usersPath, 'utf8');
+  const users = JSON.parse(content);
+
+  // Validate it's an array
+  if (!Array.isArray(users)) {
+    throw new AppError('Invalid user accounts format', 400);
+  }
+
+  // Restore each user to the user database
+  const { Level } = require('level');
+  const userDb = new Level('./data/user.db', { valueEncoding: 'json' });
+  
+  try {
+    for (const user of users) {
+      const { username, ...userData } = user;
+      if (username) {
+        await userDb.put(username, userData);
+      }
+    }
+    logger.info(`Restored ${users.length} user accounts`);
+  } finally {
+    await userDb.close();
+  }
 }
 
 /**
