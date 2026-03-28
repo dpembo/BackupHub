@@ -293,10 +293,16 @@ function displaySecs(secs) {
             <td><span class="material-icons vertMid" style="color:<%=historyList[i].color%>;font-size:24pt"><%=historyList[i].icon%></span></td>
             <td>
               <% if(itemInternal==true){%>
-                <%=historyList[i].jobName.substr(historyList[i].jobName.lastIndexOf("||")+2)%>
+                <strong><%=historyList[i].jobName.substr(historyList[i].jobName.lastIndexOf("||")+2)%></strong>
               <% } else {%> 
-                <%=historyList[i].jobName%>
+                <strong><%=historyList[i].jobName%></strong>
               <% }%>
+              <br/>
+              <% if (historyList[i].description) { %>
+                <span style="font-size: 0.85em; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; max-width: 300px;" title="<%=historyList[i].description%>"><%=historyList[i].description%></span>
+              <% } else { %>
+                <span style="font-size: 0.85em; color: #999; font-style: italic;">No Description</span>
+              <% } %>
             </td>
             <td>
               <% var runType="schedule"; var runDesc="Scheduled Execution";%>
@@ -317,7 +323,7 @@ function displaySecs(secs) {
                 runType="disc_full";runDesc="Mount Threshold Exceeded";
               }
               %>
-              <span title="<%=runDesc%>" class="material-icons"><%=runType%></span><i><%=icons%> <%=runType%></i>
+              <span title="<%=runDesc%>" class="material-icons"><%=runType%></span>
 
             </td>
             <% 

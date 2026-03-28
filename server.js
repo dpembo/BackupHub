@@ -1339,6 +1339,7 @@ app.get('/historyList/data',User.isAuthenticated, async (req, res) => {
       if(workJob == schedules[y].jobName){
         item.icon=schedules[y].icon;
         item.color=schedules[y].color;
+        item.description=schedules[y].description;
         break;
       }
     }
