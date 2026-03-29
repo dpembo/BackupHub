@@ -377,7 +377,7 @@ function displaySecs(secs) {
               <% if(!deleted){%><a title="Edit Job" href="/scheduler.html?jobname=<%=historyList[i].jobName%>&redir=<%=encodeURIComponent('/history.html')%>"><i class="material-icons <%=logclass%> vertTop">edit</i></a><%}%>
               <% if(!deleted){%><a title="Re-run Job" href="/runSchedule.html?jobname=<%=historyList[i].jobName%>&redir=<%=encodeURIComponent('/history.html')%>"><i class="material-icons <%=logclass%> vertTop">play_circle</i></a><%}%>
               <% } else { %> 
-                <% if(!deleted){%><a title="Internal Job"><i class="material-icons <%=logclass%> vertTop">blocked</a>
+                <% if(!deleted){%><a title="Internal Job"><i class="material-icons <%=logclass%> vertTop" style="display:inline; position:absolute">blocked</a>
                 <% } else {%>
                   <a title="Deleted Job"><i class="material-icons deletedIcons vertTop">blocked</a>
                 <%}%>
