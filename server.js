@@ -1585,10 +1585,15 @@ app.get('/rest/script/:script', User.isAuthenticated, (req, res) => {
 app.get('/delete-schedule.html',User.isAuthenticated, (req, res) => {
   logger.warn("Deleting Schedule*******************");
   var jobName=req.query.jobName;
+  var redir=req.query.redir;
   logger.info("Deleting Schedule with jobName: " + jobName);
   scheduler.deleteSchedule(jobName);
   logger.debug("schedule deleted");
-  res.redirect("/scheduleList.html?message=Deleted+schedule: " + jobName);
+  if(redir!==undefined && redir!==null) {
+    res.redirect(redir + (redir.includes('?') ? '&' : '?') + "message=Deleted+schedule: " + jobName);
+  } else {
+    res.redirect("/scheduleList.html?message=Deleted+schedule: " + jobName);
+  }
 });
 
 

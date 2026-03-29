@@ -104,6 +104,7 @@
         document.getElementById('schedule-lastrun').innerHTML="Historical execution not found";
         document.getElementById('schedule-lastrunduration').innerHTML="-";
         document.getElementById('schedule-jobstarted').innerHTML="-";
+        document.getElementById('schedule-jobstarttime').innerHTML="-";
         document.getElementById('schedule-log').innerHTML="Historical execution record not found in history database";
         var statusElem = document.getElementById('cardStatusIndicatorScheduleInfo');
         statusElem.innerHTML="error";
@@ -122,6 +123,7 @@
           document.getElementById('schedule-lastrun').innerHTML=inData.hist.histLastRun.runDate.replace("T", " ").split('.')[0];
           document.getElementById('schedule-lastrunduration').innerHTML=displaySecs(inData.hist.histLastRun.runTime);
           document.getElementById('schedule-jobstarted').innerHTML="(Historical)";
+          document.getElementById('schedule-jobstarttime').innerHTML=inData.hist.histLastRun.runDate.replace("T", " ").split('.')[0];
           document.getElementById('schedule-log').innerHTML=inData.hist.histLastRun.log || "No log data";
         }
         var statusElem = document.getElementById('cardStatusIndicatorScheduleInfo');
@@ -159,9 +161,12 @@
       
       document.getElementById('schedule-averageduration').innerHTML=inData.hist.histAvgRuntimeSecs;
       if (inData.agent.jobStarted) {
-        document.getElementById('schedule-jobstarted').innerHTML=inData.agent.jobStarted.replace('T',' ').split('.')[0];
+        const formattedStartTime = inData.agent.jobStarted.replace('T',' ').split('.')[0];
+        document.getElementById('schedule-jobstarted').innerHTML=formattedStartTime;
+        document.getElementById('schedule-jobstarttime').innerHTML=formattedStartTime;
       } else {
         document.getElementById('schedule-jobstarted').innerHTML="-";
+        document.getElementById('schedule-jobstarttime').innerHTML="-";
       }
       
       var statusElem = document.getElementById('cardStatusIndicatorScheduleInfo');
@@ -385,11 +390,11 @@
                 <div class="row">
                 <div class="col s4">
                   <p id="schedule-desc">-</p>
-                  <p>&nbsp;</p>
                   <p><span class="headerInRow">Assigned Agent:</span><span id="schedule-agent"class="itemInRow">-</span></p>
                   <p><span class="headerInRow">Agent Status:</span><span id="schedule-agentstatus" class="itemInRow">-</span></p>
                   <p><span class="headerInRow">Last Run: </span><span id="schedule-lastrun" class="itemInRow">-</span></p>
                   <p><span class="headerInRow">Last Run Duration: </span><span id="schedule-lastrunduration"class="itemInRow">-</span></p>
+                  <p><span class="headerInRow">Job Started: </span><span id="schedule-jobstarttime" class="itemInRow">-</span></p>
                   <p><span class="headerInRow">Average Duration: </span><span id="schedule-averageduration" class="itemInRow">-</span></p>
                   <div id="jobInProgressDiv">
                     <p id="jobInProgressP"><span class="headerInRow">Job in Progress: </span><span id="schedule-jobstarted" class="itemInRow">-</span></p>

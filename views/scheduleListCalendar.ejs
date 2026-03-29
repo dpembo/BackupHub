@@ -206,6 +206,7 @@ function datesMatch(d1,d2){
           document.getElementById('cloneBtn').href="/scheduler.html?copyIndex=" + index + "&redir=" + document.location.href;
           document.getElementById('statusBtn').href="scheduleInfo.html?index=" + index + "&redir=" + document.location.href;
           document.getElementById('runBtn').href="runSchedule.html?index=" + index;
+          document.getElementById('deleteBtn').onclick = function() { openDeleteModal(name); };
           //alert(colour);
           html = '<h4>';
           html += '<span class="mdi vertMid ' + icon + ' mdisize" style="color:' + colour + ';font-size:24pt;"></span>&nbsp;'
@@ -297,12 +298,35 @@ function datesMatch(d1,d2){
 
         }
 
+        function openDeleteModal(jobName) {
+          document.getElementById('inJobName').innerHTML = jobName;
+          var elem = document.getElementById('confirmationModal');
+          var instance = M.Modal.getInstance(elem);
+          instance.open();
+        }
+
+        function doDelete() {
+          var jobName = document.getElementById('inJobName').innerHTML;
+          document.location.replace("/delete-schedule.html?jobName=" + jobName + "&redir=" + encodeURIComponent(document.location.href));
+        }
+
       </script>
 
 </head>
 
 <body onload="scrollTodayIntoView()">
   <%- include('./partials/_header'); %>
+    <!-- Confirmation Modal -->
+  <div id="confirmationModal" class="modal">
+    <div class="modal-content">
+      <h4>Delete Schedule Job?</h4>
+      <p>Are you sure you want to Delete the Scheduled Job<br><br><b>Job Name: </b><span id='inJobName'></span></p>
+    </div>
+    <div class="modal-footer">
+      <a href="#!" class="modal-close waves-effect waves-green btn-flat">Cancel</a>
+      <a href="#" onclick="doDelete()" id="confirmButton" class="modal-close waves-effect waves-green btn-flat">OK</a>
+    </div>
+  </div>
     <!-- Modal Structure -->
   <div id="modal" class="modal modal-fixed-footer">
     <div class="modal-content" id="modalContent">
@@ -314,6 +338,7 @@ function datesMatch(d1,d2){
       <a id="statusBtn" href="#!" class="waves-effect waves-green btn-flat orange-text">Last Run Info</a>
       <a id="editBtn" href="#!" class="waves-effect waves-green btn-flat orange-text">Edit</a>
       <a id="cloneBtn" href="#!" class="waves-effect waves-green btn-flat orange-text">Clone</a>
+      <a id="deleteBtn" href="#" class="waves-effect waves-red btn-flat red-text">Delete</a>
       <a href="#!" class="modal-close waves-effect waves-green btn-flat brown-text">Close</a>
     </div>
   </div>

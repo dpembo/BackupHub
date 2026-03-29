@@ -1,5 +1,16 @@
 <script src="/js/utils.js"></script>
 
+<style>
+  .active-nav-link {
+    background-color: rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+  }
+  
+  .active-nav-link .material-icons {
+    color: #ffffff !important;
+  }
+</style>
+
 <nav class="headerColor" role="navigation">
   <div class="nav-wrapper container">
     <a id="logo-container" href="/" class="brand-logo">
@@ -65,6 +76,24 @@
   <%- include('_theme'); %>
 </nav>
 
+<script>
+  // Highlight the current page in the navigation
+  document.addEventListener('DOMContentLoaded', function() {
+    const currentPath = window.location.pathname;
+    
+    // Get all nav links (both desktop and mobile)
+    const navLinks = document.querySelectorAll('ul.right a[href], ul#nav-mobile a[href]');
+    
+    navLinks.forEach(link => {
+      const href = link.getAttribute('href');
+      
+      // Check if the current path matches the link href
+      if (currentPath === href || currentPath.startsWith(href.replace('.html', ''))) {
+        link.classList.add('active-nav-link');
+      }
+    });
+  });
+</script>
 
 <div id="notificationPanelWrapper" class="panel-wrapper">
   <div class="content-panel">
