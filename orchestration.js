@@ -94,6 +94,8 @@ async function getJobVersion(jobId, version = 'current') {
       name: job.name,
       description: job.description,
       type: job.type,
+      icon: job.icon || 'schema',
+      color: job.color || '#000000',
       nodes: versionData.nodes || [],
       edges: versionData.edges || [],
       createdAt: job.createdAt,
@@ -120,6 +122,8 @@ function getJobWithVersion(job) {
     name: job.name,
     description: job.description,
     type: job.type,
+    icon: job.icon || 'schema',
+    color: job.color || '#000000',
     nodes: currentVersionData.nodes || [],
     edges: currentVersionData.edges || [],
     createdAt: job.createdAt,
@@ -152,6 +156,8 @@ async function saveJob(jobId, jobDefinition) {
         id: jobId,
         name: jobDefinition.name,
         description: jobDefinition.description || '',
+        icon: jobDefinition.icon || 'schema',
+        color: jobDefinition.color || '#000000',
         type: 'orchestration',
         createdAt: now,
         updatedAt: now,
@@ -192,9 +198,11 @@ async function saveJob(jobId, jobDefinition) {
         job.currentVersion = newVersion;
       }
       
-      // Update metadata
+      // Update metadata (icon and color don't create new versions)
       job.name = jobDefinition.name;
       job.description = jobDefinition.description || '';
+      job.icon = jobDefinition.icon || job.icon || 'schema';
+      job.color = jobDefinition.color || job.color || '#000000';
       job.updatedAt = now;
     }
     

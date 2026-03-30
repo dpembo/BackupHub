@@ -2591,7 +2591,7 @@ app.get('/rest/orchestration/jobs/:jobId', User.isAuthenticated, asyncHandler(as
  * Create or update an orchestration job
  */
 app.post('/rest/orchestration/jobs', User.isAuthenticated, asyncHandler(async (req, res) => {
-  const { jobId, name, description, nodes, edges } = req.body;
+  const { jobId, name, description, nodes, edges, icon, color } = req.body;
   
   if (!jobId || !name) {
     return res.status(400).json({ error: 'Job ID and name are required' });
@@ -2601,7 +2601,9 @@ app.post('/rest/orchestration/jobs', User.isAuthenticated, asyncHandler(async (r
     name,
     description,
     nodes,
-    edges
+    edges,
+    icon,
+    color
   });
   
   res.json({ success: true, job });
@@ -2611,14 +2613,16 @@ app.post('/rest/orchestration/jobs', User.isAuthenticated, asyncHandler(async (r
  * Update an existing orchestration job
  */
 app.put('/rest/orchestration/jobs/:jobId', User.isAuthenticated, asyncHandler(async (req, res) => {
-  const { name, description, nodes, edges } = req.body;
+  const { name, description, nodes, edges, icon, color } = req.body;
   const { jobId } = req.params;
   
   const job = await orchestration.saveJob(jobId, {
     name,
     description,
     nodes,
-    edges
+    edges,
+    icon,
+    color
   });
   
   res.json({ success: true, job });
@@ -2753,6 +2757,33 @@ app.get('/rest/orchestration/agents', User.isAuthenticated, asyncHandler(async (
     version: agent.version || ''
   }));
   res.json(agentList);
+}));
+
+/**
+ * Get orchestration metadata (name, description, icon, color) without full definition
+ */
+app.get('/rest/orchestration/jobs/:jobId/metadata', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const job = await orchestration.getJob(req.params.jobId);
+  res.json({
+    id: job.id,
+    name: job.name,
+    description: job.description,
+    icon: job.icon || 'schema',
+    color: job.color || '#000000',
+    type: job.type,
+    createdAt: job.createdAt,
+    updatedAt: job.updatedAt,
+    currentVersion: job.currentVersion,
+    totalVersions: job.totalVersions
+  });
+}));
+
+/**
+ * Get a specific version of an orchestration job
+ */
+app.get('/rest/orchestration/jobs/:jobId/versions/:version', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const job = await orchestration.getJobVersion(req.params.jobId, req.params.version);
+  res.json(job);
 }));
 
 /**
