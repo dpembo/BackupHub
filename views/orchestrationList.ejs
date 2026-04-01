@@ -79,9 +79,13 @@
         
         tableHtml += `
           <tr>
-            <td><span class="material-icons" style="color: #ff9800; font-size: 24pt;" title="Orchestration">schema</span></td>
+            <td>
+              <span class="material-icons" style="color: ${orch.color || '#000000'}; font-size: 24pt;" title="Orchestration">${orch.icon || 'schema'}</span>`;
+        if(orch.icon){ tableHtml+='<span class="material-icons icon-indicator" style="color: #000000; font-size: 14pt;" title="Orchestration">schema</span>';}
+        tableHtml +=`
+            </td>
             <td>${orchName}</td>
-            <td><div style="max-width: 250px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${description}">${description}</div></td>
+            <td>${description}</td>
             <td>${updatedDate}</td>
             <td>
               <a title="edit" href="/orchestrationBuilder.html?id=${encodeURIComponent(orchId)}"><i class="material-icons tableIconButton vertMid">edit</i></a>

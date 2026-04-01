@@ -1,4 +1,13 @@
-<!DOCTYPE html>
+<%
+var orchestrationIcon;
+function isSelected(inValue,compareValue){
+  if(compareValue===undefined||compareValue==null)return"";
+  if(inValue==compareValue){
+    return " selected ";
+  }
+  else return "";
+}
+%><!DOCTYPE html>
 <html lang="en">
 <head>
   <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
@@ -37,6 +46,69 @@
     .palette-item { padding: 10px; margin-bottom: 8px; background: #f9f9f9; border: 1px solid #e0e0e0; border-radius: 4px; cursor: move; user-select: none; display: flex; align-items: center; gap: 8px; font-size: 13px; transition: all 0.2s; }
     .palette-item:hover { background: #f0f0f0; border-color: #ff9800; }
     .palette-item i { font-size: 16px; }
+    .palette-item[data-node-type="start"],
+    .palette-item[data-node-type="end-success"],
+    .palette-item[data-node-type="end-failure"] {
+      width: 44px;
+      height: 44px;
+      padding: 0;
+      margin-bottom: 8px;
+      border-radius: 50%;
+      justify-content: center;
+      gap: 0;
+      flex-direction: column;
+    }
+    .palette-item[data-node-type="condition"] {
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      margin-bottom: 8px;
+      border-radius: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 0;
+      flex-direction: column;
+      border-color: #e0e0e0;
+      transform: rotate(45deg);
+      line-height: 1.2;
+    }
+    .palette-item[data-node-type="condition"] i {
+      font-size: 12px;
+      margin: 0;
+      line-height: 1;
+      display: block;
+    }
+    .palette-item[data-node-type="condition"] span {
+      font-size: 8px;
+      margin: 0;
+      text-align: center;
+      width: 100%;
+      line-height: 1;
+      display: block;
+    }
+    .palette-item[data-node-type="start"] i,
+    .palette-item[data-node-type="end-success"] i,
+    .palette-item[data-node-type="end-failure"] i {
+      font-size: 14px;
+      margin: 0;
+    }
+    .palette-item[data-node-type="start"] span,
+    .palette-item[data-node-type="end-success"] span,
+    .palette-item[data-node-type="end-failure"] span {
+      font-size: 7px;
+      margin-top: 1px;
+      text-align: center;
+      width: 100%;
+    }
+    .end-nodes-container {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-start;
+    }
+    .end-nodes-container .palette-item {
+      flex: 0 0 44px;
+    }
     .palette-section { margin-bottom: 20px; }
     .palette-section h4 { margin: 5px 0 10px 0; font-size: 12px; color: #666; text-transform: uppercase; font-weight: 600; }
     #orchestration-footer { background: #f5f5f5; padding: 15px 20px; border-top: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
@@ -85,7 +157,26 @@
       transform: scale(1.2);
     }
 
+    .sp-replacer{
+      position: relative;
+      left: 80px;
+      top: -50px;
+    }
+
   </style>
+  <link rel="stylesheet" href="/css/spectrum/spectrum.min.css">
+  <script src="/js/spectrum/spectrum.min.js"></script>
+  <script>
+    function updateIconPreview(selectItem)
+    {
+      //alert("update preview");
+      document.getElementById("orch-icon-element").innerText =  selectItem.value;
+      document.getElementById("orch-icon-input").value = selectItem.value;
+    }
+
+    var savedColor = "<%=color%>";
+    var savedIcon = "<%=icon%>";
+  </script>
   
 </head>
 <body>
@@ -95,9 +186,39 @@
     <div id="orchestration-header">
       
       <h3 style="margin: 0; display: flex; align-items: center; gap: 15px;">
-        <i class="material-icons">schema</i>
+        <div style="display: flex; align-items: center; gap: 5px; cursor: pointer;" id="orch-icon-display" title="Click to edit orchestration icon and color" >
+          <i id="orch-icon-element" class="material-icons" style="color: #FF9800; font-size: 24px;" onclick="toggleIconEdit()"><%=icon%></i>
+          <i id="orch-icon-indicator" class="material-icons" style="color: #000000; font-size:14px; position: relative; left: -14px; top: 11px;" onclick="toggleIconEdit()">schema</i>
+
+          <div id="orch-icon-edit" style="display: none; background: white; border: 1px solid #ddd; border-radius: 4px; padding: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); min-width: 280px;">
+            <label style="font-size: 11px; color: #999; text-transform: uppercase; display: block; margin-bottom: 4px;">Icon Name</label>
+            <input type="hidden" id="orch-icon-input" placeholder="e.g., schema, backup, settings..." style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 3px; box-sizing: border-box; margin-bottom: 10px;">
+            <select id="icon_select" name="icon" onchange="updateIconPreview(this);">
+                <option value="" disabled>Select Icon</option>
+
+
+                <% for(iconCount=0;iconCount<icons.length;iconCount++){%>
+                
+                  <option data-icon="<%=icons[iconCount]%>" value="<%=icons[iconCount]%>" <%=isSelected(icons[iconCount],icon)%>><%=icons[iconCount]%></option>
+
+                <%
+                }
+                %>
+              </select>
+            <label style="font-size: 11px; color: #999; text-transform: uppercase; display: block; margin-bottom: 4px;">Colour (hex code)</label>
+            <input type="hidden" id="orch-color-input" placeholder="#FF9800" style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 3px; box-sizing: border-box; margin-bottom: 10px;">
+            <input onchange="setPickerColor(this.value);" type="text" value="<%=color%>" id="colour" name="colour" required>
+            <span class="helper-text" data-error="Please provide a colour (e.g. #000000)"></span>
+            <input type="text" id="picker" name="picker" value="<%=color%>" onchange="document.getElementById('colour').value=this.value;document.getElementById('orch-color-input').value=this.value;">
+            
+            <div class="orch-edit-buttons" style="gap: 4px;">
+              <button onclick="saveIconEdit()" style="background: #4caf50; color: white; border: none; padding: 6px 12px; border-radius: 3px; cursor: pointer; font-size: 11px; flex: 1;">Save</button>
+              <button onclick="cancelIconEdit()" style="background: #999; color: white; border: none; padding: 6px 12px; border-radius: 3px; cursor: pointer; font-size: 11px; flex: 1;">Cancel</button>
+            </div>
+          </div>
+        </div>
         <div id="orch-name-display" title="Click to edit orchestration name">
-          <span id="orch-name-text">Branded Orchestration Builder</span>
+          <span id="orch-name-text">Orchestration</span>
           <span id="orch-desc-text" title="Orchestration description">No Description</span>
         </div>
         <div id="orch-name-edit">
@@ -153,20 +274,22 @@
         <div class="palette-section">
           <h4>Logic</h4>
           <div class="palette-item" draggable="true" data-node-type="condition">
-            <i class="material-icons">device_hub</i>
-            <span>Condition</span>
+            <i class="material-icons" style="transform: rotate(-45deg); font-size: 12px;margin-right:6px">call_split</i>
+            <span style="transform: rotate(-45deg); font-size: 8px; font-weight: bold; margin-top: -2px;margin-left:10px;">if</span>
           </div>
         </div>
         
         <div class="palette-section">
           <h4>End Nodes</h4>
-          <div class="palette-item" draggable="true" data-node-type="end-success">
-            <i class="material-icons" style="color: #4caf50;">check_circle</i>
-            <span>Success</span>
-          </div>
-          <div class="palette-item" draggable="true" data-node-type="end-failure">
-            <i class="material-icons" style="color: #f44336;">error</i>
-            <span>Failure</span>
+          <div class="end-nodes-container">
+            <div class="palette-item" draggable="true" data-node-type="end-success">
+              <i class="material-icons" style="color: #4caf50;">check_circle</i>
+              <span>Success</span>
+            </div>
+            <div class="palette-item" draggable="true" data-node-type="end-failure">
+              <i class="material-icons" style="color: #f44336;">error</i>
+              <span>Failure</span>
+            </div>
           </div>
         </div>
         <div id="orchestration-counts"><hr>
@@ -298,8 +421,7 @@
   
   <!-- List Schedules Modal -->
   <div id="schedules-list-modal" class="modal" style="max-height: 90vh; max-width: 800px; width: 90%;">
-    <div class="modal-content" style="max-height: 75vh; overflow-y: auto; position: relative;">
-      <button class="modal-close" style="position: absolute; top: 10px; right: 10px; background: none; border: none; cursor: pointer; color: #999; font-size: 28px; padding: 0; line-height: 1;">&times;</button>
+    <div class="modal-content" style="max-height: 75vh; overflow-y: auto;">
       <h4><i class="material-icons" style="vertical-align: middle; margin-right: 10px;">list</i>Schedules Using This Orchestration</h4>
       <div id="schedules-list-container">
         <p style="text-align: center; color: #999;">Loading schedules...</p>
@@ -338,6 +460,8 @@
     let availableAgents = [];
     let orchestrationName = '';
     let orchestrationDescription = '';
+    let orchestrationIcon = savedIcon;
+    let orchestrationColor = savedColor;
     let pendingSave = false;
     
     // Data structures
@@ -368,6 +492,8 @@
       }
       setupDragAndDrop();
       setupZoomControls();
+      // Initialize color picker for both new and existing orchestrations
+      setColorPicker(savedColor);
       // Setup name display click handler
       document.getElementById('orch-name-display').addEventListener('click', enterNameEditMode);
       
@@ -424,6 +550,46 @@
         item.addEventListener('dragstart', function(e) {
           e.dataTransfer.effectAllowed = 'move';
           e.dataTransfer.setData('nodeType', this.dataset.nodeType);
+          
+          // Create custom drag image for condition nodes to show diamond shape
+          if (this.dataset.nodeType === 'condition') {
+            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svg.setAttribute('width', '40');
+            svg.setAttribute('height', '40');
+            svg.setAttribute('viewBox', '0 0 40 40');
+            
+            const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+            polygon.setAttribute('points', '20,0 40,20 20,40 0,20');
+            polygon.setAttribute('fill', '#f9f9f9');
+            polygon.setAttribute('stroke', '#e0e0e0');
+            polygon.setAttribute('stroke-width', '1');
+            
+            const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            text.setAttribute('x', '20');
+            text.setAttribute('y', '21');
+            text.setAttribute('font-family', 'Arial, sans-serif');
+            text.setAttribute('font-size', '10');
+            text.setAttribute('font-weight', 'bold');
+            text.setAttribute('text-anchor', 'middle');
+            text.setAttribute('dominant-baseline', 'middle');
+            text.setAttribute('fill', '#333');
+            text.textContent = 'if';
+            
+            svg.appendChild(polygon);
+            svg.appendChild(text);
+            
+            // Create a temporary container
+            const container = document.createElement('div');
+            container.style.position = 'absolute';
+            container.style.top = '-9999px';
+            container.appendChild(svg);
+            document.body.appendChild(container);
+            
+            e.dataTransfer.setDragImage(svg, 20, 20);
+            
+            // Clean up after drag
+            setTimeout(() => document.body.removeChild(container), 0);
+          }
         });
       });
       
@@ -478,12 +644,22 @@
       document.getElementById('zoom-level').textContent = Math.round(zoomLevel * 100) + '%';
     }
     
-    // Helper function to get dynamic port position accounting for variable node width
+    // Helper function to get dynamic port position accounting for variable node width and circular nodes
     function getPortPosition(node, portId) {
       const port = node.ports.find(p => p.id === portId);
       if (!port) return null;
       
-      // Measure label width to calculate dynamic box width
+      const isCircularNode = node.type === 'start' || node.type === 'end-success' || node.type === 'end-failure';
+      
+      if (isCircularNode && node.type === 'start') {
+        // For circular start nodes, port is at bottom center on the circle edge
+        return {
+          x: node.x,
+          y: node.y + 28 // circle radius
+        };
+      }
+      
+      // Measure label width to calculate dynamic box width for rectangular nodes
       const tempText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
       tempText.setAttribute('font-family', 'Arial, sans-serif');
       tempText.setAttribute('font-size', '14');
@@ -501,12 +677,11 @@
       if (node.type === 'execute') {
         portX = nodeWidth / 2;
       } else if (node.type === 'condition') {
-        const baseOffset = 30;
-        if (port.id === 'true') {
-          portX = nodeWidth / 2 - baseOffset;
-        } else if (port.id === 'false') {
-          portX = nodeWidth / 2 + baseOffset;
-        }
+        // For diamond nodes, ports are already positioned relative to center
+        return {
+          x: node.x + port.x,
+          y: node.y + port.y
+        };
       }
       
       return {
@@ -532,12 +707,12 @@
         icon = 'settings';
         ports = [{ id: 'out', label: 'next', x: CANVAS.nodeWidth / 2, y: CANVAS.nodeHeight }];
       } else if (type === 'condition') {
-        label = 'Condition';
+        label = 'if';
         icon = 'device_hub';
-        // Condition nodes have labeled exit ports
+        // Condition nodes have labeled exit ports on left/right of diamond
         ports = [
-          { id: 'true', label: 'true', x: CANVAS.nodeWidth / 2 - 30, y: CANVAS.nodeHeight },
-          { id: 'false', label: 'false', x: CANVAS.nodeWidth / 2 + 30, y: CANVAS.nodeHeight }
+          { id: 'true', label: 'true', x: -28, y: 0 },
+          { id: 'false', label: 'false', x: 28, y: 0 }
         ];
       } else if (type === 'end-success') {
         label = 'Success';
@@ -578,7 +753,7 @@
       grp.setAttribute('class', 'node');
       grp.style.cursor = 'move';
       
-      // Calculate dynamic width based on label text
+      // Calculate dynamic width based on label text (needed for all nodes)
       // Create temp text to measure width
       const tempText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
       tempText.setAttribute('font-family', 'Arial, sans-serif');
@@ -589,93 +764,216 @@
       const textWidth = tempText.getComputedTextLength();
       nodeLayer.removeChild(tempText);
       
-      // Calculate node width: icon(18) + left pad(8) + text width + right pad(16)
-      const minWidth = 200; // Minimum width
-      const calculatedWidth = Math.max(minWidth, 18 + 8 + textWidth + 16);
-      const nodeWidth = calculatedWidth;
+      // Check if this is a circular node type (start, success, failure)
+      const isCircularNode = node.type === 'start' || node.type === 'end-success' || node.type === 'end-failure';
+      const isDiamondNode = node.type === 'condition';
       
-      // Draw box with palette-like styling
-      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-      rect.setAttribute('x', node.x - nodeWidth / 2);
-      rect.setAttribute('y', node.y - CANVAS.nodeHeight / 2);
-      rect.setAttribute('width', nodeWidth);
-      rect.setAttribute('height', CANVAS.nodeHeight);
-      rect.setAttribute('fill', getCSSVariable('--surface-secondary', '#f9f9f9'));
-      rect.setAttribute('stroke', selectedNode === nodeId ? getCSSVariable('--warning-color', '#ff9800') : getCSSVariable('--border-color', '#e0e0e0'));
-      rect.setAttribute('stroke-width', selectedNode === nodeId ? '2' : '1');
-      rect.setAttribute('rx', '4');
-      grp.appendChild(rect);
-      
-      // Draw icon using Material Icons font
-      const icon = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      icon.setAttribute('x', node.x - nodeWidth / 2 + 12);
-      icon.setAttribute('y', node.y);
-      icon.setAttribute('font-family', 'Material Icons');
-      icon.setAttribute('font-size', '18');
-      icon.setAttribute('pointer-events', 'none');
-      icon.setAttribute('text-anchor', 'middle');
-      icon.setAttribute('dominant-baseline', 'middle');
-      
-      // Set icon color based on node type
-      if (node.type === 'start') {
-        icon.setAttribute('fill', getCSSVariable('--success-color', '#4caf50'));
-      } else if (node.type === 'end-success') {
-        icon.setAttribute('fill', getCSSVariable('--success-color', '#4caf50'));
-      } else if (node.type === 'end-failure') {
-        icon.setAttribute('fill', getCSSVariable('--error-color', '#f44336'));
-      } else {
-        icon.setAttribute('fill', getCSSVariable('--text-muted', '#999'));
+      // Define nodeWidth for use in ports (for rectangular nodes)
+      let nodeWidth = 200;
+      if (!isCircularNode) {
+        // Calculate node width: icon(18) + left pad(8) + text width + right pad(16)
+        const minWidth = 200; // Minimum width
+        const calculatedWidth = Math.max(minWidth, 18 + 8 + textWidth + 16);
+        nodeWidth = calculatedWidth;
       }
       
-      // Material Icons font mapping
-      const iconMap = {
-        'play_arrow': 'play_arrow',
-        'settings': 'settings',
-        'device_hub': 'device_hub',
-        'check_circle': 'check_circle',
-        'error': 'error'
-      };
-      icon.textContent = iconMap[node.icon] || 'device_hub';
-      grp.appendChild(icon);
+      if (isDiamondNode) {
+        // Diamond node rendering (conditionals)
+        const diamondSize = 28; // same as circle radius
+        
+        // Draw diamond using polygon
+        const diamond = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+        const points = [
+          [node.x, node.y - diamondSize],           // top
+          [node.x + diamondSize, node.y],           // right
+          [node.x, node.y + diamondSize],           // bottom
+          [node.x - diamondSize, node.y]            // left
+        ];
+        diamond.setAttribute('points', points.map(p => p.join(',')).join(' '));
+        diamond.setAttribute('fill', getCSSVariable('--surface-secondary', '#f9f9f9'));
+        diamond.setAttribute('stroke', selectedNode === nodeId ? getCSSVariable('--warning-color', '#ff9800') : getCSSVariable('--border-color', '#e0e0e0'));
+        diamond.setAttribute('stroke-width', selectedNode === nodeId ? '2' : '1');
+        grp.appendChild(diamond);
+        
+        // Draw icon (above center in diamond)
+        const icon = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        icon.setAttribute('x', node.x);
+        icon.setAttribute('y', node.y - 6);
+        icon.setAttribute('font-family', 'Material Icons');
+        icon.setAttribute('font-size', '16');
+        icon.setAttribute('pointer-events', 'none');
+        icon.setAttribute('text-anchor', 'middle');
+        icon.setAttribute('dominant-baseline', 'middle');
+        icon.setAttribute('fill', getCSSVariable('--text-primary', '#333'));
+        icon.textContent = 'call_split';
+        grp.appendChild(icon);
+        
+        // Draw label text (below icon, centered in diamond)
+        const labelText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        labelText.setAttribute('x', node.x);
+        labelText.setAttribute('y', node.y + 6);
+        labelText.setAttribute('font-family', 'Arial, sans-serif');
+        labelText.setAttribute('font-size', '12');
+        labelText.setAttribute('font-weight', 'bold');
+        labelText.setAttribute('pointer-events', 'none');
+        labelText.setAttribute('text-anchor', 'middle');
+        labelText.setAttribute('dominant-baseline', 'middle');
+        labelText.setAttribute('fill', getCSSVariable('--text-primary', '#333'));
+        labelText.textContent = node.label;
+        grp.appendChild(labelText);
+        
+      } else if (isCircularNode) {
+        // Circular node rendering
+        const circleRadius = 28;
+        
+        // Draw circle
+        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        circle.setAttribute('cx', node.x);
+        circle.setAttribute('cy', node.y);
+        circle.setAttribute('r', circleRadius);
+        circle.setAttribute('fill', getCSSVariable('--surface-secondary', '#f9f9f9'));
+        circle.setAttribute('stroke', selectedNode === nodeId ? getCSSVariable('--warning-color', '#ff9800') : getCSSVariable('--border-color', '#e0e0e0'));
+        circle.setAttribute('stroke-width', selectedNode === nodeId ? '2' : '1');
+        grp.appendChild(circle);
+        
+        // Draw icon (centered in circle)
+        const icon = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        icon.setAttribute('x', node.x);
+        icon.setAttribute('y', node.y - 2);
+        icon.setAttribute('font-family', 'Material Icons');
+        icon.setAttribute('font-size', '20');
+        icon.setAttribute('pointer-events', 'none');
+        icon.setAttribute('text-anchor', 'middle');
+        icon.setAttribute('dominant-baseline', 'middle');
+        
+        // Set icon color based on node type
+        if (node.type === 'start') {
+          icon.setAttribute('fill', getCSSVariable('--success-color', '#4caf50'));
+        } else if (node.type === 'end-success') {
+          icon.setAttribute('fill', getCSSVariable('--success-color', '#4caf50'));
+        } else if (node.type === 'end-failure') {
+          icon.setAttribute('fill', getCSSVariable('--error-color', '#f44336'));
+        }
+        
+        const iconMap = {
+          'play_arrow': 'play_arrow',
+          'settings': 'settings',
+          'device_hub': 'device_hub',
+          'check_circle': 'check_circle',
+          'error': 'error'
+        };
+        icon.textContent = iconMap[node.icon] || 'device_hub';
+        grp.appendChild(icon);
+        
+        // Draw label (below icon, inside/below circle)
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('x', node.x);
+        text.setAttribute('y', node.y + 10);
+        text.setAttribute('text-anchor', 'middle');
+        text.setAttribute('dominant-baseline', 'middle');
+        text.setAttribute('fill', getCSSVariable('--text-primary', '#333'));
+        text.setAttribute('font-size', '9');
+        text.setAttribute('font-weight', '500');
+        text.setAttribute('pointer-events', 'none');
+        text.textContent = node.label;
+        grp.appendChild(text);
+        
+      } else {
+        
+        // Draw box with palette-like styling
+        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        rect.setAttribute('x', node.x - nodeWidth / 2);
+        rect.setAttribute('y', node.y - CANVAS.nodeHeight / 2);
+        rect.setAttribute('width', nodeWidth);
+        rect.setAttribute('height', CANVAS.nodeHeight);
+        rect.setAttribute('fill', getCSSVariable('--surface-secondary', '#f9f9f9'));
+        rect.setAttribute('stroke', selectedNode === nodeId ? getCSSVariable('--warning-color', '#ff9800') : getCSSVariable('--border-color', '#e0e0e0'));
+        rect.setAttribute('stroke-width', selectedNode === nodeId ? '2' : '1');
+        rect.setAttribute('rx', '4');
+        grp.appendChild(rect);
+        
+        // Draw icon using Material Icons font
+        const icon = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        icon.setAttribute('x', node.x - nodeWidth / 2 + 12);
+        icon.setAttribute('y', node.y);
+        icon.setAttribute('font-family', 'Material Icons');
+        icon.setAttribute('font-size', '18');
+        icon.setAttribute('pointer-events', 'none');
+        icon.setAttribute('text-anchor', 'middle');
+        icon.setAttribute('dominant-baseline', 'middle');
+        
+        // Set icon color based on node type
+        if (node.type === 'start') {
+          icon.setAttribute('fill', getCSSVariable('--success-color', '#4caf50'));
+        } else if (node.type === 'end-success') {
+          icon.setAttribute('fill', getCSSVariable('--success-color', '#4caf50'));
+        } else if (node.type === 'end-failure') {
+          icon.setAttribute('fill', getCSSVariable('--error-color', '#f44336'));
+        } else {
+          icon.setAttribute('fill', getCSSVariable('--text-muted', '#999'));
+        }
+        
+        // Material Icons font mapping
+        const iconMap = {
+          'play_arrow': 'play_arrow',
+          'settings': 'settings',
+          'device_hub': 'device_hub',
+          'check_circle': 'check_circle',
+          'error': 'error'
+        };
+        icon.textContent = iconMap[node.icon] || 'device_hub';
+        grp.appendChild(icon);
+        
+        // Draw label (positioned to right of icon)
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('x', node.x - nodeWidth / 2 + 36);
+        text.setAttribute('y', node.y);
+        text.setAttribute('text-anchor', 'start');
+        text.setAttribute('dominant-baseline', 'middle');
+        text.setAttribute('fill', getCSSVariable('--text-primary', '#333'));
+        text.setAttribute('font-size', '14');
+        text.setAttribute('font-weight', '500');
+        text.setAttribute('pointer-events', 'none');
+        text.textContent = node.label;
+        grp.appendChild(text);
+      }
       
-      // Draw label (positioned to right of icon)
-      const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      text.setAttribute('x', node.x - nodeWidth / 2 + 36);
-      text.setAttribute('y', node.y);
-      text.setAttribute('text-anchor', 'start');
-      text.setAttribute('dominant-baseline', 'middle');
-      text.setAttribute('fill', getCSSVariable('--text-primary', '#333'));
-      text.setAttribute('font-size', '14');
-      text.setAttribute('font-weight', '500');
-      text.setAttribute('pointer-events', 'none');
-      text.textContent = node.label;
-      grp.appendChild(text);
-      
-      // Draw ports with adjusted positions based on dynamic width
+      // Draw ports with adjusted positions based on node type
       node.ports.forEach(port => {
         const portGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         portGroup.setAttribute('data-port', port.id);
         portGroup.style.cursor = 'crosshair';
         
-        // Calculate dynamic port x position based on node type
+        // Calculate port position based on node type
         let portX = port.x;
-        if (node.type === 'execute') {
+        let portY = port.y;
+        let portAbsX, portAbsY;
+        let labelOffsetX = 0, labelOffsetY = 20;
+        
+        if (isDiamondNode) {
+          // For diamond nodes, ports are already relative to center
+          portAbsX = node.x + portX;
+          portAbsY = node.y + portY;
+          labelOffsetX = portX > 0 ? 20 : -20;  // offset label to outside
+          labelOffsetY = 5;
+        } else if (isCircularNode && node.type === 'start') {
+          // For circular start nodes, port is at bottom center
+          portAbsX = node.x;
+          portAbsY = node.y + 28; // circle radius
+        } else if (node.type === 'execute') {
           // Center port at bottom-center
-          portX = nodeWidth / 2;
-        } else if (node.type === 'condition') {
-          // Condition ports: left and right of center
-          const baseOffset = 30;
-          if (port.id === 'true') {
-            portX = nodeWidth / 2 - baseOffset;
-          } else if (port.id === 'false') {
-            portX = nodeWidth / 2 + baseOffset;
-          }
+          portAbsX = node.x;
+          portAbsY = node.y + CANVAS.nodeHeight / 2;
+        } else {
+          // Default for rectangular nodes
+          portAbsX = node.x + portX - nodeWidth / 2;
+          portAbsY = node.y + portY - CANVAS.nodeHeight / 2;
         }
         
         // Port circle
         const portCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        portCircle.setAttribute('cx', node.x + portX - nodeWidth / 2);
-        portCircle.setAttribute('cy', node.y + port.y - CANVAS.nodeHeight / 2);
+        portCircle.setAttribute('cx', portAbsX);
+        portCircle.setAttribute('cy', portAbsY);
         portCircle.setAttribute('r', CANVAS.portRadius);
         portCircle.setAttribute('fill', getCSSVariable('--surface-color', '#fff'));
         portCircle.setAttribute('stroke', getCSSVariable('--border-color', '#333'));
@@ -684,9 +982,14 @@
         
         // Port label
         const portLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        portLabel.setAttribute('x', node.x + portX - nodeWidth / 2);
-        portLabel.setAttribute('y', node.y + port.y - CANVAS.nodeHeight / 2 + 20);
-        portLabel.setAttribute('text-anchor', 'middle');
+        portLabel.setAttribute('x', portAbsX + labelOffsetX);
+        portLabel.setAttribute('y', portAbsY + labelOffsetY);
+        
+        if (isDiamondNode) {
+          portLabel.setAttribute('text-anchor', labelOffsetX > 0 ? 'start' : 'end');
+        } else {
+          portLabel.setAttribute('text-anchor', 'middle');
+        }
         portLabel.setAttribute('font-size', '11');
         portLabel.setAttribute('fill', getCSSVariable('--text-muted', '#666'));
         portLabel.setAttribute('pointer-events', 'none');
@@ -699,7 +1002,8 @@
       
       // Node interaction
       grp.addEventListener('mousedown', (e) => {
-        if (e.target.tagName === 'circle') return; // Don't handle port clicks here
+        // Only ignore if it's a port circle (parent has data-port attribute)
+        if (e.target.tagName === 'circle' && e.target.parentElement.hasAttribute('data-port')) return;
         isDraggingNode = nodeId;
         selectedNode = nodeId;
         updatePropertiesPanel();
@@ -1126,8 +1430,8 @@
               } else if (type === 'condition') {
                 icon = 'device_hub';
                 ports = [
-                  { id: 'true', label: 'true', x: CANVAS.nodeWidth / 2 - 30, y: CANVAS.nodeHeight },
-                  { id: 'false', label: 'false', x: CANVAS.nodeWidth / 2 + 30, y: CANVAS.nodeHeight }
+                  { id: 'true', label: 'true', x: -28, y: 0 },
+                  { id: 'false', label: 'false', x: 28, y: 0 }
                 ];
               } else if (type === 'end-success') {
                 icon = 'check_circle';
@@ -1171,17 +1475,77 @@
           if (orch.description) {
             orchestrationDescription = orch.description;
           }
+          
+          // Load icon and color
+          if (orch.icon) {
+            orchestrationIcon = orch.icon;
+          }
+          if (orch.color) {
+            orchestrationColor = orch.color;
+          }
+          
+          // Update icon display
+          document.getElementById('orch-icon-element').textContent = orchestrationIcon;
+          document.getElementById('orch-icon-element').style.color = orchestrationColor;
+          
           updateDescriptionDisplay();
           
           // Re-render all nodes to attach event handlers and connections
           renderAllNodes();
           updateStats();
           console.log('Orchestration loaded - nodes:', Object.keys(nodes).length, 'edges:', edges.length);
+          setIconDropDownValue(orch.icon);
+          setColorPicker(orch.color);
         },
         error: function(xhr, status, error) {
           console.error('Failed to load orchestration:', error, xhr);
           alert('Failed to load orchestration: ' + error);
-        }
+        }  
+      });
+      
+    }
+    
+    function setColorPicker(inColor){
+      document.getElementById('orch-color-input').value=inColor;
+      
+      var colorPicker = $("#picker");
+      colorPicker.spectrum({
+        preferredFormat: "hex",
+        showInput: false,
+        color: inColor,
+        // Additional options for the color picker (if needed)
+      });
+      //docmuent.getElementById("picker").value = inColor;
+      //docmuent.getElementById("colour").value = inColor;
+
+    }
+    function setIconDropDownValue(inOrchIcon) {
+      var selectElement = document.getElementById('icon_select');
+      var instance = M.FormSelect.getInstance(selectElement);
+      console.log("***ORCH ICON****: "+ inOrchIcon);
+      //alert(instance);
+      // Get the dropdown content element
+      var dropdownContent = instance.dropdownOptions;
+
+      // Add icons to each option
+      dropdownContent.querySelectorAll('li').forEach((li, index) => {
+          if (index > 0) { // Skip the first disabled option
+              //alert(li.innerText);
+              var option = selectElement.querySelectorAll('option')[index];
+              var icon = option.getAttribute('data-icon');
+              //console.log("Looking to see if [" + icon + "] matches [" + inOrchIcon +"]");
+              if(icon==inOrchIcon){
+                //console.log("---- matched ----");
+                //console.log("Setting selected on [" + li.id);
+                li.setAttribute("class","selected");
+                option.setAttribute("selected","true");
+              }
+              else{
+                li.removeAttribute("class");
+              };
+          }
+
+        
       });
     }
     
@@ -1226,6 +1590,8 @@
         jobId: orchestrationId || 'new_' + Date.now(),
         name: orchestrationName,
         description: orchestrationDescription,
+        icon: orchestrationIcon,
+        color: orchestrationColor,
         nodes: nodeArray,
         edges: edgeArray
       };
@@ -1364,6 +1730,53 @@
       descEl.setAttribute('title', orchestrationDescription || 'No Description');
     }
     
+    function toggleIconEdit() {
+      console.log("====TOGGLING ICON EDIT====");
+      console.log("a");
+      const iconEdit = document.getElementById('orch-icon-edit');
+      if (iconEdit.style.display === 'none') {
+        iconEdit.style.display = 'block';
+        document.getElementById('orch-icon-input').value = orchestrationIcon;
+        document.getElementById('orch-color-input').value = orchestrationColor;
+        document.getElementById('orch-icon-input').focus();
+      } else {
+        iconEdit.style.display = 'none';
+      }
+    }
+    
+    function saveIconEdit() {
+      //alert("saveIconEdit");
+      const iconInput = document.getElementById('orch-icon-input').value.trim();
+      //alert(iconInput);
+      const colorInput = document.getElementById('orch-color-input').value.trim();
+      //alert(colorInput);
+      // Validate icon name (basic validation - only alphanumeric and underscores)
+      if (!iconInput || !/^[a-zA-Z0-9_]+$/.test(iconInput)) {
+        alert('Please provide a valid icon name (alphanumeric and underscores only)');
+        return;
+      }
+      
+      // Validate hex color
+      if (!colorInput || !/^#[0-9A-Fa-f]{6}$/.test(colorInput)) {
+        alert('Please provide a valid hex color code (e.g., #ff0000)');
+        return;
+      }
+      
+      orchestrationIcon = iconInput;
+      orchestrationColor = colorInput;
+      
+      // Update display icons
+      document.getElementById('orch-icon-element').textContent = orchestrationIcon;
+      document.getElementById('orch-icon-element').style.color = orchestrationColor;
+      
+      // Hide editor
+      document.getElementById('orch-icon-edit').style.display = 'none';
+    }
+    
+    function cancelIconEdit() {
+      document.getElementById('orch-icon-edit').style.display = 'none';
+    }
+    
     function listSchedulesForOrchestration() {
       // If orchestration hasn't been saved yet, show a message
       if (!orchestrationId) {
@@ -1402,21 +1815,20 @@
       
       let html = '<div style="overflow-x: auto;"><table style="width: 100%; border-collapse: collapse;">';
       html += '<thead style="background: #f5f5f5; border-bottom: 2px solid #ddd;">';
-      html += '<tr><th style="padding: 12px 8px; text-align: left; font-weight: 600;"></th>';
-      html += '<th style="padding: 12px 8px; text-align: left; font-weight: 600;">Schedule Name</th>';
-      html += '<th style="padding: 12px 8px; text-align: left; font-weight: 600;">Schedule</th>';
+      html += '<tr><th style="padding: 12px 8px; text-align: left; font-weight: 600;">Schedule Name</th>';
+      html += '<th style="padding: 12px 8px; text-align: left; font-weight: 600;">Type</th>';
+      html += '<th style="padding: 12px 8px; text-align: left; font-weight: 600;">Time</th>';
       html += '<th style="padding: 12px 8px; text-align: center; font-weight: 600;">Actions</th></tr></thead><tbody>';
       
       schedules.forEach(function(schedule, idx) {
         const bgColor = idx % 2 === 0 ? 'white' : '#fafafa';
-        const scheduleDisplay = formatScheduleDisplay(schedule);
-        const icon = schedule.icon || 'schedule';
-        const color = schedule.color || '#999';
+        const scheduleType = schedule.scheduleType || 'Unknown';
+        const scheduleTime = schedule.scheduleTime || '—';
         
         html += `<tr style="background: ${bgColor}; border-bottom: 1px solid #eee;">`;
-        html += `<td style="padding: 12px 8px; text-align: center;"><i class="material-icons" style="color: ${escapeHtml(color)}; font-size: 20px;">${escapeHtml(icon)}</i></td>`;
         html += `<td style="padding: 12px 8px; font-weight: 500;">${escapeHtml(schedule.jobName)}</td>`;
-        html += `<td style="padding: 12px 8px; font-size: 0.9em; color: #666;">${scheduleDisplay}</td>`;
+        html += `<td style="padding: 12px 8px; font-size: 0.9em; color: #666;">${escapeHtml(scheduleType)}</td>`;
+        html += `<td style="padding: 12px 8px; font-size: 0.9em; color: #666;">${escapeHtml(scheduleTime)}</td>`;
         html += `<td style="padding: 12px 8px; text-align: center;">`;
         html += `<a href="#" onclick="event.preventDefault(); editScheduleFromList('${escapeHtml(schedule.jobName)}')" title="Edit schedule" style="color: #2196f3; text-decoration: none; margin-right: 10px;">`;
         html += `<i class="material-icons" style="font-size: 18px; vertical-align: middle;">edit</i></a>`;
@@ -1425,36 +1837,6 @@
       
       html += '</tbody></table></div>';
       container.innerHTML = html;
-    }
-    
-    function formatScheduleDisplay(schedule) {
-      const type = schedule.scheduleType || 'once';
-      const time = schedule.scheduleTime || '00:00';
-      const dayOfWeek = schedule.dayOfWeek || 0;
-      const dayInMonth = schedule.dayInMonth || 1;
-      
-      const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-      
-      switch(type) {
-        case 'daily':
-          return `Daily at ${time}`;
-        case 'weekly':
-          return `${daysOfWeek[dayOfWeek]} at ${time}`;
-        case 'monthly':
-          return `${getOrdinalDay(dayInMonth)} of Month at ${time}`;
-        case 'once':
-        default:
-          return 'Once';
-      }
-    }
-    
-    function getOrdinalDay(day) {
-      const j = day % 10;
-      const k = day % 100;
-      if (j === 1 && k !== 11) return day + 'st';
-      if (j === 2 && k !== 12) return day + 'nd';
-      if (j === 3 && k !== 13) return day + 'rd';
-      return day + 'th';
     }
     
     function editScheduleFromList(jobName) {
@@ -1501,6 +1883,53 @@
         startNode.title = '';
       }
     }
+
+    // Initialize FormSelect only for the icon_select, not for dynamically-shown properties (which use native selects)
+    const iconSelect = document.getElementById('icon_select');
+    if (iconSelect) {
+      M.FormSelect.init(iconSelect);
+    }
+    // Add icons to the select options
+    document.addEventListener('DOMContentLoaded', function() {
+
+      var selectElement = document.getElementById('icon_select');
+      var instance = M.FormSelect.getInstance(selectElement);
+      //alert(instance);
+      // Get the dropdown content element
+      var dropdownContent = instance.dropdownOptions;
+
+      // Add icons to each option
+      dropdownContent.querySelectorAll('li').forEach((li, index) => {
+          if (index > 0) { // Skip the first disabled option
+              var option = selectElement.querySelectorAll('option')[index];
+              var icon = option.getAttribute('data-icon');
+              var iconElement = document.createElement('i');
+              iconElement.className = 'material-icons left vertMid';
+              iconElement.style.position="relative";
+              iconElement.style.top="13px";
+              iconElement.textContent = icon;
+              li.prepend(iconElement);
+              
+              var imgElement = li.querySelector('img');
+              if (imgElement) {
+                  imgElement.remove();
+              }
+          }
+      });
+    });
+
+    function setPickerColor(inColor){
+      var colorPicker = $("#picker");
+      colorPicker.spectrum({
+        preferredFormat: "hex",
+        showInput: false,
+        color: inColor,
+        // Additional options for the color picker (if needed)
+      });
+      //alert(document.getElementById("preview"));
+      document.querySelector("span#preview").style.color=inColor;
+    }
+
   </script>
 </body>
 </html>

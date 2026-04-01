@@ -156,8 +156,9 @@ function displaySecs(secs) {
             %>
             <tr class="toggle-row group-<%=groupId%> orch-parent" style="display:none;" data-orch-id="<%=compositeId%>" data-safe-id="<%=safeCompositeId%>">
               <td>
-                <span class="material-icons vertMid" style="color:#ff9800;font-size:24pt;cursor:pointer;" id="orch-icon-<%=safeCompositeId%>" onclick="event.stopPropagation(); toggleOrchestrationGroup('<%=safeCompositeId%>')" title="Orchestration">schema</span>
-                <span class="material-icons vertMid" style="color: #ff9800;font-size:24pt; cursor: pointer; display: block; padding-left: 25px; top: -10px; position: relative; cursor:pointer;" id="orch-expand-<%=safeCompositeId%>" onclick="event.stopPropagation(); toggleOrchestrationGroup('<%=safeCompositeId%>')" title="Show/Hide Details">expand_more</span>
+                <span class="material-icons vertMid" style="color:<%=historyList[i].color || '#000000'%>;font-size:24pt;cursor:pointer;" id="orch-icon-<%=safeCompositeId%>" onclick="event.stopPropagation(); toggleOrchestrationGroup('<%=safeCompositeId%>')" title="Orchestration"><%=historyList[i].icon || 'schema'%></span>
+                <%if(historyList[i].icon){%><span class="material-icons icon-indicator" style="color: #000000; font-size: 14pt;left: -17px !important;top: 22px !important;" title="Orchestration">schema</span><%}%>
+                <span class="material-icons vertMid" style="color: <%=historyList[i].color || '#000000'%>;font-size:24pt; cursor: pointer; display: block; padding-left: 30px; top: -10px; position: relative; cursor:pointer;" id="orch-expand-<%=safeCompositeId%>" onclick="event.stopPropagation(); toggleOrchestrationGroup('<%=safeCompositeId%>')" title="Show/Hide Details">expand_more</span>
               </td>
               <td>
                 <strong><%=historyList[i].jobName%></strong>

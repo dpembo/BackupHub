@@ -211,8 +211,20 @@ function addDateSuffix(date) {
             <% for (let i = 0; i < schedules.length; i++) { %>
               <tr <% if(schedules[i].returnCode!=0){%>class="errorHighlight"<%}%>>
 
-                <td><span class="material-icons vertMid" style="color:<%=schedules[i].color%>;font-size:24pt;"><%=schedules[i].icon%></span></td>
-                <td><%= schedules[i].jobName %></td>
+                <td><span class="material-icons vertMid" style="color:<%=schedules[i].color%>;font-size:24pt;"><%=schedules[i].icon%></span>
+                <% if(schedules[i].scheduleMode==='orchestration'){ %> <span class="material-icons vertMid" style="color:black;font-size:14pt;position: relative; left: -16px;top: 16px;">schema</span> <% } %>
+              </td>
+                
+                
+                <td>
+                  <strong><%= schedules[i].jobName %></strong>
+                  <br/>
+                  <% if (schedules[i].description) { %>
+                    <span style="font-size: 0.85em; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; max-width: 300px;" title="<%=schedules[i].description%>"><%=schedules[i].description%></span>
+                  <% } else { %>
+                    <span style="font-size: 0.85em; color: #999; font-style: italic;">No Description</span>
+                  <% } %>
+                </td>
                 <td>
                   <!-- SCHEDULE TYPE -->
                   <% var schedTypedisplay = schedules[i].scheduleType;

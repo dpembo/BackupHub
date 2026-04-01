@@ -399,15 +399,19 @@ async function getItemsGroupedByOrchestration() {
     const orchestrationMap = new Map(); // Map of "${jobId}#${executionId}" -> {parent, nodes}
     const regularItems = [];
 
-    // Fetch all orchestrations to get their names and descriptions
+    // Fetch all orchestrations to get their names, descriptions, icons, and colors
     let orchestrationNames = {};
     let orchestrationDescriptions = {};
+    let orchestrationIcons = {};
+    let orchestrationColors = {};
     try {
         const allOrchestrations = await db.getData('ORCHESTRATION_JOBS');
         if (allOrchestrations) {
             for (const [jobId, jobData] of Object.entries(allOrchestrations)) {
                 orchestrationNames[jobId] = jobData.name || `Orchestration [${jobId}]`;
                 orchestrationDescriptions[jobId] = jobData.description || '';
+                orchestrationIcons[jobId] = jobData.icon || 'schema';
+                orchestrationColors[jobId] = jobData.color || '#000000';
             }
         }
     } catch (err) {
@@ -429,9 +433,11 @@ async function getItemsGroupedByOrchestration() {
             const mapKey = `${jobId}#${executionId}`;
             
             if (!orchestrationMap.has(mapKey)) {
-                // Get the orchestration display name and description
+                // Get the orchestration display name, description, icon, and color
                 const displayName = orchestrationNames[jobId] || `Orchestration [${jobId}]`;
                 const displayDesc = orchestrationDescriptions[jobId] || '';
+                const displayIcon = orchestrationIcons[jobId] || 'schema';
+                const displayColor = orchestrationColors[jobId] || '#000000';
                 
                 orchestrationMap.set(mapKey, {
                     parent: {
@@ -441,8 +447,8 @@ async function getItemsGroupedByOrchestration() {
                         executionId: item.executionId,
                         runDate: item.runDate,
                         isOrchestration: true,
-                        icon: 'hub',
-                        color: '#2196F3',
+                        icon: displayIcon,
+                        color: displayColor,
                         children: []
                     },
                     nodeMap: new Map()

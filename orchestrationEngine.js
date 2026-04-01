@@ -282,53 +282,83 @@ async function executeJob(jobId, isManual = false, executionId = null, onNodeCom
           // Construct the log key that will be used (must match agentMessageProcessor logic)
           const agents = require('./agents.js');
           const agent = agents.getAgent(agentId);
-          if (agent) {
-            const jobName = `Orchestration [${jobId}] Execution [${executionLog.executionId}] Node [${currentNodeId}]`;
-            const logKey = `${agent.name}_${jobName}_log`;
-            try {
-              await db.deleteData(logKey);
-              logger.debug(`[ORCHESTRATION] Cleared old log for key [${logKey}]`);
-            } catch (clearErr) {
-              // Key might not exist - that's fine
-              logger.debug(`[ORCHESTRATION] No existing log to clear for key [${logKey}]: ${clearErr.message}`);
+          
+          // Check if agent is online before attempting to send command
+          let result;
+          const offlineCheckTime = new Date().toISOString();
+          
+          if (!agent) {
+            logger.error(`[ORCHESTRATION] Agent [${agentId}] not found - treating as offline`);
+            result = {
+              exitCode: 1,
+              stdout: '',
+              stderr: `Agent [${agentId}] not found in system`,
+              startTime: offlineCheckTime,
+              endTime: offlineCheckTime
+            };
+          } else if (agent.status !== 'online') {
+            logger.warn(`[ORCHESTRATION] Agent [${agentId}] is offline (status: ${agent.status}) - skipping execution and continuing orchestration`);
+            result = {
+              exitCode: 1,
+              stdout: '',
+              stderr: `Agent [${agentId}] is currently offline (status: ${agent.status}). Execution skipped.`,
+              startTime: offlineCheckTime,
+              endTime: offlineCheckTime
+            };
+          } else {
+            // Agent is online, proceed with execution
+            if (agent) {
+              const jobName = `Orchestration [${jobId}] Execution [${executionLog.executionId}] Node [${currentNodeId}]`;
+              const logKey = `${agent.name}_${jobName}_log`;
+              try {
+                await db.deleteData(logKey);
+                logger.debug(`[ORCHESTRATION] Cleared old log for key [${logKey}]`);
+              } catch (clearErr) {
+                // Key might not exist - that's fine
+                logger.debug(`[ORCHESTRATION] No existing log to clear for key [${logKey}]: ${clearErr.message}`);
+              }
             }
-          }
-          // Read script content from server
-          const fullScriptPath = `./scripts/${scriptPath}`;
-          logger.info(`Reading script content from [${fullScriptPath}]`);
-          
-          let scriptContent;
-          try {
-            scriptContent = await fs.readFile(fullScriptPath, 'utf8');
-          } catch (readErr) {
-            throw new Error(`Failed to read script [${fullScriptPath}]: ${readErr.message}`);
-          }
+            // Read script content from server
+            const fullScriptPath = `./scripts/${scriptPath}`;
+            logger.info(`Reading script content from [${fullScriptPath}]`);
+            
+            let scriptContent;
+            try {
+              scriptContent = await fs.readFile(fullScriptPath, 'utf8');
+            } catch (readErr) {
+              throw new Error(`Failed to read script [${fullScriptPath}]: ${readErr.message}`);
+            }
 
-          // Construct job name that matches what agent will report back
-          // Format: Orchestration [jobId] Execution [executionId] Node [nodeId]
-          const jobName = `Orchestration [${jobId}] Execution [${executionLog.executionId}] Node [${currentNodeId}]`;
-          
-          logger.info(`Sending script [${scriptPath}] to agent [${agentId}]`);
-          
-          // Send script content (not path) to agent using agentComms
-          // The agent will create a temp file with this content and execute it
-          agentComms.sendCommand(
-            agentId,
-            'execute/orchestrationScript',
-            scriptContent,  // Send actual script content, not path
-            parameters,
-            jobName,
-            undefined,
-            isManual,
-            executionLog.executionId
-          );
+            // Construct job name that matches what agent will report back
+            // Format: Orchestration [jobId] Execution [executionId] Node [nodeId]
+            const jobName = `Orchestration [${jobId}] Execution [${executionLog.executionId}] Node [${currentNodeId}]`;
+            
+            logger.info(`Sending script [${scriptPath}] to agent [${agentId}]`);
+            
+            // Send script content (not path) to agent using agentComms
+            // The agent will create a temp file with this content and execute it
+            agentComms.sendCommand(
+              agentId,
+              'execute/orchestrationScript',
+              scriptContent,  // Send actual script content, not path
+              parameters,
+              jobName,
+              undefined,
+              isManual,
+              executionLog.executionId
+            );
 
-          // Wait for agent response (with 5-minute timeout)
-          logger.debug(`[ORCHESTRATION] About to wait for script completion on node [${currentNodeId}]`);
-          const scriptStartTime = new Date().toISOString();
-          const result = await waitForScriptCompletion(jobName, 300000);
-          const scriptEndTime = new Date().toISOString();
-          logger.debug(`[ORCHESTRATION] Script completion received: exitCode=${result.exitCode}`);
+            // Wait for agent response (with 5-minute timeout)
+            logger.debug(`[ORCHESTRATION] About to wait for script completion on node [${currentNodeId}]`);
+            const actualStartTime = new Date().toISOString();
+            result = await waitForScriptCompletion(jobName, 300000);
+            const actualEndTime = new Date().toISOString();
+            logger.debug(`[ORCHESTRATION] Script completion received: exitCode=${result.exitCode}`);
+            
+            // Update with actual execution times for online agent case
+            result.startTime = actualStartTime;
+            result.endTime = actualEndTime;
+          }
 
           // Update execution log with actual results
           executionLog.scriptOutputs[currentNodeId] = {
@@ -339,11 +369,16 @@ async function executeJob(jobId, isManual = false, executionId = null, onNodeCom
             exitCode: result.exitCode || 0,
             stdout: result.stdout || '',
             stderr: result.stderr || '',
-            startTime: scriptStartTime,
-            endTime: scriptEndTime
+            startTime: result.startTime,
+            endTime: result.endTime
           };
 
-          logger.info(`Script execution completed on agent [${agentId}] with exit code [${result.exitCode}]`);
+          // Log with additional details if this failed due to agent offline
+          if (result.stderr && (result.stderr.includes('offline') || result.stderr.includes('not found'))) {
+            logger.error(`Execute step failed for node [${currentNodeId}]: ${result.stderr}`);
+          } else {
+            logger.info(`Script execution completed on agent [${agentId}] with exit code [${result.exitCode}]`);
+          }
 
           const nodeEndTime = new Date().toISOString();
           executionLog.nodeMetrics[currentNodeId] = {
@@ -611,6 +646,8 @@ async function executeJob(jobId, isManual = false, executionId = null, onNodeCom
     }
 
     logger.error(`Orchestration [${jobId}] execution failed: ${err.message}`);
+    // Note: returning executionLog here ensures the promise resolves (not rejects)
+    // This allows server.js to properly save and clean up the failed execution
     return executionLog;
   } finally {
     // Clean up execution tracking - but delay for 30 seconds to allow pending messages to be processed
