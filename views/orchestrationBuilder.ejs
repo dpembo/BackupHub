@@ -479,6 +479,30 @@ function isSelected(inValue,compareValue){
       <a href="#!" onclick="proceedWithExecution()" class="waves-effect waves-red btn-flat" style="color: #f44336; font-weight: 600;">Execute</a>
     </div>
   </div>
+
+  <!-- Delete Node Confirmation Modal -->
+  <div id="delete-node-confirmation-modal" class="modal">
+    <div class="modal-content">
+      <h4><i class="material-icons" style="vertical-align: middle; margin-right: 8px; color: #f44336;">delete</i>Delete Node</h4>
+      <p>Are you sure you want to delete this node?</p>
+      <div style="background: #f5f5f5; padding: 12px; border-radius: 4px; margin: 15px 0; border-left: 4px solid #ff9800;">
+        <div style="margin-bottom: 8px;">
+          <span style="font-size: 0.85em; color: #666; text-transform: uppercase;">Node Type:</span>
+          <strong id="delete-node-type" style="display: block; margin-top: 2px;"></strong>
+        </div>
+        <div style="margin-bottom: 8px;">
+          <span style="font-size: 0.85em; color: #666; text-transform: uppercase;">Label:</span>
+          <strong id="delete-node-label" style="display: block; margin-top: 2px;"></strong>
+        </div>
+        <div id="delete-node-extra-info"></div>
+      </div>
+      <p style="font-size: 0.85em; color: #f44336; margin-top: 15px;"><i class="material-icons" style="vertical-align: middle; font-size: 16px;">warning</i> This action cannot be undone. All connections to this node will also be removed.</p>
+    </div>
+    <div class="modal-footer">
+      <a href="#!" class="modal-close waves-effect waves-green btn-flat">Cancel</a>
+      <a href="#!" onclick="confirmDeleteNode()" class="waves-effect waves-red btn-flat" style="color: #f44336; font-weight: 600;">Delete</a>
+    </div>
+  </div>
   
   <script>
     // SVG-based orchestration builder with labeled exit ports for conditions
@@ -1258,12 +1282,50 @@ function isSelected(inValue,compareValue){
     function deleteSelectedNode() {
       if (!selectedNode) return;
       
+      const node = nodes[selectedNode];
+      if (!node) return;
+      
+      // Populate modal with node information
+      const nodeType = node.type.charAt(0).toUpperCase() + node.type.slice(1);
+      document.getElementById('delete-node-type').textContent = nodeType;
+      document.getElementById('delete-node-label').textContent = node.label || '(Untitled)';
+      
+      // Show extra info for specific node types
+      let extraInfo = '';
+      if (node.type === 'execute' && node.data.script) {
+        extraInfo = `<div><span style="font-size: 0.85em; color: #666; text-transform: uppercase;">Script:</span><strong style="display: block; margin-top: 2px; font-family: monospace; font-size: 0.9em;">${node.data.script}</strong></div>`;
+      } else if (node.type === 'condition') {
+        extraInfo = `<div><span style="font-size: 0.85em; color: #666; text-transform: uppercase;">Condition:</span><strong style="display: block; margin-top: 2px; font-family: monospace; font-size: 0.9em;">${node.data.conditionType || 'N/A'}</strong></div>`;
+      }
+      document.getElementById('delete-node-extra-info').innerHTML = extraInfo;
+      
+      // Open the modal
+      var modal = M.Modal.getInstance(document.getElementById('delete-node-confirmation-modal'));
+      if (modal) {
+        modal.open();
+      } else {
+        M.Modal.init(document.getElementById('delete-node-confirmation-modal')).open();
+      }
+    }
+    
+    function confirmDeleteNode() {
+      if (!selectedNode) return;
+      
+      // Perform the actual deletion
       edges = edges.filter(e => e.from !== selectedNode && e.to !== selectedNode);
       delete nodes[selectedNode];
       selectedNode = null;
       updatePropertiesPanel();
       renderAllNodes();
       updateStats();
+      
+      // Close the modal
+      var modal = M.Modal.getInstance(document.getElementById('delete-node-confirmation-modal'));
+      if (modal) {
+        modal.close();
+      }
+      
+      M.toast({html: 'Node deleted successfully'});
     }
     
     function updatePropertiesPanel() {
@@ -2042,6 +2104,17 @@ function isSelected(inValue,compareValue){
     if (iconSelect) {
       M.FormSelect.init(iconSelect);
     }
+    
+    // Add keyboard listener for delete key
+    document.addEventListener('keydown', function(event) {
+      if (event.key === 'Delete' || event.key === 'del') {
+        if (selectedNode) {
+          event.preventDefault();
+          deleteSelectedNode();
+        }
+      }
+    });
+    
     // Add icons to the select options
     document.addEventListener('DOMContentLoaded', function() {
 
