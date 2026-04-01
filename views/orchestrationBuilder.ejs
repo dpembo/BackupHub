@@ -459,7 +459,7 @@ function isSelected(inValue,compareValue){
     <div class="modal-content" style="max-height: 75vh; overflow-y: auto;">
       <h4><i class="material-icons" style="vertical-align: middle; margin-right: 10px;">list</i>Schedules Using This Orchestration</h4>
       <div id="schedules-list-container">
-        <p style="text-align: center; color: #999;">Loading schedules...</p>
+        <p style="text-align: center; color: var(--text-muted, #999);">Loading schedules...</p>
       </div>
     </div>
     <div class="modal-footer">
@@ -1920,30 +1920,35 @@ function isSelected(inValue,compareValue){
     
     function displaySchedulesList(schedules) {
       const container = document.getElementById('schedules-list-container');
+      const textMuted = getCSSVariable('--text-muted', '#666');
+      const surfaceSecondary = getCSSVariable('--surface-secondary', '#f5f5f5');
+      const borderColor = getCSSVariable('--border-color', '#ddd');
+      const surfaceColor = getCSSVariable('--surface-color', '#fff');
+      const primaryColor = getCSSVariable('--primary-color', '#2196f3');
       
       if (!schedules || schedules.length === 0) {
-        container.innerHTML = '<p style="text-align: center; color: #999;">No schedules are using this orchestration</p>';
+        container.innerHTML = `<p style="text-align: center; color: ${textMuted};">No schedules are using this orchestration</p>`;
         return;
       }
       
       let html = '<div style="overflow-x: auto;"><table style="width: 100%; border-collapse: collapse;">';
-      html += '<thead style="background: #f5f5f5; border-bottom: 2px solid #ddd;">';
+      html += `<thead style="background: ${surfaceSecondary}; border-bottom: 2px solid ${borderColor};">`;
       html += '<tr><th style="padding: 12px 8px; text-align: left; font-weight: 600;">Schedule Name</th>';
       html += '<th style="padding: 12px 8px; text-align: left; font-weight: 600;">Type</th>';
       html += '<th style="padding: 12px 8px; text-align: left; font-weight: 600;">Time</th>';
       html += '<th style="padding: 12px 8px; text-align: center; font-weight: 600;">Actions</th></tr></thead><tbody>';
       
       schedules.forEach(function(schedule, idx) {
-        const bgColor = idx % 2 === 0 ? 'white' : '#fafafa';
+        const bgColor = idx % 2 === 0 ? surfaceColor : surfaceSecondary;
         const scheduleType = schedule.scheduleType || 'Unknown';
         const scheduleTime = schedule.scheduleTime || '—';
         
-        html += `<tr style="background: ${bgColor}; border-bottom: 1px solid #eee;">`;
+        html += `<tr style="background: ${bgColor}; border-bottom: 1px solid ${borderColor};">`;
         html += `<td style="padding: 12px 8px; font-weight: 500;">${escapeHtml(schedule.jobName)}</td>`;
-        html += `<td style="padding: 12px 8px; font-size: 0.9em; color: #666;">${escapeHtml(scheduleType)}</td>`;
-        html += `<td style="padding: 12px 8px; font-size: 0.9em; color: #666;">${escapeHtml(scheduleTime)}</td>`;
+        html += `<td style="padding: 12px 8px; font-size: 0.9em; color: ${textMuted};">${escapeHtml(scheduleType)}</td>`;
+        html += `<td style="padding: 12px 8px; font-size: 0.9em; color: ${textMuted};">${escapeHtml(scheduleTime)}</td>`;
         html += `<td style="padding: 12px 8px; text-align: center;">`;
-        html += `<a href="#" onclick="event.preventDefault(); editScheduleFromList('${escapeHtml(schedule.jobName)}')" title="Edit schedule" style="color: #2196f3; text-decoration: none; margin-right: 10px;">`;
+        html += `<a href="#" onclick="event.preventDefault(); editScheduleFromList('${escapeHtml(schedule.jobName)}')" title="Edit schedule" style="color: ${primaryColor}; text-decoration: none; margin-right: 10px;">`;
         html += `<i class="material-icons" style="font-size: 18px; vertical-align: middle;">edit</i></a>`;
         html += `</td></tr>`;
       });
