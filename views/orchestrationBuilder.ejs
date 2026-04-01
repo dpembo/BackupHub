@@ -46,6 +46,40 @@ function isSelected(inValue,compareValue){
     .palette-item { padding: 10px; margin-bottom: 8px; background: #f9f9f9; border: 1px solid #e0e0e0; border-radius: 4px; cursor: move; user-select: none; display: flex; align-items: center; gap: 8px; font-size: 13px; transition: all 0.2s; }
     .palette-item:hover { background: #f0f0f0; border-color: #ff9800; }
     .palette-item i { font-size: 16px; }
+    .palette-item[data-node-type="start"],
+    .palette-item[data-node-type="end-success"],
+    .palette-item[data-node-type="end-failure"] {
+      width: 44px;
+      height: 44px;
+      padding: 0;
+      margin-bottom: 8px;
+      border-radius: 50%;
+      justify-content: center;
+      gap: 0;
+      flex-direction: column;
+    }
+    .palette-item[data-node-type="start"] i,
+    .palette-item[data-node-type="end-success"] i,
+    .palette-item[data-node-type="end-failure"] i {
+      font-size: 14px;
+      margin: 0;
+    }
+    .palette-item[data-node-type="start"] span,
+    .palette-item[data-node-type="end-success"] span,
+    .palette-item[data-node-type="end-failure"] span {
+      font-size: 7px;
+      margin-top: 1px;
+      text-align: center;
+      width: 100%;
+    }
+    .end-nodes-container {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-start;
+    }
+    .end-nodes-container .palette-item {
+      flex: 0 0 44px;
+    }
     .palette-section { margin-bottom: 20px; }
     .palette-section h4 { margin: 5px 0 10px 0; font-size: 12px; color: #666; text-transform: uppercase; font-weight: 600; }
     #orchestration-footer { background: #f5f5f5; padding: 15px 20px; border-top: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
@@ -112,6 +146,7 @@ function isSelected(inValue,compareValue){
     }
 
     var savedColor = "<%=color%>";
+    var savedIcon = "<%=icon%>";
   </script>
   
 </head>
@@ -123,7 +158,7 @@ function isSelected(inValue,compareValue){
       
       <h3 style="margin: 0; display: flex; align-items: center; gap: 15px;">
         <div style="display: flex; align-items: center; gap: 5px; cursor: pointer;" id="orch-icon-display" title="Click to edit orchestration icon and color" >
-          <i id="orch-icon-element" class="material-icons" style="color: #000000; font-size: 24px;" onclick="toggleIconEdit()"><%=icon%></i>
+          <i id="orch-icon-element" class="material-icons" style="color: #FF9800; font-size: 24px;" onclick="toggleIconEdit()"><%=icon%></i>
           <i id="orch-icon-indicator" class="material-icons" style="color: #000000; font-size:14px; position: relative; left: -14px; top: 11px;" onclick="toggleIconEdit()">schema</i>
 
           <div id="orch-icon-edit" style="display: none; background: white; border: 1px solid #ddd; border-radius: 4px; padding: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); min-width: 280px;">
@@ -142,7 +177,7 @@ function isSelected(inValue,compareValue){
                 %>
               </select>
             <label style="font-size: 11px; color: #999; text-transform: uppercase; display: block; margin-bottom: 4px;">Colour (hex code)</label>
-            <input type="hidden" id="orch-color-input" placeholder="#000000" style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 3px; box-sizing: border-box; margin-bottom: 10px;">
+            <input type="hidden" id="orch-color-input" placeholder="#FF9800" style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 3px; box-sizing: border-box; margin-bottom: 10px;">
             <input onchange="setPickerColor(this.value);" type="text" value="<%=color%>" id="colour" name="colour" required>
             <span class="helper-text" data-error="Please provide a colour (e.g. #000000)"></span>
             <input type="text" id="picker" name="picker" value="<%=color%>" onchange="document.getElementById('colour').value=this.value;document.getElementById('orch-color-input').value=this.value;">
@@ -217,13 +252,15 @@ function isSelected(inValue,compareValue){
         
         <div class="palette-section">
           <h4>End Nodes</h4>
-          <div class="palette-item" draggable="true" data-node-type="end-success">
-            <i class="material-icons" style="color: #4caf50;">check_circle</i>
-            <span>Success</span>
-          </div>
-          <div class="palette-item" draggable="true" data-node-type="end-failure">
-            <i class="material-icons" style="color: #f44336;">error</i>
-            <span>Failure</span>
+          <div class="end-nodes-container">
+            <div class="palette-item" draggable="true" data-node-type="end-success">
+              <i class="material-icons" style="color: #4caf50;">check_circle</i>
+              <span>Success</span>
+            </div>
+            <div class="palette-item" draggable="true" data-node-type="end-failure">
+              <i class="material-icons" style="color: #f44336;">error</i>
+              <span>Failure</span>
+            </div>
           </div>
         </div>
         <div id="orchestration-counts"><hr>
@@ -394,8 +431,8 @@ function isSelected(inValue,compareValue){
     let availableAgents = [];
     let orchestrationName = '';
     let orchestrationDescription = '';
-    let orchestrationIcon = 'schema';
-    let orchestrationColor = '#000000';
+    let orchestrationIcon = savedIcon;
+    let orchestrationColor = savedColor;
     let pendingSave = false;
     
     // Data structures
@@ -426,6 +463,8 @@ function isSelected(inValue,compareValue){
       }
       setupDragAndDrop();
       setupZoomControls();
+      // Initialize color picker for both new and existing orchestrations
+      setColorPicker(savedColor);
       // Setup name display click handler
       document.getElementById('orch-name-display').addEventListener('click', enterNameEditMode);
       
@@ -536,12 +575,22 @@ function isSelected(inValue,compareValue){
       document.getElementById('zoom-level').textContent = Math.round(zoomLevel * 100) + '%';
     }
     
-    // Helper function to get dynamic port position accounting for variable node width
+    // Helper function to get dynamic port position accounting for variable node width and circular nodes
     function getPortPosition(node, portId) {
       const port = node.ports.find(p => p.id === portId);
       if (!port) return null;
       
-      // Measure label width to calculate dynamic box width
+      const isCircularNode = node.type === 'start' || node.type === 'end-success' || node.type === 'end-failure';
+      
+      if (isCircularNode && node.type === 'start') {
+        // For circular start nodes, port is at bottom center on the circle edge
+        return {
+          x: node.x,
+          y: node.y + 28 // circle radius
+        };
+      }
+      
+      // Measure label width to calculate dynamic box width for rectangular nodes
       const tempText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
       tempText.setAttribute('font-family', 'Arial, sans-serif');
       tempText.setAttribute('font-size', '14');
@@ -636,7 +685,7 @@ function isSelected(inValue,compareValue){
       grp.setAttribute('class', 'node');
       grp.style.cursor = 'move';
       
-      // Calculate dynamic width based on label text
+      // Calculate dynamic width based on label text (needed for all nodes)
       // Create temp text to measure width
       const tempText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
       tempText.setAttribute('font-family', 'Arial, sans-serif');
@@ -647,77 +696,149 @@ function isSelected(inValue,compareValue){
       const textWidth = tempText.getComputedTextLength();
       nodeLayer.removeChild(tempText);
       
-      // Calculate node width: icon(18) + left pad(8) + text width + right pad(16)
-      const minWidth = 200; // Minimum width
-      const calculatedWidth = Math.max(minWidth, 18 + 8 + textWidth + 16);
-      const nodeWidth = calculatedWidth;
+      // Check if this is a circular node type (start, success, failure)
+      const isCircularNode = node.type === 'start' || node.type === 'end-success' || node.type === 'end-failure';
       
-      // Draw box with palette-like styling
-      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-      rect.setAttribute('x', node.x - nodeWidth / 2);
-      rect.setAttribute('y', node.y - CANVAS.nodeHeight / 2);
-      rect.setAttribute('width', nodeWidth);
-      rect.setAttribute('height', CANVAS.nodeHeight);
-      rect.setAttribute('fill', getCSSVariable('--surface-secondary', '#f9f9f9'));
-      rect.setAttribute('stroke', selectedNode === nodeId ? getCSSVariable('--warning-color', '#ff9800') : getCSSVariable('--border-color', '#e0e0e0'));
-      rect.setAttribute('stroke-width', selectedNode === nodeId ? '2' : '1');
-      rect.setAttribute('rx', '4');
-      grp.appendChild(rect);
-      
-      // Draw icon using Material Icons font
-      const icon = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      icon.setAttribute('x', node.x - nodeWidth / 2 + 12);
-      icon.setAttribute('y', node.y);
-      icon.setAttribute('font-family', 'Material Icons');
-      icon.setAttribute('font-size', '18');
-      icon.setAttribute('pointer-events', 'none');
-      icon.setAttribute('text-anchor', 'middle');
-      icon.setAttribute('dominant-baseline', 'middle');
-      
-      // Set icon color based on node type
-      if (node.type === 'start') {
-        icon.setAttribute('fill', getCSSVariable('--success-color', '#4caf50'));
-      } else if (node.type === 'end-success') {
-        icon.setAttribute('fill', getCSSVariable('--success-color', '#4caf50'));
-      } else if (node.type === 'end-failure') {
-        icon.setAttribute('fill', getCSSVariable('--error-color', '#f44336'));
-      } else {
-        icon.setAttribute('fill', getCSSVariable('--text-muted', '#999'));
+      // Define nodeWidth for use in ports (for rectangular nodes)
+      let nodeWidth = 200;
+      if (!isCircularNode) {
+        // Calculate node width: icon(18) + left pad(8) + text width + right pad(16)
+        const minWidth = 200; // Minimum width
+        const calculatedWidth = Math.max(minWidth, 18 + 8 + textWidth + 16);
+        nodeWidth = calculatedWidth;
       }
       
-      // Material Icons font mapping
-      const iconMap = {
-        'play_arrow': 'play_arrow',
-        'settings': 'settings',
-        'device_hub': 'device_hub',
-        'check_circle': 'check_circle',
-        'error': 'error'
-      };
-      icon.textContent = iconMap[node.icon] || 'device_hub';
-      grp.appendChild(icon);
+      if (isCircularNode) {
+        // Circular node rendering
+        const circleRadius = 28;
+        
+        // Draw circle
+        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        circle.setAttribute('cx', node.x);
+        circle.setAttribute('cy', node.y);
+        circle.setAttribute('r', circleRadius);
+        circle.setAttribute('fill', getCSSVariable('--surface-secondary', '#f9f9f9'));
+        circle.setAttribute('stroke', selectedNode === nodeId ? getCSSVariable('--warning-color', '#ff9800') : getCSSVariable('--border-color', '#e0e0e0'));
+        circle.setAttribute('stroke-width', selectedNode === nodeId ? '2' : '1');
+        grp.appendChild(circle);
+        
+        // Draw icon (centered in circle)
+        const icon = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        icon.setAttribute('x', node.x);
+        icon.setAttribute('y', node.y - 2);
+        icon.setAttribute('font-family', 'Material Icons');
+        icon.setAttribute('font-size', '20');
+        icon.setAttribute('pointer-events', 'none');
+        icon.setAttribute('text-anchor', 'middle');
+        icon.setAttribute('dominant-baseline', 'middle');
+        
+        // Set icon color based on node type
+        if (node.type === 'start') {
+          icon.setAttribute('fill', getCSSVariable('--success-color', '#4caf50'));
+        } else if (node.type === 'end-success') {
+          icon.setAttribute('fill', getCSSVariable('--success-color', '#4caf50'));
+        } else if (node.type === 'end-failure') {
+          icon.setAttribute('fill', getCSSVariable('--error-color', '#f44336'));
+        }
+        
+        const iconMap = {
+          'play_arrow': 'play_arrow',
+          'settings': 'settings',
+          'device_hub': 'device_hub',
+          'check_circle': 'check_circle',
+          'error': 'error'
+        };
+        icon.textContent = iconMap[node.icon] || 'device_hub';
+        grp.appendChild(icon);
+        
+        // Draw label (below icon, inside/below circle)
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('x', node.x);
+        text.setAttribute('y', node.y + 10);
+        text.setAttribute('text-anchor', 'middle');
+        text.setAttribute('dominant-baseline', 'middle');
+        text.setAttribute('fill', getCSSVariable('--text-primary', '#333'));
+        text.setAttribute('font-size', '9');
+        text.setAttribute('font-weight', '500');
+        text.setAttribute('pointer-events', 'none');
+        text.textContent = node.label;
+        grp.appendChild(text);
+        
+      } else {
+        
+        // Draw box with palette-like styling
+        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        rect.setAttribute('x', node.x - nodeWidth / 2);
+        rect.setAttribute('y', node.y - CANVAS.nodeHeight / 2);
+        rect.setAttribute('width', nodeWidth);
+        rect.setAttribute('height', CANVAS.nodeHeight);
+        rect.setAttribute('fill', getCSSVariable('--surface-secondary', '#f9f9f9'));
+        rect.setAttribute('stroke', selectedNode === nodeId ? getCSSVariable('--warning-color', '#ff9800') : getCSSVariable('--border-color', '#e0e0e0'));
+        rect.setAttribute('stroke-width', selectedNode === nodeId ? '2' : '1');
+        rect.setAttribute('rx', '4');
+        grp.appendChild(rect);
+        
+        // Draw icon using Material Icons font
+        const icon = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        icon.setAttribute('x', node.x - nodeWidth / 2 + 12);
+        icon.setAttribute('y', node.y);
+        icon.setAttribute('font-family', 'Material Icons');
+        icon.setAttribute('font-size', '18');
+        icon.setAttribute('pointer-events', 'none');
+        icon.setAttribute('text-anchor', 'middle');
+        icon.setAttribute('dominant-baseline', 'middle');
+        
+        // Set icon color based on node type
+        if (node.type === 'start') {
+          icon.setAttribute('fill', getCSSVariable('--success-color', '#4caf50'));
+        } else if (node.type === 'end-success') {
+          icon.setAttribute('fill', getCSSVariable('--success-color', '#4caf50'));
+        } else if (node.type === 'end-failure') {
+          icon.setAttribute('fill', getCSSVariable('--error-color', '#f44336'));
+        } else {
+          icon.setAttribute('fill', getCSSVariable('--text-muted', '#999'));
+        }
+        
+        // Material Icons font mapping
+        const iconMap = {
+          'play_arrow': 'play_arrow',
+          'settings': 'settings',
+          'device_hub': 'device_hub',
+          'check_circle': 'check_circle',
+          'error': 'error'
+        };
+        icon.textContent = iconMap[node.icon] || 'device_hub';
+        grp.appendChild(icon);
+        
+        // Draw label (positioned to right of icon)
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('x', node.x - nodeWidth / 2 + 36);
+        text.setAttribute('y', node.y);
+        text.setAttribute('text-anchor', 'start');
+        text.setAttribute('dominant-baseline', 'middle');
+        text.setAttribute('fill', getCSSVariable('--text-primary', '#333'));
+        text.setAttribute('font-size', '14');
+        text.setAttribute('font-weight', '500');
+        text.setAttribute('pointer-events', 'none');
+        text.textContent = node.label;
+        grp.appendChild(text);
+      }
       
-      // Draw label (positioned to right of icon)
-      const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      text.setAttribute('x', node.x - nodeWidth / 2 + 36);
-      text.setAttribute('y', node.y);
-      text.setAttribute('text-anchor', 'start');
-      text.setAttribute('dominant-baseline', 'middle');
-      text.setAttribute('fill', getCSSVariable('--text-primary', '#333'));
-      text.setAttribute('font-size', '14');
-      text.setAttribute('font-weight', '500');
-      text.setAttribute('pointer-events', 'none');
-      text.textContent = node.label;
-      grp.appendChild(text);
-      
-      // Draw ports with adjusted positions based on dynamic width
+      // Draw ports with adjusted positions based on node type
       node.ports.forEach(port => {
         const portGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         portGroup.setAttribute('data-port', port.id);
         portGroup.style.cursor = 'crosshair';
         
-        // Calculate dynamic port x position based on node type
+        // Calculate dynamic port x position and y position based on node type
         let portX = port.x;
-        if (node.type === 'execute') {
+        let portY = port.y;
+        
+        if (isCircularNode && node.type === 'start') {
+          // For circular start nodes, port is at bottom center
+          portX = 0;
+          portY = 28; // circle radius
+        } else if (node.type === 'execute') {
           // Center port at bottom-center
           portX = nodeWidth / 2;
         } else if (node.type === 'condition') {
@@ -732,8 +853,17 @@ function isSelected(inValue,compareValue){
         
         // Port circle
         const portCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        portCircle.setAttribute('cx', node.x + portX - nodeWidth / 2);
-        portCircle.setAttribute('cy', node.y + port.y - CANVAS.nodeHeight / 2);
+        
+        if (isCircularNode && node.type === 'start') {
+          // For circular nodes, calculate absolute position
+          portCircle.setAttribute('cx', node.x + portX);
+          portCircle.setAttribute('cy', node.y + portY);
+        } else {
+          // For rectangular nodes
+          portCircle.setAttribute('cx', node.x + portX - nodeWidth / 2);
+          portCircle.setAttribute('cy', node.y + portY - CANVAS.nodeHeight / 2);
+        }
+        
         portCircle.setAttribute('r', CANVAS.portRadius);
         portCircle.setAttribute('fill', getCSSVariable('--surface-color', '#fff'));
         portCircle.setAttribute('stroke', getCSSVariable('--border-color', '#333'));
@@ -742,8 +872,17 @@ function isSelected(inValue,compareValue){
         
         // Port label
         const portLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        portLabel.setAttribute('x', node.x + portX - nodeWidth / 2);
-        portLabel.setAttribute('y', node.y + port.y - CANVAS.nodeHeight / 2 + 20);
+        
+        if (isCircularNode && node.type === 'start') {
+          // For circular nodes
+          portLabel.setAttribute('x', node.x + portX);
+          portLabel.setAttribute('y', node.y + portY + 20);
+        } else {
+          // For rectangular nodes
+          portLabel.setAttribute('x', node.x + portX - nodeWidth / 2);
+          portLabel.setAttribute('y', node.y + portY - CANVAS.nodeHeight / 2 + 20);
+        }
+        
         portLabel.setAttribute('text-anchor', 'middle');
         portLabel.setAttribute('font-size', '11');
         portLabel.setAttribute('fill', getCSSVariable('--text-muted', '#666'));
@@ -757,7 +896,8 @@ function isSelected(inValue,compareValue){
       
       // Node interaction
       grp.addEventListener('mousedown', (e) => {
-        if (e.target.tagName === 'circle') return; // Don't handle port clicks here
+        // Only ignore if it's a port circle (parent has data-port attribute)
+        if (e.target.tagName === 'circle' && e.target.parentElement.hasAttribute('data-port')) return;
         isDraggingNode = nodeId;
         selectedNode = nodeId;
         updatePropertiesPanel();

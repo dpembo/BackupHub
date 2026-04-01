@@ -1928,7 +1928,11 @@ app.get('/runSchedule.html',User.isAuthenticated, asyncHandler(async (req, res) 
         orchestration.executeJob(orchestrationId, true, executionId, onNodeComplete).then(async (executionLog) => {
           updateInProgressExecution(orchestrationId, executionId, executionLog);
           // Execute in background, save results when complete
-          await orchestration.saveExecutionResult(executionLog);
+          try {
+            await orchestration.saveExecutionResult(executionLog);
+          } catch (saveErr) {
+            logger.error(`Failed to save execution result for orchestration [${orchestrationId}]: ${saveErr.message}`);
+          }
           // Clear the stub from cache - actual execution is now in history
           clearInProgressExecution(orchestrationId, executionId);
           // Remove from running queue by executionId for consistency with REST endpoint
@@ -1936,6 +1940,24 @@ app.get('/runSchedule.html',User.isAuthenticated, asyncHandler(async (req, res) 
           logger.info(`Orchestration [${orchestrationId}] execution completed with status: ${executionLog.finalStatus}`);
         }).catch((err) => {
           logger.error(`Background orchestration execution failed: ${err.message}`);
+          // Try to retrieve execution log from cache to save to history
+          const inProgressExecution = getInProgressExecution(orchestrationId, executionId);
+          if (inProgressExecution) {
+            // Mark as failed if not already marked
+            if (!inProgressExecution.status || inProgressExecution.status === 'running') {
+              inProgressExecution.status = 'failed';
+              inProgressExecution.finalStatus = 'error';
+            }
+            inProgressExecution.endTime = new Date().toISOString();
+            if (!inProgressExecution.errors) {
+              inProgressExecution.errors = [];
+            }
+            inProgressExecution.errors.push({ message: err.message });
+            // Save to history even on error
+            orchestration.saveExecutionResult(inProgressExecution).catch((saveErr) => {
+              logger.error(`Failed to save failed execution result for orchestration [${orchestrationId}]: ${saveErr.message}`);
+            });
+          }
           // Clear the stub on error too
           clearInProgressExecution(orchestrationId, executionId);
           // Remove from running queue on error by executionId
@@ -2712,7 +2734,11 @@ app.post('/rest/orchestration/jobs/:jobId/execute', User.isAuthenticated, asyncH
   orchestration.executeJob(jobId, true, executionId, onNodeComplete).then(async (executionLog) => {
     updateInProgressExecution(jobId, executionId, executionLog);
     // Execute in background, save results when complete
-    await orchestration.saveExecutionResult(executionLog);
+    try {
+      await orchestration.saveExecutionResult(executionLog);
+    } catch (saveErr) {
+      logger.error(`Failed to save execution result for orchestration [${jobId}]: ${saveErr.message}`);
+    }
     // Clear the stub from cache - actual execution is now in history
     clearInProgressExecution(jobId, executionId);
     // Remove from running queue
@@ -2720,6 +2746,24 @@ app.post('/rest/orchestration/jobs/:jobId/execute', User.isAuthenticated, asyncH
     logger.info(`Orchestration [${jobId}] execution completed with status: ${executionLog.finalStatus}`);
   }).catch((err) => {
     logger.error(`Background orchestration execution failed: ${err.message}`);
+    // Try to retrieve execution log from cache to save to history
+    const inProgressExecution = getInProgressExecution(jobId, executionId);
+    if (inProgressExecution) {
+      // Mark as failed if not already marked
+      if (!inProgressExecution.status || inProgressExecution.status === 'running') {
+        inProgressExecution.status = 'failed';
+        inProgressExecution.finalStatus = 'error';
+      }
+      inProgressExecution.endTime = new Date().toISOString();
+      if (!inProgressExecution.errors) {
+        inProgressExecution.errors = [];
+      }
+      inProgressExecution.errors.push({ message: err.message });
+      // Save to history even on error
+      orchestration.saveExecutionResult(inProgressExecution).catch((saveErr) => {
+        logger.error(`Failed to save failed execution result for orchestration [${jobId}]: ${saveErr.message}`);
+      });
+    }
     // Clear the stub on error too
     clearInProgressExecution(jobId, executionId);
     // Remove from running queue on error as well
@@ -3074,13 +3118,21 @@ app.get('/orchestrationList.html', User.isAuthenticated, asyncHandler(async (req
 
 app.get('/orchestrationBuilder.html', User.isAuthenticated, asyncHandler(async (req, res) => {
   const jobId = req.query.id; // undefined for new jobs, or specific ID for editing
-  const job = await orchestration.getJob(jobId);
+  var color = "#FF9800";
+  var icon = "workspaces";
+
+  if(jobId !== undefined){
+    const job = await orchestration.getJob(jobId);
+    color = job.color;
+    icon = job.icon;
+  }
+
   res.render('orchestrationBuilder', { 
     csrfToken: req.csrfToken(),
     icons:serverConfig.job_icons,
     jobId: jobId || '',
-    color: job.color,
-    icon: job.icon
+    color: color,
+    icon: icon
   });
 }));
 

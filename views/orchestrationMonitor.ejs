@@ -456,6 +456,13 @@
       animation: nodeSpinning 2s linear infinite, nodeBlinking 1s ease-in-out infinite;
     }
 
+    .node-in-progress circle {
+      stroke: #ff9800 !important;
+      stroke-width: 3 !important;
+      stroke-dasharray: 20, 8;
+      animation: nodeSpinning 2s linear infinite, nodeBlinking 1s ease-in-out infinite;
+    }
+
     @keyframes nodeSpinning {
       0% {
         stroke-dashoffset: 0;
@@ -477,7 +484,21 @@
       opacity: 1 !important;
     }
 
+    .node-completed circle {
+      stroke: #4caf50 !important;
+      stroke-width: 2 !important;
+      animation: none !important;
+      opacity: 1 !important;
+    }
+
     .node-failed rect {
+      stroke: #f44336 !important;
+      stroke-width: 2 !important;
+      animation: none !important;
+      opacity: 1 !important;
+    }
+
+    .node-failed circle {
       stroke: #f44336 !important;
       stroke-width: 2 !important;
       animation: none !important;
@@ -1104,6 +1125,8 @@
       }
 
       const rect = nodeElement.querySelector('rect');
+      const circle = nodeElement.querySelector('circle');
+      const shape = rect || circle; // Get whichever shape element exists
       let iconElement = nodeElement.querySelector('.node-status-icon');
       let iconText = '';
       let iconColor = '#9e9e9e';
@@ -1125,16 +1148,16 @@
         iconText = '✅';
         iconColor = '#4caf50';
         
-        // Also update the rect's stroke directly as backup styling
-        if (rect) {
+        // Also update the shape's stroke directly as backup styling
+        if (shape) {
           const successColor = '#4caf50';
           const failureColor = state.includes('failure') ? '#f44336' : successColor;
-          rect.setAttribute('stroke', failureColor);
-          rect.setAttribute('stroke-width', '2');
+          shape.setAttribute('stroke', failureColor);
+          shape.setAttribute('stroke-width', '2');
         }
       }
 
-      if (iconText && rect) {
+      if (iconText && shape) {
         if (!iconElement) {
           iconElement = document.createElementNS('http://www.w3.org/2000/svg', 'text');
           iconElement.setAttribute('class', 'node-status-icon');
@@ -1143,8 +1166,20 @@
           iconElement.setAttribute('text-anchor', 'middle');
           nodeElement.appendChild(iconElement);
         }
-        iconElement.setAttribute('x', Number(rect.getAttribute('x')) + 12);
-        iconElement.setAttribute('y', Number(rect.getAttribute('y')) + (Number(rect.getAttribute('height')) / 2));
+        
+        // Position icon based on shape type
+        if (circle) {
+          // For circles, center the icon
+          const cx = Number(circle.getAttribute('cx'));
+          const cy = Number(circle.getAttribute('cy'));
+          iconElement.setAttribute('x', cx);
+          iconElement.setAttribute('y', cy - 4);
+        } else if (rect) {
+          // For rectangles, position icon on the left
+          iconElement.setAttribute('x', Number(rect.getAttribute('x')) + 12);
+          iconElement.setAttribute('y', Number(rect.getAttribute('y')) + (Number(rect.getAttribute('height')) / 2));
+        }
+        
         iconElement.setAttribute('fill', iconColor);
         iconElement.textContent = iconText;
       } else if (iconElement) {
@@ -1432,55 +1467,97 @@
       }
       g.setAttribute('class', nodeClasses.join(' '));
 
-      // Rectangle background
-      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-      rect.setAttribute('x', node.x - CANVAS.nodeWidth / 2);
-      rect.setAttribute('y', node.y - CANVAS.nodeHeight / 2);
-      rect.setAttribute('width', CANVAS.nodeWidth);
-      rect.setAttribute('height', CANVAS.nodeHeight);
-      rect.setAttribute('fill', getCSSVariable('--surface-color', '#ffffff'));
-      rect.setAttribute('stroke', borderColor);
-      rect.setAttribute('stroke-width', '2');
-      rect.setAttribute('rx', '4');
-      g.appendChild(rect);
+      // Check if node is a circular node type (start, end-success, end-failure)
+      const isCircularNode = node.type === 'start' || node.type === 'end-success' || node.type === 'end-failure';
+      const circleRadius = 28;
 
-      // Status icon
-      if (statusIcon) {
-        const iconText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        iconText.setAttribute('class', 'node-status-icon');
-        iconText.setAttribute('x', node.x - CANVAS.nodeWidth / 2 + 12);
-        iconText.setAttribute('y', node.y);
-        iconText.setAttribute('font-size', '18');
-        iconText.setAttribute('fill', borderColor);
-        iconText.setAttribute('dominant-baseline', 'middle');
-        iconText.setAttribute('text-anchor', 'middle');
-        iconText.textContent = statusIcon;
-        g.appendChild(iconText);
-      }
+      if (isCircularNode) {
+        // Circular background for start, success, failure nodes
+        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        circle.setAttribute('cx', node.x);
+        circle.setAttribute('cy', node.y);
+        circle.setAttribute('r', circleRadius);
+        circle.setAttribute('fill', getCSSVariable('--surface-color', '#ffffff'));
+        circle.setAttribute('stroke', borderColor);
+        circle.setAttribute('stroke-width', '2');
+        g.appendChild(circle);
 
-      // Node label
-      const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      text.setAttribute('x', node.x - CANVAS.nodeWidth / 2 + 40);
-      text.setAttribute('y', node.y);
-      text.setAttribute('font-size', '12');
-      text.setAttribute('font-weight', '500');
-      text.setAttribute('fill', 'var(--text-primary)');
-      text.setAttribute('text-anchor', 'start');
-      text.setAttribute('dominant-baseline', 'middle');
-      text.textContent = node.label.substring(0, 20);
-      g.appendChild(text);
+        // Status icon centered in circle
+        if (statusIcon) {
+          const iconText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          iconText.setAttribute('class', 'node-status-icon');
+          iconText.setAttribute('x', node.x);
+          iconText.setAttribute('y', node.y - 4);
+          iconText.setAttribute('font-size', '18');
+          iconText.setAttribute('fill', borderColor);
+          iconText.setAttribute('dominant-baseline', 'middle');
+          iconText.setAttribute('text-anchor', 'middle');
+          iconText.textContent = statusIcon;
+          g.appendChild(iconText);
+        }
 
-      // Exit code if applicable
-      if (statusInfo.exitCode !== undefined) {
-        const exitText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        exitText.setAttribute('x', node.x - CANVAS.nodeWidth / 2 + 40);
-        exitText.setAttribute('y', node.y + 12);
-        exitText.setAttribute('font-size', '10');
-        exitText.setAttribute('fill', 'var(--text-muted)');
-        exitText.setAttribute('dominant-baseline', 'middle');
-        exitText.setAttribute('text-anchor', 'start');
-        exitText.textContent = `Exit: ${statusInfo.exitCode}`;
-        g.appendChild(exitText);
+        // Node label below circle
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('x', node.x);
+        text.setAttribute('y', node.y + circleRadius + 16);
+        text.setAttribute('font-size', '11');
+        text.setAttribute('font-weight', '500');
+        text.setAttribute('fill', 'var(--text-primary)');
+        text.setAttribute('text-anchor', 'middle');
+        text.setAttribute('dominant-baseline', 'middle');
+        text.textContent = node.label;
+        g.appendChild(text);
+      } else {
+        // Rectangle background for other node types (execute, condition)
+        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        rect.setAttribute('x', node.x - CANVAS.nodeWidth / 2);
+        rect.setAttribute('y', node.y - CANVAS.nodeHeight / 2);
+        rect.setAttribute('width', CANVAS.nodeWidth);
+        rect.setAttribute('height', CANVAS.nodeHeight);
+        rect.setAttribute('fill', getCSSVariable('--surface-color', '#ffffff'));
+        rect.setAttribute('stroke', borderColor);
+        rect.setAttribute('stroke-width', '2');
+        rect.setAttribute('rx', '4');
+        g.appendChild(rect);
+
+        // Status icon
+        if (statusIcon) {
+          const iconText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          iconText.setAttribute('class', 'node-status-icon');
+          iconText.setAttribute('x', node.x - CANVAS.nodeWidth / 2 + 12);
+          iconText.setAttribute('y', node.y);
+          iconText.setAttribute('font-size', '18');
+          iconText.setAttribute('fill', borderColor);
+          iconText.setAttribute('dominant-baseline', 'middle');
+          iconText.setAttribute('text-anchor', 'middle');
+          iconText.textContent = statusIcon;
+          g.appendChild(iconText);
+        }
+
+        // Node label
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('x', node.x - CANVAS.nodeWidth / 2 + 40);
+        text.setAttribute('y', node.y);
+        text.setAttribute('font-size', '12');
+        text.setAttribute('font-weight', '500');
+        text.setAttribute('fill', 'var(--text-primary)');
+        text.setAttribute('text-anchor', 'start');
+        text.setAttribute('dominant-baseline', 'middle');
+        text.textContent = node.label.substring(0, 20);
+        g.appendChild(text);
+
+        // Exit code if applicable
+        if (statusInfo.exitCode !== undefined) {
+          const exitText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          exitText.setAttribute('x', node.x - CANVAS.nodeWidth / 2 + 40);
+          exitText.setAttribute('y', node.y + 12);
+          exitText.setAttribute('font-size', '10');
+          exitText.setAttribute('fill', 'var(--text-muted)');
+          exitText.setAttribute('dominant-baseline', 'middle');
+          exitText.setAttribute('text-anchor', 'start');
+          exitText.textContent = `Exit: ${statusInfo.exitCode}`;
+          g.appendChild(exitText);
+        }
       }
 
       layer.appendChild(g);
@@ -1502,11 +1579,29 @@
         arrowMarker = 'url(#arrowhead-blue)';
       }
 
-      // Calculate port positions
-      const fromX = fromNode.x;
-      const fromY = fromNode.y + CANVAS.nodeHeight / 2;
-      const toX = toNode.x;
-      const toY = toNode.y - CANVAS.nodeHeight / 2;
+      // Determine node types to calculate proper port positions
+      const fromIsCircular = fromNode.type === 'start' || fromNode.type === 'end-success' || fromNode.type === 'end-failure';
+      const toIsCircular = toNode.type === 'start' || toNode.type === 'end-success' || toNode.type === 'end-failure';
+      const circleRadius = 28;
+
+      // Calculate port positions based on node type
+      let fromX, fromY, toX, toY;
+      
+      if (fromIsCircular) {
+        fromX = fromNode.x;
+        fromY = fromNode.y + circleRadius + 4; // Account for circle radius + small buffer
+      } else {
+        fromX = fromNode.x;
+        fromY = fromNode.y + CANVAS.nodeHeight / 2;
+      }
+      
+      if (toIsCircular) {
+        toX = toNode.x;
+        toY = toNode.y - circleRadius - 4; // Account for circle radius + small buffer
+      } else {
+        toX = toNode.x;
+        toY = toNode.y - CANVAS.nodeHeight / 2;
+      }
 
       // Create bezier curve
       const midY = (fromY + toY) / 2;
@@ -1706,8 +1801,24 @@
       statusColor = statusInfo.color;
 
       let logHtml = '<p style="color: var(--text-muted); margin: 0;">No output captured</p>';
-      if (nodeOutput && nodeOutput.stdout) {
-        logHtml = `<textarea readonly rows="10" style="font-family: 'Courier New', monospace; width: 100%; height: auto;">${escapeHtml(nodeOutput.stdout)}</textarea>`;
+      if (nodeOutput && (nodeOutput.stdout || nodeOutput.stderr)) {
+        let outputContent = '';
+        
+        // Add stdout if present
+        if (nodeOutput.stdout) {
+          outputContent += nodeOutput.stdout;
+        }
+        
+        // Add stderr if present (with separator if stdout also exists)
+        if (nodeOutput.stderr) {
+          if (nodeOutput.stdout) {
+            outputContent += '\n\n--- STDERR ---\n' + nodeOutput.stderr;
+          } else {
+            outputContent += nodeOutput.stderr;
+          }
+        }
+        
+        logHtml = `<textarea readonly rows="10" style="font-family: 'Courier New', monospace; width: 100%; height: auto;">${escapeHtml(outputContent)}</textarea>`;
       }
 
       // Format start time and duration from nodeMetrics

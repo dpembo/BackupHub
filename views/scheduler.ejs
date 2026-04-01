@@ -281,6 +281,14 @@ function noValue(inValue){
           </div>
 
           <div class="row">
+            <div class="input-field col s12">
+            <textarea id="description" name="description" class="materialize-textarea" required><%=getSchedule().description%></textarea>
+            <label for="description">Description*</label>
+            <span class="helper-text" data-error="Please provide a description"></span>
+            </div>
+          </div>
+
+          <div class="row" id="iconColorRow">
             <!--<div class="input-field col s5">
               <div class="input-wrapper">
                 <label for="jobName">Job Name*</label>
@@ -327,13 +335,7 @@ function noValue(inValue){
             </div>
           </div>
 
-          <div class="row">
-            <div class="input-field col s12">
-            <textarea id="description" name="description" class="materialize-textarea" required><%=getSchedule().description%></textarea>
-            <label for="description">Description*</label>
-            <span class="helper-text" data-error="Please provide a description"></span>
-            </div>
-          </div>
+
 
           <div class="row">
             <div class="input-field col s12 m3">
@@ -618,15 +620,18 @@ function noValue(inValue){
   function switchScheduleMode(mode) {
     const classicSection = document.getElementById('classicModeSection');
     const orchestrationSection = document.getElementById('orchestrationModeSection');
+    const iconColorRow = document.getElementById('iconColorRow');
     
     if (mode === 'classic') {
       classicSection.style.display = 'block';
       orchestrationSection.style.display = 'none';
+      iconColorRow.style.display = 'block';
       // Reinitialize Materialize selects for classic mode elements
       M.FormSelect.init(document.querySelectorAll('#classicModeSection select'));
     } else if (mode === 'orchestration') {
       classicSection.style.display = 'none';
       orchestrationSection.style.display = 'block';
+      iconColorRow.style.display = 'none';
       // Reinitialize Materialize selects for orchestration mode elements
       M.FormSelect.init(document.querySelectorAll('#orchestrationModeSection select'));
     }
@@ -652,7 +657,14 @@ function noValue(inValue){
     // Common validations
     isValid = validateInput(document.getElementById('jobName')) ? isValid : false;
     isValid = validateInput(document.getElementById('description')) ? isValid : false; 
-    isValid = validateInput(document.getElementById('icon_select')) ? isValid : false;
+    
+    // Only validate icon in classic mode
+    if (scheduleMode === 'classic') {
+      isValid = validateInput(document.getElementById('icon_select')) ? isValid : false;
+    } else {
+      resetValidation(document.getElementById('icon_select'));
+    }
+    
     isValid = validateInput(document.getElementById('scheduleType')) ? isValid : false;
     
     if (scheduleMode === 'classic') {
