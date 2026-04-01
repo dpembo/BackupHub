@@ -1884,7 +1884,11 @@ function isSelected(inValue,compareValue){
       }
     }
 
-    M.FormSelect.init(document.querySelectorAll('select'));
+    // Initialize FormSelect only for the icon_select, not for dynamically-shown properties (which use native selects)
+    const iconSelect = document.getElementById('icon_select');
+    if (iconSelect) {
+      M.FormSelect.init(iconSelect);
+    }
     // Add icons to the select options
     document.addEventListener('DOMContentLoaded', function() {
 
