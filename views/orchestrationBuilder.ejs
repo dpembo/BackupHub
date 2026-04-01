@@ -58,6 +58,35 @@ function isSelected(inValue,compareValue){
       gap: 0;
       flex-direction: column;
     }
+    .palette-item[data-node-type="condition"] {
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      margin-bottom: 8px;
+      border-radius: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 0;
+      flex-direction: column;
+      border-color: #e0e0e0;
+      transform: rotate(45deg);
+      line-height: 1.2;
+    }
+    .palette-item[data-node-type="condition"] i {
+      font-size: 12px;
+      margin: 0;
+      line-height: 1;
+      display: block;
+    }
+    .palette-item[data-node-type="condition"] span {
+      font-size: 8px;
+      margin: 0;
+      text-align: center;
+      width: 100%;
+      line-height: 1;
+      display: block;
+    }
     .palette-item[data-node-type="start"] i,
     .palette-item[data-node-type="end-success"] i,
     .palette-item[data-node-type="end-failure"] i {
@@ -245,8 +274,8 @@ function isSelected(inValue,compareValue){
         <div class="palette-section">
           <h4>Logic</h4>
           <div class="palette-item" draggable="true" data-node-type="condition">
-            <i class="material-icons">device_hub</i>
-            <span>Condition</span>
+            <i class="material-icons" style="transform: rotate(-45deg); font-size: 12px;margin-right:6px">call_split</i>
+            <span style="transform: rotate(-45deg); font-size: 8px; font-weight: bold; margin-top: -2px;margin-left:10px;">if</span>
           </div>
         </div>
         
@@ -521,6 +550,46 @@ function isSelected(inValue,compareValue){
         item.addEventListener('dragstart', function(e) {
           e.dataTransfer.effectAllowed = 'move';
           e.dataTransfer.setData('nodeType', this.dataset.nodeType);
+          
+          // Create custom drag image for condition nodes to show diamond shape
+          if (this.dataset.nodeType === 'condition') {
+            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svg.setAttribute('width', '40');
+            svg.setAttribute('height', '40');
+            svg.setAttribute('viewBox', '0 0 40 40');
+            
+            const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+            polygon.setAttribute('points', '20,0 40,20 20,40 0,20');
+            polygon.setAttribute('fill', '#f9f9f9');
+            polygon.setAttribute('stroke', '#e0e0e0');
+            polygon.setAttribute('stroke-width', '1');
+            
+            const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            text.setAttribute('x', '20');
+            text.setAttribute('y', '21');
+            text.setAttribute('font-family', 'Arial, sans-serif');
+            text.setAttribute('font-size', '10');
+            text.setAttribute('font-weight', 'bold');
+            text.setAttribute('text-anchor', 'middle');
+            text.setAttribute('dominant-baseline', 'middle');
+            text.setAttribute('fill', '#333');
+            text.textContent = 'if';
+            
+            svg.appendChild(polygon);
+            svg.appendChild(text);
+            
+            // Create a temporary container
+            const container = document.createElement('div');
+            container.style.position = 'absolute';
+            container.style.top = '-9999px';
+            container.appendChild(svg);
+            document.body.appendChild(container);
+            
+            e.dataTransfer.setDragImage(svg, 20, 20);
+            
+            // Clean up after drag
+            setTimeout(() => document.body.removeChild(container), 0);
+          }
         });
       });
       
@@ -608,12 +677,11 @@ function isSelected(inValue,compareValue){
       if (node.type === 'execute') {
         portX = nodeWidth / 2;
       } else if (node.type === 'condition') {
-        const baseOffset = 30;
-        if (port.id === 'true') {
-          portX = nodeWidth / 2 - baseOffset;
-        } else if (port.id === 'false') {
-          portX = nodeWidth / 2 + baseOffset;
-        }
+        // For diamond nodes, ports are already positioned relative to center
+        return {
+          x: node.x + port.x,
+          y: node.y + port.y
+        };
       }
       
       return {
@@ -639,12 +707,12 @@ function isSelected(inValue,compareValue){
         icon = 'settings';
         ports = [{ id: 'out', label: 'next', x: CANVAS.nodeWidth / 2, y: CANVAS.nodeHeight }];
       } else if (type === 'condition') {
-        label = 'Condition';
+        label = 'if';
         icon = 'device_hub';
-        // Condition nodes have labeled exit ports
+        // Condition nodes have labeled exit ports on left/right of diamond
         ports = [
-          { id: 'true', label: 'true', x: CANVAS.nodeWidth / 2 - 30, y: CANVAS.nodeHeight },
-          { id: 'false', label: 'false', x: CANVAS.nodeWidth / 2 + 30, y: CANVAS.nodeHeight }
+          { id: 'true', label: 'true', x: -28, y: 0 },
+          { id: 'false', label: 'false', x: 28, y: 0 }
         ];
       } else if (type === 'end-success') {
         label = 'Success';
@@ -698,6 +766,7 @@ function isSelected(inValue,compareValue){
       
       // Check if this is a circular node type (start, success, failure)
       const isCircularNode = node.type === 'start' || node.type === 'end-success' || node.type === 'end-failure';
+      const isDiamondNode = node.type === 'condition';
       
       // Define nodeWidth for use in ports (for rectangular nodes)
       let nodeWidth = 200;
@@ -708,7 +777,52 @@ function isSelected(inValue,compareValue){
         nodeWidth = calculatedWidth;
       }
       
-      if (isCircularNode) {
+      if (isDiamondNode) {
+        // Diamond node rendering (conditionals)
+        const diamondSize = 28; // same as circle radius
+        
+        // Draw diamond using polygon
+        const diamond = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+        const points = [
+          [node.x, node.y - diamondSize],           // top
+          [node.x + diamondSize, node.y],           // right
+          [node.x, node.y + diamondSize],           // bottom
+          [node.x - diamondSize, node.y]            // left
+        ];
+        diamond.setAttribute('points', points.map(p => p.join(',')).join(' '));
+        diamond.setAttribute('fill', getCSSVariable('--surface-secondary', '#f9f9f9'));
+        diamond.setAttribute('stroke', selectedNode === nodeId ? getCSSVariable('--warning-color', '#ff9800') : getCSSVariable('--border-color', '#e0e0e0'));
+        diamond.setAttribute('stroke-width', selectedNode === nodeId ? '2' : '1');
+        grp.appendChild(diamond);
+        
+        // Draw icon (above center in diamond)
+        const icon = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        icon.setAttribute('x', node.x);
+        icon.setAttribute('y', node.y - 6);
+        icon.setAttribute('font-family', 'Material Icons');
+        icon.setAttribute('font-size', '16');
+        icon.setAttribute('pointer-events', 'none');
+        icon.setAttribute('text-anchor', 'middle');
+        icon.setAttribute('dominant-baseline', 'middle');
+        icon.setAttribute('fill', getCSSVariable('--text-primary', '#333'));
+        icon.textContent = 'call_split';
+        grp.appendChild(icon);
+        
+        // Draw label text (below icon, centered in diamond)
+        const labelText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        labelText.setAttribute('x', node.x);
+        labelText.setAttribute('y', node.y + 6);
+        labelText.setAttribute('font-family', 'Arial, sans-serif');
+        labelText.setAttribute('font-size', '12');
+        labelText.setAttribute('font-weight', 'bold');
+        labelText.setAttribute('pointer-events', 'none');
+        labelText.setAttribute('text-anchor', 'middle');
+        labelText.setAttribute('dominant-baseline', 'middle');
+        labelText.setAttribute('fill', getCSSVariable('--text-primary', '#333'));
+        labelText.textContent = node.label;
+        grp.appendChild(labelText);
+        
+      } else if (isCircularNode) {
         // Circular node rendering
         const circleRadius = 28;
         
@@ -830,40 +944,36 @@ function isSelected(inValue,compareValue){
         portGroup.setAttribute('data-port', port.id);
         portGroup.style.cursor = 'crosshair';
         
-        // Calculate dynamic port x position and y position based on node type
+        // Calculate port position based on node type
         let portX = port.x;
         let portY = port.y;
+        let portAbsX, portAbsY;
+        let labelOffsetX = 0, labelOffsetY = 20;
         
-        if (isCircularNode && node.type === 'start') {
+        if (isDiamondNode) {
+          // For diamond nodes, ports are already relative to center
+          portAbsX = node.x + portX;
+          portAbsY = node.y + portY;
+          labelOffsetX = portX > 0 ? 20 : -20;  // offset label to outside
+          labelOffsetY = 5;
+        } else if (isCircularNode && node.type === 'start') {
           // For circular start nodes, port is at bottom center
-          portX = 0;
-          portY = 28; // circle radius
+          portAbsX = node.x;
+          portAbsY = node.y + 28; // circle radius
         } else if (node.type === 'execute') {
           // Center port at bottom-center
-          portX = nodeWidth / 2;
-        } else if (node.type === 'condition') {
-          // Condition ports: left and right of center
-          const baseOffset = 30;
-          if (port.id === 'true') {
-            portX = nodeWidth / 2 - baseOffset;
-          } else if (port.id === 'false') {
-            portX = nodeWidth / 2 + baseOffset;
-          }
+          portAbsX = node.x;
+          portAbsY = node.y + CANVAS.nodeHeight / 2;
+        } else {
+          // Default for rectangular nodes
+          portAbsX = node.x + portX - nodeWidth / 2;
+          portAbsY = node.y + portY - CANVAS.nodeHeight / 2;
         }
         
         // Port circle
         const portCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        
-        if (isCircularNode && node.type === 'start') {
-          // For circular nodes, calculate absolute position
-          portCircle.setAttribute('cx', node.x + portX);
-          portCircle.setAttribute('cy', node.y + portY);
-        } else {
-          // For rectangular nodes
-          portCircle.setAttribute('cx', node.x + portX - nodeWidth / 2);
-          portCircle.setAttribute('cy', node.y + portY - CANVAS.nodeHeight / 2);
-        }
-        
+        portCircle.setAttribute('cx', portAbsX);
+        portCircle.setAttribute('cy', portAbsY);
         portCircle.setAttribute('r', CANVAS.portRadius);
         portCircle.setAttribute('fill', getCSSVariable('--surface-color', '#fff'));
         portCircle.setAttribute('stroke', getCSSVariable('--border-color', '#333'));
@@ -872,18 +982,14 @@ function isSelected(inValue,compareValue){
         
         // Port label
         const portLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        portLabel.setAttribute('x', portAbsX + labelOffsetX);
+        portLabel.setAttribute('y', portAbsY + labelOffsetY);
         
-        if (isCircularNode && node.type === 'start') {
-          // For circular nodes
-          portLabel.setAttribute('x', node.x + portX);
-          portLabel.setAttribute('y', node.y + portY + 20);
+        if (isDiamondNode) {
+          portLabel.setAttribute('text-anchor', labelOffsetX > 0 ? 'start' : 'end');
         } else {
-          // For rectangular nodes
-          portLabel.setAttribute('x', node.x + portX - nodeWidth / 2);
-          portLabel.setAttribute('y', node.y + portY - CANVAS.nodeHeight / 2 + 20);
+          portLabel.setAttribute('text-anchor', 'middle');
         }
-        
-        portLabel.setAttribute('text-anchor', 'middle');
         portLabel.setAttribute('font-size', '11');
         portLabel.setAttribute('fill', getCSSVariable('--text-muted', '#666'));
         portLabel.setAttribute('pointer-events', 'none');
@@ -1324,8 +1430,8 @@ function isSelected(inValue,compareValue){
               } else if (type === 'condition') {
                 icon = 'device_hub';
                 ports = [
-                  { id: 'true', label: 'true', x: CANVAS.nodeWidth / 2 - 30, y: CANVAS.nodeHeight },
-                  { id: 'false', label: 'false', x: CANVAS.nodeWidth / 2 + 30, y: CANVAS.nodeHeight }
+                  { id: 'true', label: 'true', x: -28, y: 0 },
+                  { id: 'false', label: 'false', x: 28, y: 0 }
                 ];
               } else if (type === 'end-success') {
                 icon = 'check_circle';
