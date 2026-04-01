@@ -467,6 +467,19 @@ function isSelected(inValue,compareValue){
     </div>
   </div>
   
+  <!-- Execution Confirmation Modal -->
+  <div id="execution-confirmation-modal" class="modal">
+    <div class="modal-content">
+      <h4>Execute Orchestration</h4>
+      <p>Execute <strong id="exec-modal-name"></strong>?</p>
+      <p style="font-size: 0.9em; color: var(--text-muted, #666); margin-top: 15px;">The orchestration will start immediately.</p>
+    </div>
+    <div class="modal-footer">
+      <a href="#!" class="modal-close waves-effect waves-green btn-flat">Cancel</a>
+      <a href="#!" onclick="proceedWithExecution()" class="waves-effect waves-red btn-flat" style="color: #f44336; font-weight: 600;">Execute</a>
+    </div>
+  </div>
+  
   <script>
     // SVG-based orchestration builder with labeled exit ports for conditions
     
@@ -1719,11 +1732,13 @@ function isSelected(inValue,compareValue){
         data: JSON.stringify(orchestration),
         success: function(result) {
           orchestrationId = result.job.id;
-          alert('Orchestration saved successfully!');
-          window.location.href = '/orchestrationList.html';
+          M.toast({html: 'Orchestration saved successfully!'});
+          setTimeout(function() {
+            window.location.href = '/orchestrationList.html';
+          }, 1000);
         },
         error: function(err) {
-          alert('Error saving orchestration: ' + err.statusText);
+          M.toast({html: 'Error saving orchestration: ' + err.statusText});
         }
       });
     }
@@ -1731,18 +1746,27 @@ function isSelected(inValue,compareValue){
     function runOrchestration() {
       // Check if orchestration has been saved
       if (!orchestrationId) {
-        alert('Please save the orchestration before running it');
+        M.toast({html: 'Please save the orchestration before running it'});
         return;
       }
       
-      // Show confirmation and run
-      const confirmRun = confirm(`Execute "${orchestrationName}"?\n\nThe orchestration will start immediately.`);
-      if (!confirmRun) return;
-      
+      // Show confirmation modal
+      document.getElementById('exec-modal-name').textContent = orchestrationName;
+      var modal = M.Modal.getInstance(document.getElementById('execution-confirmation-modal'));
+      if (modal) {
+        modal.open();
+      } else {
+        M.Modal.init(document.getElementById('execution-confirmation-modal')).open();
+      }
+    }
+    
+    function proceedWithExecution() {
       // Disable the button during execution
-      const runButton = event.target.closest('button');
-      runButton.disabled = true;
-      runButton.style.opacity = '0.6';
+      const runButton = document.querySelector('.save-btn');
+      if (runButton) {
+        runButton.disabled = true;
+        runButton.style.opacity = '0.6';
+      }
       
       $.ajax({
         url: '/rest/orchestration/jobs/' + encodeURIComponent(orchestrationId) + '/execute',
@@ -1750,23 +1774,34 @@ function isSelected(inValue,compareValue){
         contentType: 'application/json',
         success: function(result) {
           if (result.success && result.executionId) {
-            alert('Orchestration execution started!\n\nExecution ID: ' + result.executionId);
+            M.toast({html: 'Orchestration execution started! (ID: ' + result.executionId + ')'});
             // Open monitor in new tab
             window.open('/orchestration/monitor.html?jobId=' + encodeURIComponent(orchestrationId) + '&executionId=' + encodeURIComponent(result.executionId), '_blank');
+            // Close modal
+            var modal = M.Modal.getInstance(document.getElementById('execution-confirmation-modal'));
+            if (modal) {
+              modal.close();
+            }
             // Re-enable button
-            runButton.disabled = false;
-            runButton.style.opacity = '1';
+            if (runButton) {
+              runButton.disabled = false;
+              runButton.style.opacity = '1';
+            }
           } else {
-            alert('Failed to start orchestration execution');
+            M.toast({html: 'Failed to start orchestration execution'});
             // Re-enable button on failure
-            runButton.disabled = false;
-            runButton.style.opacity = '1';
+            if (runButton) {
+              runButton.disabled = false;
+              runButton.style.opacity = '1';
+            }
           }
         },
         error: function(err) {
-          alert('Error executing orchestration: ' + (err.responseJSON ? err.responseJSON.error : err.statusText));
-          runButton.disabled = false;
-          runButton.style.opacity = '1';
+          M.toast({html: 'Error executing orchestration: ' + (err.responseJSON ? err.responseJSON.error : err.statusText)});
+          if (runButton) {
+            runButton.disabled = false;
+            runButton.style.opacity = '1';
+          }
         }
       });
     }
@@ -1817,7 +1852,7 @@ function isSelected(inValue,compareValue){
       const desc = descInput.value.trim();
       
       if (!name) {
-        alert('Please provide a name for the orchestration');
+        M.toast({html: 'Please provide a name for the orchestration'});
         return;
       }
       

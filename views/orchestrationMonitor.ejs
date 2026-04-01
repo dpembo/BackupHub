@@ -463,6 +463,13 @@
       animation: nodeSpinning 2s linear infinite, nodeBlinking 1s ease-in-out infinite;
     }
 
+    .node-in-progress polygon {
+      stroke: #ff9800 !important;
+      stroke-width: 3 !important;
+      stroke-dasharray: 20, 8;
+      animation: nodeSpinning 2s linear infinite, nodeBlinking 1s ease-in-out infinite;
+    }
+
     @keyframes nodeSpinning {
       0% {
         stroke-dashoffset: 0;
@@ -491,6 +498,13 @@
       opacity: 1 !important;
     }
 
+    .node-completed polygon {
+      stroke: #4caf50 !important;
+      stroke-width: 2 !important;
+      animation: none !important;
+      opacity: 1 !important;
+    }
+
     .node-failed rect {
       stroke: #f44336 !important;
       stroke-width: 2 !important;
@@ -499,6 +513,13 @@
     }
 
     .node-failed circle {
+      stroke: #f44336 !important;
+      stroke-width: 2 !important;
+      animation: none !important;
+      opacity: 1 !important;
+    }
+
+    .node-failed polygon {
       stroke: #f44336 !important;
       stroke-width: 2 !important;
       animation: none !important;
