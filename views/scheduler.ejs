@@ -287,8 +287,8 @@ function noValue(inValue){
             <span class="helper-text" data-error="Please provide a description"></span>
             </div>
           </div>
-
-          <div class="row" id="iconColorRow">
+                    
+          <div class="row">
             <!--<div class="input-field col s5">
               <div class="input-wrapper">
                 <label for="jobName">Job Name*</label>
@@ -297,6 +297,7 @@ function noValue(inValue){
               </div>
             </div>-->
 
+            <div class="row" id="iconColorRow">
             <div class="input-field col s8">
               <label class="active" for="icon_select">Icon</label>
               <select id="icon_select" name="icon" onchange="updateIconPreview(this);">
@@ -333,7 +334,7 @@ function noValue(inValue){
             <div class="input-field col s1">
               <input type="text" id="picker" name="picker" value="<%=savedcolor%>" onchange="document.getElementById('colour').value=this.value;document.querySelector('span#preview').style.color=this.value;">
             </div>
-          </div>
+            </div>
 
 
 
@@ -632,6 +633,13 @@ function noValue(inValue){
       classicSection.style.display = 'none';
       orchestrationSection.style.display = 'block';
       iconColorRow.style.display = 'none';
+      
+      // Default icon and color values for orchestration
+      document.getElementById('icon_select').value = 'schema';
+      document.getElementById('colour').value = '#000000';
+      document.getElementById('picker').value = '#000000';
+      document.querySelector('span#preview').style.color = '#000000';
+      
       // Reinitialize Materialize selects for orchestration mode elements
       M.FormSelect.init(document.querySelectorAll('#orchestrationModeSection select'));
     }
@@ -657,14 +665,7 @@ function noValue(inValue){
     // Common validations
     isValid = validateInput(document.getElementById('jobName')) ? isValid : false;
     isValid = validateInput(document.getElementById('description')) ? isValid : false; 
-    
-    // Only validate icon in classic mode
-    if (scheduleMode === 'classic') {
-      isValid = validateInput(document.getElementById('icon_select')) ? isValid : false;
-    } else {
-      resetValidation(document.getElementById('icon_select'));
-    }
-    
+    isValid = validateInput(document.getElementById('icon_select')) ? isValid : false;
     isValid = validateInput(document.getElementById('scheduleType')) ? isValid : false;
     
     if (scheduleMode === 'classic') {

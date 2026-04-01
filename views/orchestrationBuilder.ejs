@@ -162,6 +162,41 @@ function isSelected(inValue,compareValue){
       left: 80px;
       top: -50px;
     }
+    
+    .validation-error-toast {
+      background-color: #f44336 !important;
+      color: white !important;
+      border-radius: 4px;
+      padding: 16px !important;
+      max-width: 600px !important;
+      box-shadow: 0 4px 12px rgba(244, 67, 54, 0.3) !important;
+      display: flex !important;
+      flex-direction: column !important;
+      align-items: flex-start !important;
+      justify-content: flex-start !important;
+      word-break: break-word !important;
+      white-space: normal !important;
+      text-align: left !important;
+    }
+    
+    .validation-error-toast div {
+      color: white !important;
+      display: block !important;
+      margin-bottom: 6px !important;
+      line-height: 1.4 !important;
+      word-break: break-word !important;
+      text-align: left !important;
+      width: 100% !important;
+    }
+    
+    .validation-error-toast strong {
+      color: white !important;
+      display: block !important;
+      margin-bottom: 8px !important;
+      font-weight: 600 !important;
+      text-align: left !important;
+      width: 100% !important;
+    }
 
   </style>
   <link rel="stylesheet" href="/css/spectrum/spectrum.min.css">
@@ -1549,6 +1584,78 @@ function isSelected(inValue,compareValue){
       });
     }
     
+    function validateOrchestration() {
+      const errors = [];
+      
+      // 1. Check for start node
+      const startNode = Object.values(nodes).find(n => n.type === 'start');
+      if (!startNode) {
+        errors.push('Orchestration must have a Start node.');
+      }
+      
+      // 2. Check all nodes for required fields
+      Object.values(nodes).forEach(node => {
+        if (node.type === 'execute') {
+          // Check if execute node has script and agent selected
+          if (!node.data.script || !node.data.script.trim()) {
+            errors.push(`Execute node "${node.label}" is missing a Script selection.`);
+          }
+          if (!node.data.agent || !node.data.agent.trim()) {
+            errors.push(`Execute node "${node.label}" is missing a Target Agent selection.`);
+          }
+        } else if (node.type === 'condition') {
+          // Check if condition node has both true and false paths
+          const trueEdges = edges.filter(e => e.from === node.id && e.fromPort === 'true');
+          const falseEdges = edges.filter(e => e.from === node.id && e.fromPort === 'false');
+          
+          if (trueEdges.length === 0) {
+            errors.push(`Condition node "${node.label}" is missing a True path (left exit).`);
+          }
+          if (falseEdges.length === 0) {
+            errors.push(`Condition node "${node.label}" is missing a False path (right exit).`);
+          }
+        }
+      });
+      
+      // 3. Check for dangling node exits
+      Object.values(nodes).forEach(node => {
+        if (node.type !== 'start' && node.type !== 'end-success' && node.type !== 'end-failure' && node.type !== 'condition') {
+          // Regular execute nodes should have outgoing edges
+          const outgoing = edges.filter(e => e.from === node.id);
+          if (outgoing.length === 0) {
+            errors.push(`Execute node "${node.label}" has no exit path. It must connect to another node or an end node.`);
+          }
+        }
+        
+        // End nodes should not have outgoing edges
+        if (node.type === 'end-success' || node.type === 'end-failure') {
+          const outgoing = edges.filter(e => e.from === node.id);
+          if (outgoing.length > 0) {
+            errors.push(`End node "${node.label}" should not have outgoing connections.`);
+          }
+        }
+      });
+      
+      // 4. Check that at least one end node exists
+      const endNodes = Object.values(nodes).filter(n => n.type === 'end-success' || n.type === 'end-failure');
+      if (endNodes.length === 0) {
+        errors.push('Orchestration must have at least one End node (Success or Failure).');
+      }
+      
+      return errors;
+    }
+    
+    function showValidationError(errors) {
+      const errorMessageHtml = '<strong style="display: block; margin-bottom: 8px;">Orchestration is not valid:</strong>' + 
+        errors.map(e => '<div style="margin-bottom: 4px;">• ' + e + '</div>').join('');
+      
+      M.toast({
+        html: errorMessageHtml,
+        displayLength: 8000,
+        classes: 'validation-error-toast'
+      });
+    }
+    
     function saveOrchestration() {
       // If we don't have a name yet, show the naming modal
       if (!orchestrationName.trim()) {
@@ -1567,6 +1674,12 @@ function isSelected(inValue,compareValue){
     }
     
     function performSave() {
+      // Validate orchestration before saving
+      const validationErrors = validateOrchestration();
+      if (validationErrors.length > 0) {
+        showValidationError(validationErrors);
+        return;
+      }
       const nodeArray = Object.values(nodes).map(n => ({
         id: n.id,
         label: n.label,
