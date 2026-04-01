@@ -1,4 +1,13 @@
-<!DOCTYPE html>
+<%
+var orchestrationIcon;
+function isSelected(inValue,compareValue){
+  if(compareValue===undefined||compareValue==null)return"";
+  if(inValue==compareValue){
+    return " selected ";
+  }
+  else return "";
+}
+%><!DOCTYPE html>
 <html lang="en">
 <head>
   <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
@@ -85,7 +94,25 @@
       transform: scale(1.2);
     }
 
+    .sp-replacer{
+      position: relative;
+      left: 80px;
+      top: -50px;
+    }
+
   </style>
+  <link rel="stylesheet" href="/css/spectrum/spectrum.min.css">
+  <script src="/js/spectrum/spectrum.min.js"></script>
+  <script>
+    function updateIconPreview(selectItem)
+    {
+      //alert("update preview");
+      document.getElementById("orch-icon-element").innerText =  selectItem.value;
+      document.getElementById("orch-icon-input").value = selectItem.value;
+    }
+
+    var savedColor = "<%=color%>";
+  </script>
   
 </head>
 <body>
@@ -95,15 +122,31 @@
     <div id="orchestration-header">
       
       <h3 style="margin: 0; display: flex; align-items: center; gap: 15px;">
-        <div style="display: flex; align-items: center; gap: 5px; cursor: pointer;" id="orch-icon-display" title="Click to edit orchestration icon and color" onclick="toggleIconEdit()">
-          <i id="orch-icon-element" class="material-icons" style="color: #000000; font-size: 24px;">schema</i>
-          <i id="orch-icon-indicator" class="material-icons" style="color: #000000; font-size:14px; position: relative; left: -14px; top: 11px;">schema</i>
+        <div style="display: flex; align-items: center; gap: 5px; cursor: pointer;" id="orch-icon-display" title="Click to edit orchestration icon and color" >
+          <i id="orch-icon-element" class="material-icons" style="color: #000000; font-size: 24px;" onclick="toggleIconEdit()"><%=icon%></i>
+          <i id="orch-icon-indicator" class="material-icons" style="color: #000000; font-size:14px; position: relative; left: -14px; top: 11px;" onclick="toggleIconEdit()">schema</i>
 
           <div id="orch-icon-edit" style="display: none; background: white; border: 1px solid #ddd; border-radius: 4px; padding: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); min-width: 280px;">
             <label style="font-size: 11px; color: #999; text-transform: uppercase; display: block; margin-bottom: 4px;">Icon Name</label>
-            <input type="text" id="orch-icon-input" placeholder="e.g., schema, backup, settings..." style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 3px; box-sizing: border-box; margin-bottom: 10px;">
+            <input type="hidden" id="orch-icon-input" placeholder="e.g., schema, backup, settings..." style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 3px; box-sizing: border-box; margin-bottom: 10px;">
+            <select id="icon_select" name="icon" onchange="updateIconPreview(this);">
+                <option value="" disabled>Select Icon</option>
+
+
+                <% for(iconCount=0;iconCount<icons.length;iconCount++){%>
+                
+                  <option data-icon="<%=icons[iconCount]%>" value="<%=icons[iconCount]%>" <%=isSelected(icons[iconCount],icon)%>><%=icons[iconCount]%></option>
+
+                <%
+                }
+                %>
+              </select>
             <label style="font-size: 11px; color: #999; text-transform: uppercase; display: block; margin-bottom: 4px;">Colour (hex code)</label>
-            <input type="text" id="orch-color-input" placeholder="#000000" style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 3px; box-sizing: border-box; margin-bottom: 10px;">
+            <input type="hidden" id="orch-color-input" placeholder="#000000" style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 3px; box-sizing: border-box; margin-bottom: 10px;">
+            <input onchange="setPickerColor(this.value);" type="text" value="<%=color%>" id="colour" name="colour" required>
+            <span class="helper-text" data-error="Please provide a colour (e.g. #000000)"></span>
+            <input type="text" id="picker" name="picker" value="<%=color%>" onchange="document.getElementById('colour').value=this.value;document.getElementById('orch-color-input').value=this.value;">
+            
             <div class="orch-edit-buttons" style="gap: 4px;">
               <button onclick="saveIconEdit()" style="background: #4caf50; color: white; border: none; padding: 6px 12px; border-radius: 3px; cursor: pointer; font-size: 11px; flex: 1;">Save</button>
               <button onclick="cancelIconEdit()" style="background: #999; color: white; border: none; padding: 6px 12px; border-radius: 3px; cursor: pointer; font-size: 11px; flex: 1;">Cancel</button>
@@ -1205,11 +1248,58 @@
           renderAllNodes();
           updateStats();
           console.log('Orchestration loaded - nodes:', Object.keys(nodes).length, 'edges:', edges.length);
+          setIconDropDownValue(orch.icon);
+          setColorPicker(orch.color);
         },
         error: function(xhr, status, error) {
           console.error('Failed to load orchestration:', error, xhr);
           alert('Failed to load orchestration: ' + error);
-        }
+        }  
+      });
+      
+    }
+    
+    function setColorPicker(inColor){
+      document.getElementById('orch-color-input').value=inColor;
+      
+      var colorPicker = $("#picker");
+      colorPicker.spectrum({
+        preferredFormat: "hex",
+        showInput: false,
+        color: inColor,
+        // Additional options for the color picker (if needed)
+      });
+      //docmuent.getElementById("picker").value = inColor;
+      //docmuent.getElementById("colour").value = inColor;
+
+    }
+    function setIconDropDownValue(inOrchIcon) {
+      var selectElement = document.getElementById('icon_select');
+      var instance = M.FormSelect.getInstance(selectElement);
+      console.log("***ORCH ICON****: "+ inOrchIcon);
+      //alert(instance);
+      // Get the dropdown content element
+      var dropdownContent = instance.dropdownOptions;
+
+      // Add icons to each option
+      dropdownContent.querySelectorAll('li').forEach((li, index) => {
+          if (index > 0) { // Skip the first disabled option
+              //alert(li.innerText);
+              var option = selectElement.querySelectorAll('option')[index];
+              var icon = option.getAttribute('data-icon');
+              //console.log("Looking to see if [" + icon + "] matches [" + inOrchIcon +"]");
+              if(icon==inOrchIcon){
+                //console.log("---- matched ----");
+                //console.log("Setting selected on [" + li.id);
+                li.setAttribute("class","selected");
+                option.setAttribute("selected","true");
+              }
+              else{
+                li.removeAttribute("class");
+              };
+          }
+
+        
       });
     }
     
@@ -1395,6 +1485,8 @@
     }
     
     function toggleIconEdit() {
+      console.log("====TOGGLING ICON EDIT====");
+      console.log("a");
       const iconEdit = document.getElementById('orch-icon-edit');
       if (iconEdit.style.display === 'none') {
         iconEdit.style.display = 'block';
@@ -1407,9 +1499,11 @@
     }
     
     function saveIconEdit() {
+      //alert("saveIconEdit");
       const iconInput = document.getElementById('orch-icon-input').value.trim();
+      //alert(iconInput);
       const colorInput = document.getElementById('orch-color-input').value.trim();
-      
+      //alert(colorInput);
       // Validate icon name (basic validation - only alphanumeric and underscores)
       if (!iconInput || !/^[a-zA-Z0-9_]+$/.test(iconInput)) {
         alert('Please provide a valid icon name (alphanumeric and underscores only)');
@@ -1543,6 +1637,49 @@
         startNode.title = '';
       }
     }
+
+    M.FormSelect.init(document.querySelectorAll('select'));
+    // Add icons to the select options
+    document.addEventListener('DOMContentLoaded', function() {
+
+      var selectElement = document.getElementById('icon_select');
+      var instance = M.FormSelect.getInstance(selectElement);
+      //alert(instance);
+      // Get the dropdown content element
+      var dropdownContent = instance.dropdownOptions;
+
+      // Add icons to each option
+      dropdownContent.querySelectorAll('li').forEach((li, index) => {
+          if (index > 0) { // Skip the first disabled option
+              var option = selectElement.querySelectorAll('option')[index];
+              var icon = option.getAttribute('data-icon');
+              var iconElement = document.createElement('i');
+              iconElement.className = 'material-icons left vertMid';
+              iconElement.style.position="relative";
+              iconElement.style.top="13px";
+              iconElement.textContent = icon;
+              li.prepend(iconElement);
+              
+              var imgElement = li.querySelector('img');
+              if (imgElement) {
+                  imgElement.remove();
+              }
+          }
+      });
+    });
+
+    function setPickerColor(inColor){
+      var colorPicker = $("#picker");
+      colorPicker.spectrum({
+        preferredFormat: "hex",
+        showInput: false,
+        color: inColor,
+        // Additional options for the color picker (if needed)
+      });
+      //alert(document.getElementById("preview"));
+      document.querySelector("span#preview").style.color=inColor;
+    }
+
   </script>
 </body>
 </html>

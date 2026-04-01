@@ -528,6 +528,7 @@ const validateCsrf = (req, res, next) => {
 // ============================================================================
 // Generate a token for sensitive data APIs on first startup
 const crypto = require('crypto');
+const { getJobVersion } = require("./orchestration.js");
 let sensitiveDataToken = null;
 
 function initializeSensitiveDataToken() {
@@ -1753,7 +1754,7 @@ app.get('/scheduleInfo.html',User.isAuthenticated, async(req, res) => {
 
 
 
-app.post('/scheduler.html', validateCsrf, User.isAuthenticated, (req, res) => {
+app.post('/scheduler.html', validateCsrf, User.isAuthenticated, asyncHandler(async (req, res) => {
   
   let { jobName, colour, description, scheduleType, scheduleTime, dayOfWeek,
     dayInMonth, agentselect, agentcommand, commandparams, index, redir, icon, scheduleMode, orchestrationId } = req.body;
@@ -1773,6 +1774,11 @@ app.post('/scheduler.html', validateCsrf, User.isAuthenticated, (req, res) => {
       if (!orchestrationId || orchestrationId.length === 0) {
         return res.status(400).send('Error: Orchestration ID is required for orchestration schedules');
       }
+      else{
+        const job = await orchestration.getJob(orchestrationId);
+        icon = job.icon;
+        colour = job.color
+      }
     } else {
       // Classic mode validation
       if (!agentselect || agentselect.length === 0) {
@@ -1780,12 +1786,14 @@ app.post('/scheduler.html', validateCsrf, User.isAuthenticated, (req, res) => {
       }
     }
     
+
+
     scheduler.upsertSchedule(index, jobName, colour, description, scheduleType, scheduleTime, dayOfWeek,
       dayInMonth, agentselect, agentcommand, commandparams, icon, scheduleMode, orchestrationId); 
 
   if(redir===undefined || redir === null || redir.length<=0)redir="/scheduleList.htm";
   res.redirect(redir);
-});
+}));
 
 app.get('/scheduleList.html',User.isAuthenticated, (req, res) => {
   //console.time('getSchedules');
@@ -3066,9 +3074,13 @@ app.get('/orchestrationList.html', User.isAuthenticated, asyncHandler(async (req
 
 app.get('/orchestrationBuilder.html', User.isAuthenticated, asyncHandler(async (req, res) => {
   const jobId = req.query.id; // undefined for new jobs, or specific ID for editing
+  const job = await orchestration.getJob(jobId);
   res.render('orchestrationBuilder', { 
     csrfToken: req.csrfToken(),
-    jobId: jobId || ''
+    icons:serverConfig.job_icons,
+    jobId: jobId || '',
+    color: job.color,
+    icon: job.icon
   });
 }));
 
