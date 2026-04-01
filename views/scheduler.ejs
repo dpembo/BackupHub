@@ -235,7 +235,7 @@ function noValue(inValue){
     <div class="container">
 
       <h5 class="header orange-text">Scheduler</h5>
-
+      <br>
       <div >
         <form action="/scheduler.html" method="POST" id="myForm" novalidate>
           <input type="hidden" name="_csrf" value="<%= csrf %>">
@@ -254,17 +254,43 @@ function noValue(inValue){
             </div
           <%}%>
 
+          <!-- Schedule Mode Selection -->
           <div class="row">
-            <div class="input-field col s5">
+            <div class="input-field col s8">
               <div class="input-wrapper">
                 <label for="jobName">Job Name*</label>
                 <input type="text" id="jobName" name="jobName" value="<%=getSchedule().jobName%>" required>
                 <span class="helper-text" data-error="Please provide a job name"></span>
               </div>
             </div>
+            <div class="input-field col s4">
+              <div class="input-wrapper">
+                <label for="jobName">Job Type*</label>
+                <div style="margin-bottom: 20px;">
+                  <label style="margin-right: 30px;">
+                    <input type="radio" id="modeClassic" name="scheduleMode" value="classic" <%=(getSchedule().scheduleMode === 'orchestration' ? '' : 'checked')%> onchange="switchScheduleMode('classic');">
+                    <span>Single Script</span>
+                  </label>
+                  <label>
+                    <input type="radio" id="modeOrchestration" name="scheduleMode" value="orchestration" <%=(getSchedule().scheduleMode === 'orchestration' ? 'checked' : '')%> onchange="switchScheduleMode('orchestration');">
+                    <span>Orchestration</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
 
-            <div class="input-field col s3">
-              <label class="active" for="scheduleType">Icon</label>
+          <div class="row">
+            <!--<div class="input-field col s5">
+              <div class="input-wrapper">
+                <label for="jobName">Job Name*</label>
+                <input type="text" id="jobName" name="jobName" value="<%=getSchedule().jobName%>" required>
+                <span class="helper-text" data-error="Please provide a job name"></span>
+              </div>
+            </div>-->
+
+            <div class="input-field col s8">
+              <label class="active" for="icon_select">Icon</label>
               <select id="icon_select" name="icon" onchange="updateIconPreview(this);">
                 <option value="" disabled selected>Select Material Icon</option>
 
@@ -311,7 +337,7 @@ function noValue(inValue){
 
           <div class="row">
             <div class="input-field col s12 m3">
-            <label class="active" for="scheduleType">Schedule Type</label>
+            <label class="active" for="scheduleType">Schedule Frequency</label>
             <select id="scheduleType" name="scheduleType">
               <option value="" <%=noValue(getSchedule().scheduleType)%>disabled>Choose your option</option>
               <option value="daily" <%=isSelected("daily",getSchedule().scheduleType)%>>Daily</option>
@@ -355,22 +381,7 @@ function noValue(inValue){
             </div>
           </div>
 
-          <!-- Schedule Mode Selection -->
-          <div class="row">
-            <div class="col s12">
-              <h5>Schedule Type</h5>
-              <div style="margin-bottom: 20px;">
-                <label style="margin-right: 30px;">
-                  <input type="radio" id="modeClassic" name="scheduleMode" value="classic" <%=(getSchedule().scheduleMode === 'orchestration' ? '' : 'checked')%> onchange="switchScheduleMode('classic');">
-                  <span>Classic (Script + Agent)</span>
-                </label>
-                <label>
-                  <input type="radio" id="modeOrchestration" name="scheduleMode" value="orchestration" <%=(getSchedule().scheduleMode === 'orchestration' ? 'checked' : '')%> onchange="switchScheduleMode('orchestration');">
-                  <span>Orchestration</span>
-                </label>
-              </div>
-            </div>
-          </div>
+          
 
           <!-- CLASSIC MODE SECTION -->
           <div id="classicModeSection">
