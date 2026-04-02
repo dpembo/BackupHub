@@ -1632,13 +1632,24 @@
 
       if (!fromNode || !toNode) return;
 
-      // Determine edge status color
+      // Determine edge status color based on destination node's status
       let edgeColor = '#999999'; // Default - unused (grey)
       let arrowMarker = 'url(#arrowhead-grey)';
 
-      // Check if this edge was traversed
-      if (edge.executed) {
-        edgeColor = '#2196f3'; // Blue - traversed path
+      const toNodeStatus = getNodeStatusInfo(toNode.id);
+      
+      // Color arrows based on destination node status
+      if (toNodeStatus.state === 'success') {
+        edgeColor = getCSSVariable('--success-color', '#4caf50'); // Green - successful completion
+        arrowMarker = 'url(#arrowhead-green)';
+      } else if (toNodeStatus.state === 'failed') {
+        edgeColor = getCSSVariable('--error-color', '#f44336'); // Red - failed node
+        arrowMarker = 'url(#arrowhead-red)';
+      } else if (toNodeStatus.state === 'in-progress') {
+        edgeColor = '#f57c00'; // Orange - in progress
+        arrowMarker = 'url(#arrowhead-blue)'; // Reuse blue marker for traversed paths
+      } else if (edge.executed) {
+        edgeColor = '#2196f3'; // Blue - traversed but not yet completed
         arrowMarker = 'url(#arrowhead-blue)';
       }
 
