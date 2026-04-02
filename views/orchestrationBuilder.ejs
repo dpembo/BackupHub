@@ -459,11 +459,48 @@ function isSelected(inValue,compareValue){
     <div class="modal-content" style="max-height: 75vh; overflow-y: auto;">
       <h4><i class="material-icons" style="vertical-align: middle; margin-right: 10px;">list</i>Schedules Using This Orchestration</h4>
       <div id="schedules-list-container">
-        <p style="text-align: center; color: #999;">Loading schedules...</p>
+        <p style="text-align: center; color: var(--text-muted, #999);">Loading schedules...</p>
       </div>
     </div>
     <div class="modal-footer">
       <a href="#!" class="modal-close waves-effect waves-green btn-flat">Close</a>
+    </div>
+  </div>
+  
+  <!-- Execution Confirmation Modal -->
+  <div id="execution-confirmation-modal" class="modal">
+    <div class="modal-content">
+      <h4>Execute Orchestration</h4>
+      <p>Execute <strong id="exec-modal-name"></strong>?</p>
+      <p style="font-size: 0.9em; color: var(--text-muted, #666); margin-top: 15px;">The orchestration will start immediately.</p>
+    </div>
+    <div class="modal-footer">
+      <a href="#!" class="modal-close waves-effect waves-green btn-flat">Cancel</a>
+      <a href="#!" onclick="proceedWithExecution()" class="waves-effect waves-red btn-flat" style="color: #f44336; font-weight: 600;">Execute</a>
+    </div>
+  </div>
+
+  <!-- Delete Node Confirmation Modal -->
+  <div id="delete-node-confirmation-modal" class="modal">
+    <div class="modal-content">
+      <h4><i class="material-icons" style="vertical-align: middle; margin-right: 8px; color: #f44336;">delete</i>Delete Node</h4>
+      <p>Are you sure you want to delete this node?</p>
+      <div style="background: #f5f5f5; padding: 12px; border-radius: 4px; margin: 15px 0; border-left: 4px solid #ff9800;">
+        <div style="margin-bottom: 8px;">
+          <span style="font-size: 0.85em; color: #666; text-transform: uppercase;">Node Type:</span>
+          <strong id="delete-node-type" style="display: block; margin-top: 2px;"></strong>
+        </div>
+        <div style="margin-bottom: 8px;">
+          <span style="font-size: 0.85em; color: #666; text-transform: uppercase;">Label:</span>
+          <strong id="delete-node-label" style="display: block; margin-top: 2px;"></strong>
+        </div>
+        <div id="delete-node-extra-info"></div>
+      </div>
+      <p style="font-size: 0.85em; color: #f44336; margin-top: 15px;"><i class="material-icons" style="vertical-align: middle; font-size: 16px;">warning</i> This action cannot be undone. All connections to this node will also be removed.</p>
+    </div>
+    <div class="modal-footer">
+      <a href="#!" class="modal-close waves-effect waves-green btn-flat">Cancel</a>
+      <a href="#!" onclick="confirmDeleteNode()" class="waves-effect waves-red btn-flat" style="color: #f44336; font-weight: 600;">Delete</a>
     </div>
   </div>
   
@@ -1099,19 +1136,6 @@ function isSelected(inValue,compareValue){
       line.setAttribute('fill', 'none');
       line.setAttribute('marker-end', 'url(#arrowhead)');
       edgeLayer.appendChild(line);
-      
-      // Draw label
-      if (edge.label) {
-        const labelText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        labelText.setAttribute('x', (startX + endX) / 2);
-        labelText.setAttribute('y', midY - 8);
-        labelText.setAttribute('text-anchor', 'middle');
-        labelText.setAttribute('font-size', '11');
-        labelText.setAttribute('fill', edgeColor);
-        labelText.setAttribute('font-weight', 'bold');
-        labelText.textContent = edge.label;
-        edgeLayer.appendChild(labelText);
-      }
     }
     
     function startDrawEdge(e, fromNodeId, portId) {
@@ -1245,12 +1269,50 @@ function isSelected(inValue,compareValue){
     function deleteSelectedNode() {
       if (!selectedNode) return;
       
+      const node = nodes[selectedNode];
+      if (!node) return;
+      
+      // Populate modal with node information
+      const nodeType = node.type.charAt(0).toUpperCase() + node.type.slice(1);
+      document.getElementById('delete-node-type').textContent = nodeType;
+      document.getElementById('delete-node-label').textContent = node.label || '(Untitled)';
+      
+      // Show extra info for specific node types
+      let extraInfo = '';
+      if (node.type === 'execute' && node.data.script) {
+        extraInfo = `<div><span style="font-size: 0.85em; color: #666; text-transform: uppercase;">Script:</span><strong style="display: block; margin-top: 2px; font-family: monospace; font-size: 0.9em;">${node.data.script}</strong></div>`;
+      } else if (node.type === 'condition') {
+        extraInfo = `<div><span style="font-size: 0.85em; color: #666; text-transform: uppercase;">Condition:</span><strong style="display: block; margin-top: 2px; font-family: monospace; font-size: 0.9em;">${node.data.conditionType || 'N/A'}</strong></div>`;
+      }
+      document.getElementById('delete-node-extra-info').innerHTML = extraInfo;
+      
+      // Open the modal
+      var modal = M.Modal.getInstance(document.getElementById('delete-node-confirmation-modal'));
+      if (modal) {
+        modal.open();
+      } else {
+        M.Modal.init(document.getElementById('delete-node-confirmation-modal')).open();
+      }
+    }
+    
+    function confirmDeleteNode() {
+      if (!selectedNode) return;
+      
+      // Perform the actual deletion
       edges = edges.filter(e => e.from !== selectedNode && e.to !== selectedNode);
       delete nodes[selectedNode];
       selectedNode = null;
       updatePropertiesPanel();
       renderAllNodes();
       updateStats();
+      
+      // Close the modal
+      var modal = M.Modal.getInstance(document.getElementById('delete-node-confirmation-modal'));
+      if (modal) {
+        modal.close();
+      }
+      
+      M.toast({html: 'Node deleted successfully'});
     }
     
     function updatePropertiesPanel() {
@@ -1719,11 +1781,13 @@ function isSelected(inValue,compareValue){
         data: JSON.stringify(orchestration),
         success: function(result) {
           orchestrationId = result.job.id;
-          alert('Orchestration saved successfully!');
-          window.location.href = '/orchestrationList.html';
+          M.toast({html: 'Orchestration saved successfully!'});
+          setTimeout(function() {
+            window.location.href = '/orchestrationList.html';
+          }, 1000);
         },
         error: function(err) {
-          alert('Error saving orchestration: ' + err.statusText);
+          M.toast({html: 'Error saving orchestration: ' + err.statusText});
         }
       });
     }
@@ -1731,18 +1795,27 @@ function isSelected(inValue,compareValue){
     function runOrchestration() {
       // Check if orchestration has been saved
       if (!orchestrationId) {
-        alert('Please save the orchestration before running it');
+        M.toast({html: 'Please save the orchestration before running it'});
         return;
       }
       
-      // Show confirmation and run
-      const confirmRun = confirm(`Execute "${orchestrationName}"?\n\nThe orchestration will start immediately.`);
-      if (!confirmRun) return;
-      
+      // Show confirmation modal
+      document.getElementById('exec-modal-name').textContent = orchestrationName;
+      var modal = M.Modal.getInstance(document.getElementById('execution-confirmation-modal'));
+      if (modal) {
+        modal.open();
+      } else {
+        M.Modal.init(document.getElementById('execution-confirmation-modal')).open();
+      }
+    }
+    
+    function proceedWithExecution() {
       // Disable the button during execution
-      const runButton = event.target.closest('button');
-      runButton.disabled = true;
-      runButton.style.opacity = '0.6';
+      const runButton = document.querySelector('.save-btn');
+      if (runButton) {
+        runButton.disabled = true;
+        runButton.style.opacity = '0.6';
+      }
       
       $.ajax({
         url: '/rest/orchestration/jobs/' + encodeURIComponent(orchestrationId) + '/execute',
@@ -1750,23 +1823,34 @@ function isSelected(inValue,compareValue){
         contentType: 'application/json',
         success: function(result) {
           if (result.success && result.executionId) {
-            alert('Orchestration execution started!\n\nExecution ID: ' + result.executionId);
+            M.toast({html: 'Orchestration execution started! (ID: ' + result.executionId + ')'});
             // Open monitor in new tab
             window.open('/orchestration/monitor.html?jobId=' + encodeURIComponent(orchestrationId) + '&executionId=' + encodeURIComponent(result.executionId), '_blank');
+            // Close modal
+            var modal = M.Modal.getInstance(document.getElementById('execution-confirmation-modal'));
+            if (modal) {
+              modal.close();
+            }
             // Re-enable button
-            runButton.disabled = false;
-            runButton.style.opacity = '1';
+            if (runButton) {
+              runButton.disabled = false;
+              runButton.style.opacity = '1';
+            }
           } else {
-            alert('Failed to start orchestration execution');
+            M.toast({html: 'Failed to start orchestration execution'});
             // Re-enable button on failure
-            runButton.disabled = false;
-            runButton.style.opacity = '1';
+            if (runButton) {
+              runButton.disabled = false;
+              runButton.style.opacity = '1';
+            }
           }
         },
         error: function(err) {
-          alert('Error executing orchestration: ' + (err.responseJSON ? err.responseJSON.error : err.statusText));
-          runButton.disabled = false;
-          runButton.style.opacity = '1';
+          M.toast({html: 'Error executing orchestration: ' + (err.responseJSON ? err.responseJSON.error : err.statusText)});
+          if (runButton) {
+            runButton.disabled = false;
+            runButton.style.opacity = '1';
+          }
         }
       });
     }
@@ -1817,7 +1901,7 @@ function isSelected(inValue,compareValue){
       const desc = descInput.value.trim();
       
       if (!name) {
-        alert('Please provide a name for the orchestration');
+        M.toast({html: 'Please provide a name for the orchestration'});
         return;
       }
       
@@ -1920,30 +2004,35 @@ function isSelected(inValue,compareValue){
     
     function displaySchedulesList(schedules) {
       const container = document.getElementById('schedules-list-container');
+      const textMuted = getCSSVariable('--text-muted', '#666');
+      const surfaceSecondary = getCSSVariable('--surface-secondary', '#f5f5f5');
+      const borderColor = getCSSVariable('--border-color', '#ddd');
+      const surfaceColor = getCSSVariable('--surface-color', '#fff');
+      const primaryColor = getCSSVariable('--primary-color', '#2196f3');
       
       if (!schedules || schedules.length === 0) {
-        container.innerHTML = '<p style="text-align: center; color: #999;">No schedules are using this orchestration</p>';
+        container.innerHTML = `<p style="text-align: center; color: ${textMuted};">No schedules are using this orchestration</p>`;
         return;
       }
       
       let html = '<div style="overflow-x: auto;"><table style="width: 100%; border-collapse: collapse;">';
-      html += '<thead style="background: #f5f5f5; border-bottom: 2px solid #ddd;">';
+      html += `<thead style="background: ${surfaceSecondary}; border-bottom: 2px solid ${borderColor};">`;
       html += '<tr><th style="padding: 12px 8px; text-align: left; font-weight: 600;">Schedule Name</th>';
       html += '<th style="padding: 12px 8px; text-align: left; font-weight: 600;">Type</th>';
       html += '<th style="padding: 12px 8px; text-align: left; font-weight: 600;">Time</th>';
       html += '<th style="padding: 12px 8px; text-align: center; font-weight: 600;">Actions</th></tr></thead><tbody>';
       
       schedules.forEach(function(schedule, idx) {
-        const bgColor = idx % 2 === 0 ? 'white' : '#fafafa';
+        const bgColor = idx % 2 === 0 ? surfaceColor : surfaceSecondary;
         const scheduleType = schedule.scheduleType || 'Unknown';
         const scheduleTime = schedule.scheduleTime || '—';
         
-        html += `<tr style="background: ${bgColor}; border-bottom: 1px solid #eee;">`;
+        html += `<tr style="background: ${bgColor}; border-bottom: 1px solid ${borderColor};">`;
         html += `<td style="padding: 12px 8px; font-weight: 500;">${escapeHtml(schedule.jobName)}</td>`;
-        html += `<td style="padding: 12px 8px; font-size: 0.9em; color: #666;">${escapeHtml(scheduleType)}</td>`;
-        html += `<td style="padding: 12px 8px; font-size: 0.9em; color: #666;">${escapeHtml(scheduleTime)}</td>`;
+        html += `<td style="padding: 12px 8px; font-size: 0.9em; color: ${textMuted};">${escapeHtml(scheduleType)}</td>`;
+        html += `<td style="padding: 12px 8px; font-size: 0.9em; color: ${textMuted};">${escapeHtml(scheduleTime)}</td>`;
         html += `<td style="padding: 12px 8px; text-align: center;">`;
-        html += `<a href="#" onclick="event.preventDefault(); editScheduleFromList('${escapeHtml(schedule.jobName)}')" title="Edit schedule" style="color: #2196f3; text-decoration: none; margin-right: 10px;">`;
+        html += `<a href="#" onclick="event.preventDefault(); editScheduleFromList('${escapeHtml(schedule.jobName)}')" title="Edit schedule" style="color: ${primaryColor}; text-decoration: none; margin-right: 10px;">`;
         html += `<i class="material-icons" style="font-size: 18px; vertical-align: middle;">edit</i></a>`;
         html += `</td></tr>`;
       });
@@ -2002,6 +2091,17 @@ function isSelected(inValue,compareValue){
     if (iconSelect) {
       M.FormSelect.init(iconSelect);
     }
+    
+    // Add keyboard listener for delete key
+    document.addEventListener('keydown', function(event) {
+      if (event.key === 'Delete' || event.key === 'del') {
+        if (selectedNode) {
+          event.preventDefault();
+          deleteSelectedNode();
+        }
+      }
+    });
+    
     // Add icons to the select options
     document.addEventListener('DOMContentLoaded', function() {
 
