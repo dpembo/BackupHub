@@ -1136,19 +1136,6 @@ function isSelected(inValue,compareValue){
       line.setAttribute('fill', 'none');
       line.setAttribute('marker-end', 'url(#arrowhead)');
       edgeLayer.appendChild(line);
-      
-      // Draw label
-      if (edge.label) {
-        const labelText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        labelText.setAttribute('x', (startX + endX) / 2);
-        labelText.setAttribute('y', midY - 8);
-        labelText.setAttribute('text-anchor', 'middle');
-        labelText.setAttribute('font-size', '11');
-        labelText.setAttribute('fill', edgeColor);
-        labelText.setAttribute('font-weight', 'bold');
-        labelText.textContent = edge.label;
-        edgeLayer.appendChild(labelText);
-      }
     }
     
     function startDrawEdge(e, fromNodeId, portId) {
