@@ -280,4 +280,10 @@ function updateAgentAddress(agentName, address) {
   }
 }
 
-module.exports = { init, getDict, addToAgentStatusDict,addObjToAgentStatusDict, getAgent,searchAgent, registerAgent, deleteAgent, updateAgentStatus, updateAgentAddress, reset};
+function getConcurrency(agentName) {
+  const agent = getAgent(agentName);
+  if (!agent) return 3;
+  return (agent.concurrency && agent.concurrency > 0) ? Number(agent.concurrency) : 3;
+}
+
+module.exports = { init, getDict, addToAgentStatusDict, addObjToAgentStatusDict, getAgent, searchAgent, registerAgent, deleteAgent, updateAgentStatus, updateAgentAddress, getConcurrency, reset};

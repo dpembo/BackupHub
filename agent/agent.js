@@ -378,8 +378,8 @@ function executeBackupCommand(command, commandParams, jobName, callback, manual,
   // Validate and sanitize commandParams to prevent shell injection
   const sanitizedParams = String(commandParams || '').replace(/[;&|`$()\\\"'<>]/g, '\\$&');
   
-  // Track this job
-  activeJobs.set(jobName, { startTime: Date.now(), status: 'running', executionId: executionId });
+  // Track this job - key by executionId so concurrent same-job runs don't overwrite each other
+  activeJobs.set(executionId || jobName, { startTime: Date.now(), status: 'running', executionId: executionId });
   
   status = AGENT_STATUS.RUNNING;
   publishStatusUpdate('running', `Backup in progress for job [${jobName}]`, null, jobName, undefined, manual, executionId);
@@ -400,7 +400,7 @@ function executeBackupCommand(command, commandParams, jobName, callback, manual,
   // Add error handler for spawn failures
   childProcess.on('error', (err) => {
     debug(DEBUG_LEVEL.ERROR, `Failed to spawn backup process for [${jobName}]: ${err.message}`);
-    activeJobs.delete(jobName);
+    activeJobs.delete(executionId || jobName);
     publishStatusUpdate('error', `Backup failed to start: ${err.message}`, null, jobName, undefined, manual, executionId);
   });
 
@@ -437,9 +437,7 @@ function executeBackupCommand(command, commandParams, jobName, callback, manual,
           const stop = new Date().getTime();
           debug(DEBUG_LEVEL.INFO, `Backup completed: ${jobName} [exit code: ${returnCode}]`);
           returnCode !== 0 ? failJobCount++ : successJobCount++;
-          const jobInfo = activeJobs.get(jobName);
-          const executionId = jobInfo ? jobInfo.executionId : null;
-          activeJobs.delete(jobName);
+          activeJobs.delete(executionId || jobName);
           status = AGENT_STATUS.IDLE;
           deleteFile(file);
           callback(jobName, (stop - start) / 1000, manual, executionId);

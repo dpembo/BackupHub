@@ -50,16 +50,21 @@ function add(item) {
     updateDb();
 }
 
-function createItem(jobName, startTime, mode, executionId){
+function createItem(jobName, startTime, mode, executionId, agentName){
     if(mode===undefined)mode=false;
     logger.debug("Creating running item [" + jobName + "]");
     var item = {};
     item.jobName=jobName;
     item.startTime=startTime;
     item.manual=mode;
-    item.executionId=executionId || null;  // Add execution ID
+    item.executionId=executionId || null;
+    item.agentName=agentName || null;
     logger.debug("running Item:\n" + JSON.stringify(item));
     return item;
+}
+
+function getRunningCountForAgent(agentName) {
+    return historyItems.filter(item => item.agentName === agentName).length;
 }
 
 function getItems() {
@@ -95,6 +100,18 @@ function searchItemWithName(searchTerm)
         }
     }
 
+    return null;
+}
+
+function getItemByExecutionId(executionId)
+{
+    if (!executionId) return null;
+    logger.debug("Getting Running item with Execution ID [" + executionId + "]");
+    for(var i=0;i<historyItems.length;i++){
+        if(historyItems[i].executionId === executionId){
+            return historyItems[i];
+        }
+    }
     return null;
 }
 
@@ -174,4 +191,4 @@ async function deleteAll()
     return { success: true, deletedCount: deletedCount };
 }
 
-module.exports = { init, add, getItems,getItemsUsingTZ, getItemByName, searchItemWithName, getItem , createItem, removeItem, removeItemByExecutionId, deleteAll};
+module.exports = { init, add, getItems, getItemsUsingTZ, getItemByName, getItemByExecutionId, searchItemWithName, getItem, createItem, getRunningCountForAgent, removeItem, removeItemByExecutionId, deleteAll};

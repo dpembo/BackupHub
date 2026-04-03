@@ -128,6 +128,13 @@
               <label for="imageurl">Image URL</label>
             </div>-->
           </div>
+
+          <div class="row">
+            <div class="input-field col s6">
+              <input name="concurrency" value="<%=agent.concurrency !== undefined ? agent.concurrency : 3%>" id="concurrency" type="number" min="1" max="20" class="validate">
+              <label for="concurrency" class="active">Max Concurrent Jobs</label>
+            </div>
+          </div>
           
           <!--
           <div class="row">

@@ -490,8 +490,8 @@ async function runJob(jobName, isManual, inData) {
       logger.debug(`No log entry to delete for job [${jobName}]`);
     }
 
-    if (agent.status != "online") {
-      var message = `Unable to execute job [${jobName}] agent[${schedItem.agent}] is not in the correct state [${agent.status}]`;
+    if (agent.status === 'offline') {
+      var message = `Unable to execute job [${jobName}] agent[${schedItem.agent}] is offline`;
       var fullMessage = message + "\n\nData:\n" + JSON.stringify(agent);
       logger.error(message);
       if (serverConfig.server.jobFailEnabled == "true") {
@@ -499,6 +499,13 @@ async function runJob(jobName, isManual, inData) {
       }
       var obj = hist.createHistoryItem(jobName, new Date().toISOString(), 9998, 0, fullMessage, isManual);
       hist.add(obj);
+      return { status: "error", executionId: null };
+    }
+
+    const concurrencyLimit = agents.getConcurrency(schedItem.agent);
+    const runningCount = running.getRunningCountForAgent(schedItem.agent);
+    if (runningCount >= concurrencyLimit) {
+      logger.warn(`[SCHEDULER] Job [${jobName}] skipped - agent [${schedItem.agent}] at concurrency limit [${runningCount}/${concurrencyLimit}]`);
       return { status: "error", executionId: null };
     }
 
@@ -534,7 +541,7 @@ async function runJob(jobName, isManual, inData) {
     }
 
     // Add to running queue to track this execution
-    const runningItem = running.createItem(jobName, new Date().toISOString(), isManual, executionId);
+    const runningItem = running.createItem(jobName, new Date().toISOString(), isManual, executionId, schedItem.agent);
     running.add(runningItem);
     logger.info(`Added job to running queue: [${jobName}] with execution ID [${executionId}]`);
 
@@ -635,10 +642,18 @@ async function pollRuleJob(schedItemRef) {
   const { agent: ruleAgent, type, path: rulePath, pattern } = ruleMetric;
   const { operator, threshold } = ruleCondition;
 
-  // Skip if agent is not online
+  // Skip if agent is offline or not found
   const agent = agents.getAgent(ruleAgent);
-  if (!agent || agent.status !== 'online') {
+  if (!agent || agent.status === 'offline') {
     logger.debug(`[RULE] Job [${jobName}] poll skipped - agent [${ruleAgent}] is ${agent ? agent.status : 'not found'}`);
+    return;
+  }
+
+  // Skip metric poll if agent is at concurrency limit (avoid stacking rule triggers)
+  const ruleConcurrencyLimit = agents.getConcurrency(ruleAgent);
+  const ruleRunningCount = running.getRunningCountForAgent(ruleAgent);
+  if (ruleRunningCount >= ruleConcurrencyLimit) {
+    logger.debug(`[RULE] Job [${jobName}] poll skipped - agent [${ruleAgent}] at concurrency limit [${ruleRunningCount}/${ruleConcurrencyLimit}]`);
     return;
   }
 

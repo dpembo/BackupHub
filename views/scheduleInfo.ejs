@@ -55,7 +55,7 @@
           currentScheduleData = data;
           updateScreen(data);
           // Initialize websocket listeners after we have the schedule data
-          initializeWebSocket(inId);
+          initializeWebSocket(inId, executionId);
           return data;
         })
         .catch(error => {
@@ -161,7 +161,7 @@
       
       document.getElementById('schedule-averageduration').innerHTML=inData.hist.histAvgRuntimeSecs;
       if (inData.agent.jobStarted) {
-        const formattedStartTime = inData.agent.jobStarted.replace('T',' ').split('.')[0];
+        const formattedStartTime = (inData.agent.jobStartedDisplay || inData.agent.jobStarted).replace('T',' ').split('.')[0];
         document.getElementById('schedule-jobstarted').innerHTML=formattedStartTime;
         document.getElementById('schedule-jobstarttime').innerHTML=formattedStartTime;
       } else {
@@ -279,7 +279,7 @@
       }
     }
 
-    function initializeWebSocket(scheduleIndex){
+    function initializeWebSocket(scheduleIndex, executionId){
       // Only initialize listeners once per schedule
       if(socketListenersInitialized) {
         console.log('Socket listeners already initialized for schedule ' + scheduleIndex);
@@ -290,7 +290,16 @@
       
       console.log('Setting up websocket listeners for schedule ' + scheduleIndex);
 
-      socket.on('scheduleLog:' + scheduleIndex, (data) => {
+      // When executionId is known, scope events to that execution so concurrent same-job
+      // runs don't mix each other's log output on the display.
+      var logEventName = executionId
+        ? 'scheduleLog:' + scheduleIndex + ':' + executionId
+        : 'scheduleLog:' + scheduleIndex;
+      var updateEventName = executionId
+        ? 'scheduleUpdate:' + scheduleIndex + ':' + executionId
+        : 'scheduleUpdate:' + scheduleIndex;
+
+      socket.on(logEventName, (data) => {
         console.log('Received scheduleLog event for schedule ' + scheduleIndex);
         if(currentScheduleData){
           currentScheduleData.log = data.log;
@@ -299,7 +308,7 @@
         }
       });
 
-      socket.on('scheduleUpdate:' + scheduleIndex, (data) => {
+      socket.on(updateEventName, (data) => {
         console.log('Received scheduleUpdate event for schedule ' + scheduleIndex);
         currentScheduleData = data;
         updateScreen(data);
@@ -350,7 +359,7 @@
           currentScheduleData = data;
           updateScreen(data);
           // Initialize websocket listeners after we have the schedule data
-          initializeWebSocket(data.index);
+          initializeWebSocket(data.index, executionId);
           return data;
         })
         .catch(error => {

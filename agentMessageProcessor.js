@@ -86,13 +86,13 @@ async function processMessage(topic, message,protocol) {
         logger.debug("--------------------------------------");
         agentStats.set(obj.name,obj.data);
         logger.debug("--------------------------------------");
-        if (agents.getAgent(obj.name).status != "running") {
-          agents.updateAgentStatus(obj.name, "online", "Ping response returned",null,null,null,message,protocol);
-          thresholdJobs.checkExecuteThresholdJob(obj.name,message);
-        }
-        else {
-          agents.updateAgentStatus(obj.name, "running", "Ping response returned",null,null,null,message,protocol);
-          logger.info(`Job [${obj.name}] Skipping request as job in progress")`);
+        const agentRunningCount = running.getRunningCountForAgent(obj.name);
+        const agentConcurrencyLimit = agents.getConcurrency(obj.name);
+        agents.updateAgentStatus(obj.name, agentRunningCount > 0 ? "running" : "online", "Ping response returned", null, null, null, message, protocol);
+        if (agentRunningCount < agentConcurrencyLimit) {
+          thresholdJobs.checkExecuteThresholdJob(obj.name, message);
+        } else {
+          logger.info(`Agent [${obj.name}] at concurrency limit [${agentRunningCount}/${agentConcurrencyLimit}], skipping threshold check`);
         }
   
       }
@@ -120,7 +120,14 @@ async function processMessage(topic, message,protocol) {
       //ETA Submission received
       if (obj.status == "eta_submission") {
         var runTime = obj.eta;
-        var runningItm = running.getItemByName(obj.jobName);
+        // Use executionId to get the correct running item start time when multiple same-job runs are concurrent
+        var runningItm = obj.executionId
+          ? running.getItemByExecutionId(obj.executionId)
+          : running.getItemByName(obj.jobName);
+        // If agent didn't send executionId, resolve it from the running item so log key lookups work correctly
+        if (!obj.executionId && runningItm && runningItm.executionId) {
+          obj.executionId = runningItm.executionId;
+        }
         var startTime = runningItm ? runningItm.startTime : null;
         logger.info("Received ETA event");
         //add log to db
@@ -200,7 +207,7 @@ async function processMessage(topic, message,protocol) {
         
         // Emit schedule update to notify frontend that job completed (skip for orchestration jobs)
         if (!obj.jobName || !obj.jobName.includes('Orchestration [')) {
-          emitScheduleUpdate(obj.jobName);
+          emitScheduleUpdate(obj.jobName, obj.executionId);
         }
       }
     }
@@ -251,7 +258,7 @@ async function processMessage(topic, message,protocol) {
             resp = await db.simplePutData(key,obj.data);
             logger.debug(`Data created successfully for Key [${key}], Response [${resp}], Data \n${obj.data}`);
             if (!obj.jobName || !obj.jobName.includes('Orchestration [')) {
-              emitScheduleLogUpdate(obj.jobName, obj.data);
+              emitScheduleLogUpdate(obj.jobName, obj.data, obj.executionId);
             } else {
               emitOrchestrationNodeLogUpdate(obj.jobName, obj.data);
             }
@@ -277,7 +284,7 @@ async function processMessage(topic, message,protocol) {
         resp = await db.simplePutData(key,data);
         logger.debug(`Data upadated successfully Key [${key}], Response [${resp}], Data \n${data}`);
         if (!obj.jobName || !obj.jobName.includes('Orchestration [')) {
-          emitScheduleLogUpdate(obj.jobName, data);
+          emitScheduleLogUpdate(obj.jobName, data, obj.executionId);
         } else {
           emitOrchestrationNodeLogUpdate(obj.jobName, data);
         }
@@ -312,7 +319,7 @@ async function processMessage(topic, message,protocol) {
     }
   }
 
-  function emitScheduleLogUpdate(jobName, logData) {
+  function emitScheduleLogUpdate(jobName, logData, executionId) {
     try {
       var scheduleIndex = scheduler.getScheduleIndex(jobName);
       logger.debug(`[emitScheduleLogUpdate] jobName: ${jobName}, scheduleIndex: ${scheduleIndex}`);
@@ -323,8 +330,14 @@ async function processMessage(topic, message,protocol) {
         var io = wsBrowserTransport.getIO();
         
         if (io) {
-          logger.debug(`[emitScheduleLogUpdate] Emitting scheduleLog:${scheduleIndex}`);
-          io.emit(`scheduleLog:${scheduleIndex}`, { log: logData });
+          if (executionId) {
+            // Scope to specific execution so concurrent same-job runs don't mix logs
+            logger.debug(`[emitScheduleLogUpdate] Emitting scheduleLog:${scheduleIndex}:${executionId}`);
+            io.emit(`scheduleLog:${scheduleIndex}:${executionId}`, { log: logData });
+          } else {
+            logger.debug(`[emitScheduleLogUpdate] Emitting scheduleLog:${scheduleIndex}`);
+            io.emit(`scheduleLog:${scheduleIndex}`, { log: logData });
+          }
         } else {
           logger.warn(`[emitScheduleLogUpdate] Socket.io instance not available yet`);
         }
@@ -336,7 +349,7 @@ async function processMessage(topic, message,protocol) {
     }
   }
 
-  async function emitScheduleUpdate(jobName) {
+  async function emitScheduleUpdate(jobName, executionId) {
     try {
       var scheduleIndex = scheduler.getScheduleIndex(jobName);
       logger.debug(`[emitScheduleUpdate] jobName: ${jobName}, scheduleIndex: ${scheduleIndex}`);
@@ -345,10 +358,24 @@ async function processMessage(topic, message,protocol) {
         // Gather schedule data to emit
         var schedule = scheduler.getSchedules(scheduleIndex);
         var agentData = agents.getAgent(schedule.agent);
+
+        // When a specific execution is being viewed, use the running item's exact startTime
+        // so the ETA progress bar reflects this execution's elapsed time, not the shared
+        // agent jobStarted which is overwritten by whichever concurrent run sent the last status.
+        if (executionId) {
+          var runningItem = running.getItemByExecutionId(executionId);
+          if (runningItem && runningItem.startTime) {
+            agentData = Object.assign({}, agentData);
+            agentData.jobStarted = runningItem.startTime;
+          }
+        }
         
         // Get stats and log from database
         var key1 = schedule.agent + "_" + schedule.jobName + "_" + "stats";
-        var key2 = schedule.agent + "_" + schedule.jobName + "_" + "log";
+        // Use executionId-scoped log key when available (matches how logs are stored)
+        var key2 = executionId
+          ? schedule.agent + "_" + schedule.jobName + "_" + executionId + "_log"
+          : schedule.agent + "_" + schedule.jobName + "_log";
         
         var stats = null;
         var log = null;
@@ -387,6 +414,12 @@ async function processMessage(topic, message,protocol) {
         var io = wsBrowserTransport.getIO();
         
         if (io) {
+          if (executionId) {
+            // Emit scoped event for the specific execution's page
+            logger.debug(`[emitScheduleUpdate] Emitting scheduleUpdate:${scheduleIndex}:${executionId}`);
+            io.emit(`scheduleUpdate:${scheduleIndex}:${executionId}`, data);
+          }
+          // Also emit unscoped event for pages not tracking a specific execution
           logger.debug(`[emitScheduleUpdate] Emitting scheduleUpdate:${scheduleIndex}`);
           io.emit(`scheduleUpdate:${scheduleIndex}`, data);
         } else {
@@ -544,11 +577,25 @@ async function processMessage(topic, message,protocol) {
     var histObj = hist.createHistoryItem(obj.jobName,startDate,returnCode,runTime,log,obj.manual,executionId);
     logger.debug("Adding History obj: " + JSON.stringify(histObj));
     hist.add(histObj);
+
+    // Clean up execution-specific log from DB now that it's saved in history
+    if (obj.executionId && !orchestrationMatch) {
+      try {
+        await db.deleteData(key2);
+        logger.debug(`Cleaned up execution log key [${key2}]`);
+      } catch (deleteErr) {
+        logger.debug(`Could not clean up log key [${key2}] (non-critical): ${deleteErr.message}`);
+      }
+    }
   }
 
   //Get a db key
-  function getDbKey(logEvent,type)
+  function getDbKey(logEvent, type)
   {
+    // Use executionId-scoped key for log entries so concurrent same-job runs don't collide
+    if (type === 'log' && logEvent.executionId) {
+      return `${logEvent.name}_${logEvent.jobName}_${logEvent.executionId}_${type}`;
+    }
     return logEvent.name + "_" + logEvent.jobName + "_" + type;
   }
 

@@ -374,6 +374,24 @@ async function getSchedulerData(index, executionId = null)
       errorMessage: `Agent '${schedule.agent}' is not registered or offline`
     };
   }
+
+  // Pre-format jobStarted with server timezone (same approach as history.getLastRun via getItemsUsingTZ)
+  if (data.agent.jobStarted) {
+    data.agent.jobStartedDisplay = dateTimeUtils.displayFormatDate(new Date(data.agent.jobStarted), false, serverConfig.server.timezone, 'YYYY-MM-DDTHH:mm:ss.SSS', false);
+  }
+
+  // When a specific execution is being viewed, use the running item's exact startTime so the
+  // ETA progress bar reflects this execution's elapsed time, not the shared agent jobStarted
+  // which can be overwritten by whichever concurrent run sent the most recent status message.
+  if (executionId) {
+    const runningItem = running.getItemByExecutionId(executionId);
+    if (runningItem && runningItem.startTime) {
+      // Clone agent to avoid mutating shared state
+      data.agent = Object.assign({}, data.agent);
+      data.agent.jobStarted = runningItem.startTime;
+      data.agent.jobStartedDisplay = dateTimeUtils.displayFormatDate(new Date(runningItem.startTime), false, serverConfig.server.timezone, 'YYYY-MM-DDTHH:mm:ss.SSS', false);
+    }
+  }
   
   data.schedule = schedule;
   data.index = index;
@@ -412,7 +430,10 @@ async function getSchedulerData(index, executionId = null)
   if (data.executionMode !== 'historical' && data.executionMode !== 'historical_not_found') {
     //return logEvent.name + "_" + logEvent.jobName + "_" + type;
     var key1 = schedule.agent + "_" + schedule.jobName + "_" + "stats";
-    var key2 = schedule.agent + "_" + schedule.jobName + "_" + "log";
+    // Use executionId-scoped log key when available (matches agentMessageProcessor.js getDbKey)
+    var key2 = executionId
+      ? schedule.agent + "_" + schedule.jobName + "_" + executionId + "_log"
+      : schedule.agent + "_" + schedule.jobName + "_log";
 
     var stats = null;
     var log = null;
@@ -1251,8 +1272,8 @@ app.post('/rest/agent/:id/metric', User.isAuthenticated, asyncHandler(async (req
   if (!agent) {
     return res.status(404).json({ success: false, message: `Agent [${id}] not found` });
   }
-  if (agent.status !== 'online') {
-    return res.status(503).json({ success: false, message: `Agent [${id}] is currently ${agent.status}` });
+  if (agent.status === 'offline') {
+    return res.status(503).json({ success: false, message: `Agent [${id}] is currently offline` });
   }
 
   const crypto = require('crypto');
@@ -2087,13 +2108,19 @@ app.get('/runSchedule.html',User.isAuthenticated, asyncHandler(async (req, res) 
       errorMessage = `Failed to start orchestration: ${err.message}`;
     }
   } else {
-    // Classic mode: Check if agent is online before attempting to run
+    // Classic mode: Check if agent is reachable and under concurrency limit
     if (schedule && schedule.scheduleMode !== 'orchestration') {
       const agent = agents.getAgent(schedule.agent);
       
       if (agent) {
-        if (agent.status !== "online") {
-          errorMessage = `Agent '${schedule.agent}' is ${agent.status} - cannot execute job`;
+        if (agent.status === 'offline') {
+          errorMessage = `Agent '${schedule.agent}' is offline - cannot execute job`;
+        } else {
+          const concurrencyLimit = agents.getConcurrency(schedule.agent);
+          const runningCount = running.getRunningCountForAgent(schedule.agent);
+          if (runningCount >= concurrencyLimit) {
+            errorMessage = `Agent '${schedule.agent}' is at concurrency limit (${runningCount}/${concurrencyLimit})`;
+          }
         }
       } else {
         errorMessage = `Agent '${schedule.agent}' does not exist`;
@@ -2387,8 +2414,11 @@ app.post('/agentEdit.html', validateCsrf, User.isAuthenticated, async (req, res)
     var name = req.body.agentname;
     var description = req.body.agentdescription;
     var imageurl = req.body.imageurl;
+    var concurrency = parseInt(req.body.concurrency, 10);
+    if (isNaN(concurrency) || concurrency < 1) concurrency = 3;
     var agentObj = agents.getAgent(name);
     agentObj.display = description;
+    agentObj.concurrency = concurrency;
     await agents.addObjToAgentStatusDict(agentObj);
 
     //agents.registerAgent(name,description,command,imageurl,undefined,description);
