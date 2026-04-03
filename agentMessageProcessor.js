@@ -1,5 +1,27 @@
 const status_topic = 'backup/agent/status';
 const command_topic = 'backup/agent/command';
+const EventEmitter = require('events');
+const metricResultEmitter = new EventEmitter();
+
+/**
+ * Wait for a metric_result reply from an agent.
+ * @param {string} jobName  - The correlation ID sent with the queryMetric command
+ * @param {number} timeoutMs - Milliseconds before rejecting (default 30s)
+ * @returns {Promise<{agent: string, result: Object}>}
+ */
+function waitForMetricResult(jobName, timeoutMs = 30000) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      metricResultEmitter.removeAllListeners(`result:${jobName}`);
+      reject(new Error(`Timeout waiting for metric result [${jobName}] after ${timeoutMs}ms`));
+    }, timeoutMs);
+
+    metricResultEmitter.once(`result:${jobName}`, (payload) => {
+      clearTimeout(timer);
+      resolve(payload);
+    });
+  });
+}
 
 async function processMessage(topic, message,protocol) {
     logger.debug(`Received message on Protocol: '${protocol}' with topic '${topic}': ${message.toString()}`);
@@ -73,6 +95,18 @@ async function processMessage(topic, message,protocol) {
           logger.info(`Job [${obj.name}] Skipping request as job in progress")`);
         }
   
+      }
+
+      // Metric query result received
+      if (topic == "backup/agent/status" && obj.status == "metric_result") {
+        logger.info(`[METRIC] Received metric_result from agent [${obj.name}] for job [${obj.jobName}]`);
+        try {
+          const result = JSON.parse(obj.data);
+          metricResultEmitter.emit(`result:${obj.jobName}`, { agent: obj.name, result });
+        } catch (parseErr) {
+          logger.error(`[METRIC] Failed to parse metric_result data: ${parseErr.message}`);
+          metricResultEmitter.emit(`result:${obj.jobName}`, { agent: obj.name, error: parseErr.message });
+        }
       }
   
       //Log submission received
@@ -519,4 +553,4 @@ async function processMessage(topic, message,protocol) {
   }
 
 
-  module.exports = { updateLogRecord, processMessage }
+  module.exports = { updateLogRecord, processMessage, waitForMetricResult }

@@ -549,6 +549,22 @@ async function handleCommand(message) {
       return;
     }
 
+    if (command === 'queryMetric') {
+      debug(DEBUG_LEVEL.INFO, `[queryMetric] Received request: ${commandParams}`);
+      let metricConfig;
+      try {
+        metricConfig = JSON.parse(commandParams);
+      } catch (parseErr) {
+        debug(DEBUG_LEVEL.ERROR, `[queryMetric] Invalid JSON in commandParams: ${parseErr.message}`);
+        publishStatusUpdate('metric_result', 'metric query error', JSON.stringify({ error: `Invalid config: ${parseErr.message}` }), jobName);
+        return;
+      }
+      const result = await computeMetric(metricConfig);
+      debug(DEBUG_LEVEL.INFO, `[queryMetric] Result: ${JSON.stringify(result)}`);
+      publishStatusUpdate('metric_result', 'metric query result', JSON.stringify(result), jobName);
+      return;
+    }
+
     executeBackupCommand(command, commandParams, jobName, backupComplete, manual, executionId);
     pushVerificationNotification = true;
   }).catch(error => {
@@ -584,6 +600,89 @@ function getFileSystemUsagePercentage() {
   } catch (error) {
     debug(DEBUG_LEVEL.ERROR, `Error checking disk usage: ${error.message}`);
     return [];
+  }
+}
+
+/**
+ * Compute a metric value on the agent.
+ * All metrics are gathered locally and returned as { type, value, unit, ... }.
+ * Paths are validated to contain only safe characters before being passed to child processes.
+ * @param {{ type: string, path?: string, pattern?: string }} config
+ * @returns {Promise<Object>}
+ */
+async function computeMetric(config) {
+  const { type, path: targetPath, pattern } = config;
+
+  // Validate path to prevent command injection: allow standard filesystem chars only
+  if (targetPath !== undefined && targetPath !== null) {
+    if (!/^[a-zA-Z0-9_./ -]+$/.test(targetPath)) {
+      return { type, error: `Invalid path: contains disallowed characters` };
+    }
+  }
+
+  // Validate pattern (glob) similarly
+  if (pattern !== undefined && pattern !== null) {
+    if (!/^[a-zA-Z0-9_.*?[\]-]+$/.test(pattern)) {
+      return { type, error: `Invalid pattern: contains disallowed characters` };
+    }
+  }
+
+  try {
+    const { execFileSync } = require('child_process');
+
+    switch (type) {
+      case 'cpu': {
+        return { type, value: getCPULoadPercentage(), unit: 'percent' };
+      }
+
+      case 'mount_usage': {
+        const all = getFileSystemUsagePercentage();
+        const mount = targetPath ? all.find(m => m.mount === targetPath) : null;
+        return { type, path: targetPath || null, value: mount ? mount.usage : null, unit: 'percent', allMounts: all };
+      }
+
+      case 'dir_size': {
+        if (!targetPath) return { type, error: 'path is required for dir_size' };
+        try {
+          // Use shell redirection to suppress permission denied errors on protected dirs
+          // du will still return total of accessible portions
+          const { execSync } = require('child_process');
+          const output = execSync(`du -sb "${targetPath}" 2>/dev/null || echo "0\\t${targetPath}"`).toString().trim();
+          const bytes = parseInt(output.split('\t')[0], 10);
+          return { type, path: targetPath, value: bytes, unit: 'bytes' };
+        } catch (duErr) {
+          return { type, path: targetPath, error: duErr.message };
+        }
+      }
+
+      case 'file_size': {
+        if (!targetPath) return { type, error: 'path is required for file_size' };
+        const stat = require('fs').statSync(targetPath);
+        return { type, path: targetPath, value: stat.size, unit: 'bytes' };
+      }
+
+      case 'file_count': {
+        if (!targetPath) return { type, error: 'path is required for file_count' };
+        const findArgs = pattern
+          ? [targetPath, '-maxdepth', '1', '-name', pattern]
+          : [targetPath, '-maxdepth', '1', '-type', 'f'];
+        const findOutput = execFileSync('find', findArgs).toString().trim();
+        const count = findOutput ? findOutput.split('\n').filter(l => l.length > 0).length : 0;
+        return { type, path: targetPath, pattern: pattern || null, value: count, unit: 'count' };
+      }
+
+      case 'file_age': {
+        if (!targetPath) return { type, error: 'path is required for file_age' };
+        const mtimeStr = execFileSync('stat', ['-c', '%Y', targetPath]).toString().trim();
+        const ageSeconds = Math.floor(Date.now() / 1000) - parseInt(mtimeStr, 10);
+        return { type, path: targetPath, value: ageSeconds, unit: 'seconds' };
+      }
+
+      default:
+        return { type, error: `Unknown metric type: ${type}. Supported: cpu, mount_usage, dir_size, file_size, file_count, file_age` };
+    }
+  } catch (err) {
+    return { type, path: targetPath || null, error: err.message };
   }
 }
 

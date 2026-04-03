@@ -463,13 +463,6 @@
       animation: nodeSpinning 2s linear infinite, nodeBlinking 1s ease-in-out infinite;
     }
 
-    .node-in-progress polygon {
-      stroke: #ff9800 !important;
-      stroke-width: 3 !important;
-      stroke-dasharray: 20, 8;
-      animation: nodeSpinning 2s linear infinite, nodeBlinking 1s ease-in-out infinite;
-    }
-
     @keyframes nodeSpinning {
       0% {
         stroke-dashoffset: 0;
@@ -498,13 +491,6 @@
       opacity: 1 !important;
     }
 
-    .node-completed polygon {
-      stroke: #4caf50 !important;
-      stroke-width: 2 !important;
-      animation: none !important;
-      opacity: 1 !important;
-    }
-
     .node-failed rect {
       stroke: #f44336 !important;
       stroke-width: 2 !important;
@@ -513,13 +499,6 @@
     }
 
     .node-failed circle {
-      stroke: #f44336 !important;
-      stroke-width: 2 !important;
-      animation: none !important;
-      opacity: 1 !important;
-    }
-
-    .node-failed polygon {
       stroke: #f44336 !important;
       stroke-width: 2 !important;
       animation: none !important;
@@ -1461,17 +1440,17 @@
 
     function renderMonitorNode(layer, node, CANVAS) {
       const statusInfo = getNodeStatusInfo(node.id);
-      let borderColor = getCSSVariable('--border-color', '#e0e0e0');
+      let borderColor = '#e0e0e0';
       let statusIcon = '';
 
       if (statusInfo.state === 'in-progress') {
-        borderColor = getCSSVariable('--warning-color', '#ff9800');
+        borderColor = '#ff9800';
         statusIcon = '◐';
       } else if (statusInfo.state === 'failed') {
-        borderColor = getCSSVariable('--error-color', '#f44336');
+        borderColor = '#f44336';
         statusIcon = '❌';
       } else if (statusInfo.state === 'success') {
-        borderColor = getCSSVariable('--success-color', '#4caf50');
+        borderColor = '#4caf50';
         statusIcon = '✅';
       }
 
@@ -1490,9 +1469,7 @@
 
       // Check if node is a circular node type (start, end-success, end-failure)
       const isCircularNode = node.type === 'start' || node.type === 'end-success' || node.type === 'end-failure';
-      const isDiamondNode = node.type === 'condition';
       const circleRadius = 28;
-      const diamondSize = 28;
 
       if (isCircularNode) {
         // Circular background for start, success, failure nodes
@@ -1530,48 +1507,8 @@
         text.setAttribute('dominant-baseline', 'middle');
         text.textContent = node.label;
         g.appendChild(text);
-      } else if (isDiamondNode) {
-        // Diamond background for condition nodes
-        const diamond = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
-        const points = [
-          [node.x, node.y - diamondSize],           // top
-          [node.x + diamondSize, node.y],           // right
-          [node.x, node.y + diamondSize],           // bottom
-          [node.x - diamondSize, node.y]            // left
-        ];
-        diamond.setAttribute('points', points.map(p => p.join(',')).join(' '));
-        diamond.setAttribute('fill', getCSSVariable('--surface-color', '#ffffff'));
-        diamond.setAttribute('stroke', borderColor);
-        diamond.setAttribute('stroke-width', '2');
-        g.appendChild(diamond);
-
-        // Status icon above center in diamond
-        if (statusIcon) {
-          const iconText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-          iconText.setAttribute('class', 'node-status-icon');
-          iconText.setAttribute('x', node.x);
-          iconText.setAttribute('y', node.y - 6);
-          iconText.setAttribute('font-size', '14');
-          iconText.setAttribute('fill', borderColor);
-          iconText.setAttribute('dominant-baseline', 'middle');
-          iconText.setAttribute('text-anchor', 'middle');
-          iconText.textContent = statusIcon;
-          g.appendChild(iconText);
-        }
-
-        // Node label below icon in diamond
-        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        text.setAttribute('x', node.x);
-        text.setAttribute('y', node.y + 6);
-        text.setAttribute('font-size', '11');
-        text.setAttribute('font-weight', '500');
-        text.setAttribute('fill', 'var(--text-primary)');
-        text.setAttribute('text-anchor', 'middle');
-        text.setAttribute('dominant-baseline', 'middle');
-        text.textContent = node.label;
-        g.appendChild(text);
       } else {
-        // Rectangle background for execute nodes
+        // Rectangle background for other node types (execute, condition)
         const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
         rect.setAttribute('x', node.x - CANVAS.nodeWidth / 2);
         rect.setAttribute('y', node.y - CANVAS.nodeHeight / 2);
@@ -1632,34 +1569,20 @@
 
       if (!fromNode || !toNode) return;
 
-      // Determine edge status color based on destination node's status
+      // Determine edge status color
       let edgeColor = '#999999'; // Default - unused (grey)
       let arrowMarker = 'url(#arrowhead-grey)';
 
-      const toNodeStatus = getNodeStatusInfo(toNode.id);
-      
-      // Color arrows based on destination node status
-      if (toNodeStatus.state === 'success') {
-        edgeColor = getCSSVariable('--success-color', '#4caf50'); // Green - successful completion
-        arrowMarker = 'url(#arrowhead-green)';
-      } else if (toNodeStatus.state === 'failed') {
-        edgeColor = getCSSVariable('--error-color', '#f44336'); // Red - failed node
-        arrowMarker = 'url(#arrowhead-red)';
-      } else if (toNodeStatus.state === 'in-progress') {
-        edgeColor = '#f57c00'; // Orange - in progress
-        arrowMarker = 'url(#arrowhead-blue)'; // Reuse blue marker for traversed paths
-      } else if (edge.executed) {
-        edgeColor = '#2196f3'; // Blue - traversed but not yet completed
+      // Check if this edge was traversed
+      if (edge.executed) {
+        edgeColor = '#2196f3'; // Blue - traversed path
         arrowMarker = 'url(#arrowhead-blue)';
       }
 
       // Determine node types to calculate proper port positions
       const fromIsCircular = fromNode.type === 'start' || fromNode.type === 'end-success' || fromNode.type === 'end-failure';
       const toIsCircular = toNode.type === 'start' || toNode.type === 'end-success' || toNode.type === 'end-failure';
-      const fromIsDiamond = fromNode.type === 'condition';
-      const toIsDiamond = toNode.type === 'condition';
       const circleRadius = 28;
-      const diamondSize = 28;
 
       // Calculate port positions based on node type
       let fromX, fromY, toX, toY;
@@ -1667,9 +1590,6 @@
       if (fromIsCircular) {
         fromX = fromNode.x;
         fromY = fromNode.y + circleRadius + 4; // Account for circle radius + small buffer
-      } else if (fromIsDiamond) {
-        fromX = fromNode.x;
-        fromY = fromNode.y + diamondSize + 4; // Account for diamond size + small buffer
       } else {
         fromX = fromNode.x;
         fromY = fromNode.y + CANVAS.nodeHeight / 2;
@@ -1678,9 +1598,6 @@
       if (toIsCircular) {
         toX = toNode.x;
         toY = toNode.y - circleRadius - 4; // Account for circle radius + small buffer
-      } else if (toIsDiamond) {
-        toX = toNode.x;
-        toY = toNode.y - diamondSize - 4; // Account for diamond size + small buffer
       } else {
         toX = toNode.x;
         toY = toNode.y - CANVAS.nodeHeight / 2;

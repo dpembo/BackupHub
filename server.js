@@ -1219,6 +1219,83 @@ app.get('/rest/agent/:id/ping', User.isAuthenticated, (req, res) => {
   res.send('{"status":"ok"}');  
 });
 
+app.get('/rest/agent/:id/ping', User.isAuthenticated, (req, res) => {
+  const user = req.session.user;
+  if (!user) {
+    return res.redirect('/register.html');
+  }
+  const id = req.params.id;
+  logger.info("Pinging Agent with ID: " + id);
+  //notificationData.deleteItem(index);
+  pingIndividualRuntime(id);
+  res.setHeader("Content-Type","Application/JSON");
+  res.send('{"status":"ok"}');  
+});
+
+/**
+ * POST /rest/agent/:id/metric
+ * Send a queryMetric command to an agent and wait for the result.
+ * Body: { type, path?, pattern? }
+ * Supported types: cpu, mount_usage, dir_size, file_size, file_count, file_age
+ * NOTE: This is a temporary test endpoint - remove once Rules Engine is built.
+ */
+app.post('/rest/agent/:id/metric', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { type, path: targetPath, pattern } = req.body;
+
+  if (!type) {
+    return res.status(400).json({ success: false, message: 'Missing required field: type' });
+  }
+
+  const agent = agents.getAgent(id);
+  if (!agent) {
+    return res.status(404).json({ success: false, message: `Agent [${id}] not found` });
+  }
+  if (agent.status !== 'online') {
+    return res.status(503).json({ success: false, message: `Agent [${id}] is currently ${agent.status}` });
+  }
+
+  const crypto = require('crypto');
+  const jobName = `MetricQuery_${id}_${crypto.randomBytes(6).toString('hex')}`;
+  const metricConfig = { type };
+  if (targetPath) metricConfig.path = targetPath;
+  if (pattern) metricConfig.pattern = pattern;
+
+  logger.info(`[METRIC] Sending queryMetric [${type}] to agent [${id}] with jobName [${jobName}]`);
+
+  const agentMsgProcessor = require('./agentMessageProcessor.js');
+  const waitPromise = agentMsgProcessor.waitForMetricResult(jobName, 30000);
+
+  agentComms.sendCommand(id, mqttTransport.getCommandTopic(), 'queryMetric', JSON.stringify(metricConfig), jobName, undefined, false, null);
+
+  try {
+    const payload = await waitPromise;
+    logger.info(`[METRIC] Got result for [${jobName}]: ${JSON.stringify(payload.result)}`);
+    res.json({ success: true, agent: payload.agent, jobName, result: payload.result });
+  } catch (err) {
+    logger.error(`[METRIC] Query timed out or failed for [${jobName}]: ${err.message}`);
+    res.status(408).json({ success: false, message: err.message });
+  }
+}));
+
+/**
+ * GET /metric-test.html  — Temporary test page for queryMetric exploration.
+ * NOTE: Remove this page once the Rules Engine is built.
+ */
+app.get('/metric-test.html', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const user = req.session.user;
+  if (!user) {
+    return res.redirect('/login.html');
+  }
+  const agentList = agents.getDict();
+  res.render('metrictest', {
+    version,
+    user,
+    agents: agentList,
+    csrf: req.csrfToken(),
+  });
+}));
+
 app.get('/rest/notifications', User.isAuthenticated, (req, res) => {
   const user = req.session.user;
   if (!user) {
