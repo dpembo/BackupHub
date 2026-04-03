@@ -2,6 +2,7 @@ const scheduleFile = "./data/schedules.json";
 const db = require('./db.js');
 const DB_KEY = 'SCHEDULES_CONFIG';
 var schedules = [];
+var ruleIntervals = new Map(); // Track setInterval handles for rule-based jobs
 
 var mqttClient;
 var mqttCommand_topic;
@@ -122,18 +123,27 @@ async function readSchedules() {
   }
 }
 
-// Write schedules to the database
+// Write schedules to the database and reschedule jobs
 async function writeSchedules() {
   try {
     logger.debug("Writing Schedules to database");
-    
-    // Store the schedules array to the database
     await db.putData(DB_KEY, schedules);
     logger.debug('Schedules stored to database successfully');
     await scheduleJobs();
   } catch (err) {
     logger.error('Error writing schedules:', err.message);
     throw new AppError(`Failed to save schedules: ${err.message}`, 500);
+  }
+}
+
+// Persist schedules to the database WITHOUT rescheduling (for runtime state updates only)
+async function persistSchedules() {
+  try {
+    logger.debug("Persisting Schedules to database (no reschedule)");
+    await db.putData(DB_KEY, schedules);
+    logger.debug('Schedules persisted to database successfully');
+  } catch (err) {
+    logger.error('Error persisting schedules:', err.message);
   }
 }
 
@@ -196,19 +206,34 @@ function getSchedule(jobName){
     return null;
 }
 
-function getScheduleObject(jobName, colour, description, scheduleType, scheduleTime, dayOfWeek, dayInMonth, agentselect, agentcommand, commandparams, icon, scheduleMode, orchestrationId) {
+function getScheduleObject(jobName, colour, description, scheduleType, scheduleTime, dayOfWeek, dayInMonth, agentselect, agentcommand, commandparams, icon, scheduleMode, orchestrationId, triggerType, ruleMetric, ruleCondition, rulePollIntervalMins, ruleCooldownMins) {
     var schedule = {};
     schedule.jobName = jobName;
     schedule.description = description;
-    schedule.scheduleType = scheduleType;
-    schedule.dayOfWeek = dayOfWeek;
-    schedule.dayInMonth = dayInMonth;
-    schedule.scheduleTime = scheduleTime;
+    schedule.triggerType = triggerType || 'clock';
     schedule.eta = 1;
     schedule.color = colour;
     schedule.icon = icon;
     schedule.scheduleMode = scheduleMode || 'classic';  // Default to classic for backwards compatibility
-    
+
+    if (schedule.triggerType === 'clock') {
+      schedule.scheduleType = scheduleType;
+      schedule.dayOfWeek = dayOfWeek;
+      schedule.dayInMonth = dayInMonth;
+      schedule.scheduleTime = scheduleTime;
+      schedule.ruleMetric = null;
+      schedule.ruleCondition = null;
+    } else if (schedule.triggerType === 'rule') {
+      schedule.scheduleType = null;
+      schedule.dayOfWeek = null;
+      schedule.dayInMonth = null;
+      schedule.scheduleTime = null;
+      schedule.ruleMetric = ruleMetric || null;
+      schedule.ruleCondition = ruleCondition || null;
+      schedule.rulePollIntervalMins = parseInt(rulePollIntervalMins) || 15;
+      schedule.ruleCooldownMins = parseInt(ruleCooldownMins) || 60;
+    }
+
     if (schedule.scheduleMode === 'classic') {
       schedule.command = agentcommand;
       schedule.commandParams = commandparams;
@@ -224,15 +249,15 @@ function getScheduleObject(jobName, colour, description, scheduleType, scheduleT
     return schedule;
 }
 
-function upsertSchedule(index, jobName, colour, description, scheduleType, scheduleTime, dayOfWeek, dayInMonth, agentselect, agentcommand, commandparams, icon, scheduleMode, orchestrationId) {
-  return _upsertScheduleAsync(index, jobName, colour, description, scheduleType, scheduleTime, dayOfWeek, dayInMonth, agentselect, agentcommand, commandparams, icon, scheduleMode, orchestrationId);
+function upsertSchedule(index, jobName, colour, description, scheduleType, scheduleTime, dayOfWeek, dayInMonth, agentselect, agentcommand, commandparams, icon, scheduleMode, orchestrationId, triggerType, ruleMetric, ruleCondition, rulePollIntervalMins, ruleCooldownMins) {
+  return _upsertScheduleAsync(index, jobName, colour, description, scheduleType, scheduleTime, dayOfWeek, dayInMonth, agentselect, agentcommand, commandparams, icon, scheduleMode, orchestrationId, triggerType, ruleMetric, ruleCondition, rulePollIntervalMins, ruleCooldownMins);
 }
 
-async function _upsertScheduleAsync(index, jobName, colour, description, scheduleType, scheduleTime, dayOfWeek, dayInMonth, agentselect, agentcommand, commandparams, icon, scheduleMode, orchestrationId) {
+async function _upsertScheduleAsync(index, jobName, colour, description, scheduleType, scheduleTime, dayOfWeek, dayInMonth, agentselect, agentcommand, commandparams, icon, scheduleMode, orchestrationId, triggerType, ruleMetric, ruleCondition, rulePollIntervalMins, ruleCooldownMins) {
   try {
     logger.debug("Upserting Schedule");
 
-    var schedule = getScheduleObject(jobName, colour, description, scheduleType, scheduleTime, dayOfWeek, dayInMonth, agentselect, agentcommand, commandparams, icon, scheduleMode, orchestrationId);
+    var schedule = getScheduleObject(jobName, colour, description, scheduleType, scheduleTime, dayOfWeek, dayInMonth, agentselect, agentcommand, commandparams, icon, scheduleMode, orchestrationId, triggerType, ruleMetric, ruleCondition, rulePollIntervalMins, ruleCooldownMins);
     logger.info(JSON.stringify(schedule));
     schedule.lastUpdated = new Date().toISOString();
 
@@ -341,7 +366,17 @@ function getSchedules(index){
             if (!schedules[i].scheduleMode) {
               schedules[i].scheduleMode = 'classic';
             }
-            schedules[i].nextRunDate = displayFormatDate(new Date(getNextRunDate(schedules[i])),true,serverConfig.server.timezone,"YYYY-MM-DDTHH:mm:ss",true); 
+            // Ensure triggerType defaults to 'clock' for legacy records
+            if (!schedules[i].triggerType) {
+              schedules[i].triggerType = (schedules[i].scheduleType === 'cputhreshold' || schedules[i].scheduleType === 'storagethreshold') ? 'legacy_threshold' : 'clock';
+            }
+            if (schedules[i].triggerType === 'clock') {
+              schedules[i].nextRunDate = displayFormatDate(new Date(getNextRunDate(schedules[i])),true,serverConfig.server.timezone,"YYYY-MM-DDTHH:mm:ss",true);
+            } else if (schedules[i].triggerType === 'rule') {
+              schedules[i].nextRunDate = `Polls every ${schedules[i].rulePollIntervalMins || 15}m`;
+            } else {
+              schedules[i].nextRunDate = 'n/a';
+            }
              schedules[i].eta=hist.getAverageRuntime(schedules[i].jobName)/60;
             schedules[i].lastUpdated = displayFormatDate(new Date(schedules[i].lastUpdated),false,serverConfig.server.timezone,"YYYY-MM-DDTHH:mm:ss",false);
 
@@ -499,7 +534,7 @@ async function runJob(jobName, isManual, inData) {
     }
 
     // Add to running queue to track this execution
-    const runningItem = running.createItem(jobName, new Date().toISOString(), 'manual', executionId);
+    const runningItem = running.createItem(jobName, new Date().toISOString(), isManual, executionId);
     running.add(runningItem);
     logger.info(`Added job to running queue: [${jobName}] with execution ID [${executionId}]`);
 
@@ -563,61 +598,194 @@ function createScheduleCron(second, minute, hour, dayOfMonth, month, dayOfweek) 
   return second.toString() + " " + minute.toString() + " " + hour.toString() + " " + dayOfMonth.toString() + " " + month.toString() + " " + dayOfweek.toString();
 }
 
+/**
+ * Evaluate a rule condition: compare actual metric value against threshold.
+ */
+function evaluateRuleCondition(actual, operator, threshold) {
+  const a = parseFloat(actual);
+  const t = parseFloat(threshold);
+  if (isNaN(a) || isNaN(t)) return false;
+  switch (operator) {
+    case '>':  return a > t;
+    case '>=': return a >= t;
+    case '<':  return a < t;
+    case '<=': return a <= t;
+    case '==': return a === t;
+    case '!=': return a !== t;
+    default:
+      logger.warn(`[RULE] Unknown operator [${operator}]`);
+      return false;
+  }
+}
+
+/**
+ * Poll a rule-based job: query the metric, evaluate the condition, fire if met.
+ * Only calls runJob() on a trigger — no history entry is created on non-triggering polls.
+ */
+async function pollRuleJob(schedItemRef) {
+  // Re-fetch the live schedule record to pick up updated ruleLastTriggered
+  const schedItem = getSchedule(schedItemRef.jobName) || schedItemRef;
+  const { jobName, ruleMetric, ruleCondition, ruleCooldownMins } = schedItem;
+
+  if (!ruleMetric || !ruleCondition) {
+    logger.warn(`[RULE] Job [${jobName}] is missing ruleMetric or ruleCondition - skipping poll`);
+    return;
+  }
+
+  const { agent: ruleAgent, type, path: rulePath, pattern } = ruleMetric;
+  const { operator, threshold } = ruleCondition;
+
+  // Skip if agent is not online
+  const agent = agents.getAgent(ruleAgent);
+  if (!agent || agent.status !== 'online') {
+    logger.debug(`[RULE] Job [${jobName}] poll skipped - agent [${ruleAgent}] is ${agent ? agent.status : 'not found'}`);
+    return;
+  }
+
+  try {
+    const crypto = require('crypto');
+    const correlationId = `RuleCheck_${jobName}_${crypto.randomBytes(4).toString('hex')}`;
+    const metricConfig = { type };
+    if (rulePath) metricConfig.path = rulePath;
+    if (pattern) metricConfig.pattern = pattern;
+
+    const agentMsgProcessor = require('./agentMessageProcessor.js');
+    const waitPromise = agentMsgProcessor.waitForMetricResult(correlationId, 30000);
+    agentComms.sendCommand(ruleAgent, mqttTransport.getCommandTopic(), 'queryMetric', JSON.stringify(metricConfig), correlationId, undefined, false, null);
+
+    const payload = await waitPromise;
+
+    if (payload.error) {
+      logger.warn(`[RULE] Job [${jobName}] metric query transport error: ${payload.error}`);
+      return;
+    }
+
+    const metricValue = payload.result ? payload.result.value : null;
+    if (metricValue === null || metricValue === undefined) {
+      logger.warn(`[RULE] Job [${jobName}] metric returned no value (agent error: ${payload.result && payload.result.error})`);
+      return;
+    }
+
+    const conditionMet = evaluateRuleCondition(metricValue, operator, threshold);
+    logger.debug(`[RULE] Job [${jobName}] polled: value=${metricValue}, condition: ${metricValue} ${operator} ${threshold} → ${conditionMet ? 'MET' : 'not met'}`);
+
+    if (!conditionMet) {
+      return; // No history entry, no action
+    }
+
+    // Check cooldown
+    const cooldownMs = (ruleCooldownMins || 60) * 60 * 1000;
+    const lastTriggered = schedItem.ruleLastTriggered ? new Date(schedItem.ruleLastTriggered).getTime() : 0;
+    const now = Date.now();
+    if (lastTriggered && (now - lastTriggered) < cooldownMs) {
+      const remainingMins = Math.ceil((cooldownMs - (now - lastTriggered)) / 60000);
+      logger.debug(`[RULE] Job [${jobName}] condition MET but in cooldown - ${remainingMins}m remaining before next trigger`);
+      return;
+    }
+
+    // FIRE: condition met and not in cooldown
+    logger.info(`[RULE] Job [${jobName}] TRIGGERED: ${metricValue} ${operator} ${threshold}. Firing action.`);
+
+    // Persist ruleLastTriggered before firing to prevent concurrent re-triggers
+    // Use persistSchedules (not writeSchedules) to avoid resetting all rule polling intervals
+    const schedIndex = getScheduleIndex(jobName);
+    if (schedIndex !== -1) {
+      schedules[schedIndex].ruleLastTriggered = new Date().toISOString();
+      persistSchedules().catch(err => logger.warn(`[RULE] Failed to persist ruleLastTriggered for [${jobName}]: ${err.message}`));
+    }
+
+    runJob(jobName, 'rule').catch(err =>
+      logger.error(`[RULE] Error executing triggered job [${jobName}]: ${err.message}`)
+    );
+
+  } catch (err) {
+    logger.warn(`[RULE] Job [${jobName}] poll error: ${err.message}`);
+  }
+}
+
 async function scheduleJobs() {
   try {
     logger.debug("Scheduling jobs - clearing existing schedules");
     
-    // First clear any jobs so they can be reset
+    // Clear legacy threshold job map
     thresholdJobs.empty();
+
+    // Clear existing rule polling intervals
+    ruleIntervals.forEach((handle, name) => {
+      clearInterval(handle);
+      logger.debug(`Cleared rule interval for job [${name}]`);
+    });
+    ruleIntervals.clear();
+
     if (nodeschedule.scheduledJobs !== undefined && nodeschedule.scheduledJobs !== null) {
       var jobList = nodeschedule.scheduledJobs;
       for (jobName in jobList) {
         var EachJobObject = nodeschedule.scheduledJobs[jobName];
         logger.debug(`Cancelling Schedule Item [${jobName}]`);
-          EachJobObject.cancel();
+        EachJobObject.cancel();
       }
-  }
-
-  //Now for each schedule, create the cron format, then set
-  schedules.forEach(({ jobName, scheduleType, scheduleTime, dayOfWeek, dayInMonth }) => {
-    var job;
-    var scheduleCron = "";
-
-    var sHour = parseInt(scheduleTime.split(':')[0]);
-    var sMin = parseInt(scheduleTime.split(':')[1]);
-    var startType = "clock";
-    switch (scheduleType) {
-      case "daily":
-        scheduleCron = createScheduleCron(0, sMin, sHour, "*", "*", "*");
-        break;
-
-      case "weekly":
-        scheduleCron = createScheduleCron(0, sMin, sHour, "*", "*", dayOfWeek);
-        break;
-
-      case "monthly":
-        scheduleCron = createScheduleCron(0, sMin, sHour, dayInMonth, "*", "*");
-        break;
-
-      default:
-        startType = "threshold";
-        break;
     }
 
-    if (startType == "clock") {
-      logger.debug(`Scheduling Job [${jobName}] with schedule [${scheduleCron}]`);
-      job = nodeschedule.scheduleJob(scheduleCron, function () {
-        runJob(jobName, "schedule").catch(err => 
-          logger.error(`Error in scheduled job [${jobName}]:`, err.message)
-        );
-      });
-    } else {
-      logger.debug(`Discovered Threshold Job [${jobName}] with schedule [${scheduleType}]`);
-      thresholdJobs.addJob(jobName, scheduleType);
-    }
-  });
-  
-  logger.info(`Scheduled ${schedules.length} jobs successfully`);
+    // Now for each job, set up the appropriate trigger
+    schedules.forEach((schedItem) => {
+      const { jobName, scheduleType, scheduleTime, dayOfWeek, dayInMonth } = schedItem;
+
+      // Resolve effective triggerType — default legacy records to 'clock'
+      const effectiveTriggerType = schedItem.triggerType || (
+        (scheduleType === 'daily' || scheduleType === 'weekly' || scheduleType === 'monthly') ? 'clock' : 'legacy_threshold'
+      );
+
+      if (effectiveTriggerType === 'clock') {
+        var scheduleCron = "";
+        var sHour = parseInt(scheduleTime.split(':')[0]);
+        var sMin = parseInt(scheduleTime.split(':')[1]);
+
+        switch (scheduleType) {
+          case "daily":
+            scheduleCron = createScheduleCron(0, sMin, sHour, "*", "*", "*");
+            break;
+          case "weekly":
+            scheduleCron = createScheduleCron(0, sMin, sHour, "*", "*", dayOfWeek);
+            break;
+          case "monthly":
+            scheduleCron = createScheduleCron(0, sMin, sHour, dayInMonth, "*", "*");
+            break;
+          default:
+            logger.warn(`[SCHEDULER] Job [${jobName}] has triggerType 'clock' but unrecognised scheduleType [${scheduleType}] - skipping`);
+            return;
+        }
+
+        logger.debug(`Scheduling clock job [${jobName}] with cron [${scheduleCron}]`);
+        nodeschedule.scheduleJob(scheduleCron, function () {
+          runJob(jobName, "schedule").catch(err =>
+            logger.error(`Error in scheduled job [${jobName}]:`, err.message)
+          );
+        });
+
+      } else if (effectiveTriggerType === 'rule') {
+        const pollMs = (schedItem.rulePollIntervalMins || 15) * 60 * 1000;
+        logger.info(`[RULE] Setting up polling for job [${jobName}] every ${schedItem.rulePollIntervalMins || 15} mins`);
+        const handle = setInterval(() => {
+          pollRuleJob(schedItem).catch(err =>
+            logger.error(`[RULE] Unhandled error in rule poll for [${jobName}]: ${err.message}`)
+          );
+        }, pollMs);
+        ruleIntervals.set(jobName, handle);
+
+        // Initial poll shortly after startup (allow connections to settle)
+        setTimeout(() => {
+          pollRuleJob(schedItem).catch(err =>
+            logger.error(`[RULE] Unhandled error in initial rule poll for [${jobName}]: ${err.message}`)
+          );
+        }, 15000);
+
+      } else {
+        // legacy_threshold — these used the old thresholdJobs system, now deprecated
+        logger.warn(`[DEPRECATED] Job [${jobName}] uses deprecated trigger type [${scheduleType}]. Please recreate it as a Rule-based job in the Jobs screen.`);
+      }
+    });
+
+    logger.info(`Scheduled ${schedules.length} jobs successfully`);
 } catch (err) {
   logger.error("Error scheduling jobs:", err.message);
   throw new AppError(`Failed to schedule jobs: ${err.message}`, 500);

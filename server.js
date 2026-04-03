@@ -1834,18 +1834,57 @@ app.get('/scheduleInfo.html',User.isAuthenticated, async(req, res) => {
 app.post('/scheduler.html', validateCsrf, User.isAuthenticated, asyncHandler(async (req, res) => {
   
   let { jobName, colour, description, scheduleType, scheduleTime, dayOfWeek,
-    dayInMonth, agentselect, agentcommand, commandparams, index, redir, icon, scheduleMode, orchestrationId } = req.body;
+    dayInMonth, agentselect, agentcommand, commandparams, index, redir, icon, scheduleMode, orchestrationId,
+    // Rule trigger fields
+    triggerType,
+    ruleMetricAgent, ruleMetricType, ruleMetricPath, ruleMetricPattern,
+    ruleConditionOperator, ruleConditionThreshold,
+    rulePollIntervalMins, ruleCooldownMins
+  } = req.body;
     jobName = sanitizeHtml(jobName);
     colour = sanitizeHtml(colour);
-    
+
     // Normalize and validate scheduleMode to allow-list
     scheduleMode = scheduleMode === 'orchestration' ? 'orchestration' : 'classic';
-    
+
+    // Normalize and validate triggerType
+    triggerType = triggerType === 'rule' ? 'rule' : 'clock';
+
     // Sanitize orchestrationId
     if (orchestrationId) {
       orchestrationId = sanitizeHtml(orchestrationId);
     }
-    
+
+    // Build rule config objects when triggerType is 'rule'
+    let ruleMetric = null;
+    let ruleCondition = null;
+    if (triggerType === 'rule') {
+      if (!ruleMetricAgent || !ruleMetricType || !ruleConditionOperator || ruleConditionThreshold === undefined) {
+        return res.status(400).send('Error: Agent, metric type, operator, and threshold are required for rule-based jobs');
+      }
+      const allowedMetricTypes = ['cpu', 'mount_usage', 'dir_size', 'file_size', 'file_count', 'file_age'];
+      const allowedOperators = ['>', '>=', '<', '<=', '==', '!='];
+      if (!allowedMetricTypes.includes(ruleMetricType)) {
+        return res.status(400).send('Error: Invalid metric type');
+      }
+      if (!allowedOperators.includes(ruleConditionOperator)) {
+        return res.status(400).send('Error: Invalid condition operator');
+      }
+      ruleMetric = {
+        agent: sanitizeHtml(ruleMetricAgent),
+        type: ruleMetricType,
+        path: ruleMetricPath ? sanitizeHtml(ruleMetricPath) : null,
+        pattern: ruleMetricPattern ? sanitizeHtml(ruleMetricPattern) : null,
+      };
+      ruleCondition = {
+        operator: ruleConditionOperator,
+        threshold: parseFloat(ruleConditionThreshold),
+      };
+      // Rule jobs have no clock schedule
+      scheduleType = null;
+      scheduleTime = null;
+    }
+
     // Validate based on schedule mode
     if (scheduleMode === 'orchestration') {
       if (!orchestrationId || orchestrationId.length === 0) {
@@ -1854,7 +1893,7 @@ app.post('/scheduler.html', validateCsrf, User.isAuthenticated, asyncHandler(asy
       else{
         const job = await orchestration.getJob(orchestrationId);
         icon = job.icon;
-        colour = job.color
+        colour = job.color;
       }
     } else {
       // Classic mode validation
@@ -1862,11 +1901,10 @@ app.post('/scheduler.html', validateCsrf, User.isAuthenticated, asyncHandler(asy
         return res.status(400).send('Error: Agent is required for classic schedules');
       }
     }
-    
-
 
     scheduler.upsertSchedule(index, jobName, colour, description, scheduleType, scheduleTime, dayOfWeek,
-      dayInMonth, agentselect, agentcommand, commandparams, icon, scheduleMode, orchestrationId); 
+      dayInMonth, agentselect, agentcommand, commandparams, icon, scheduleMode, orchestrationId,
+      triggerType, ruleMetric, ruleCondition, rulePollIntervalMins, ruleCooldownMins);
 
   if(redir===undefined || redir === null || redir.length<=0)redir="/scheduleList.htm";
   res.redirect(redir);
