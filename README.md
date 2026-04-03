@@ -36,7 +36,7 @@ BackupHub is designed for IT administrators, providing secure, encrypted communi
 **Execution & Scheduling**
 - Secure, token-based script execution
 - Inline script editor with templates
-- Flexible scheduling: daily, weekly, monthly, threshold-based
+- Flexible scheduling: daily, weekly, monthly, and rule-based metric thresholds
 - Timezone support for global operations
 
 **Communication & Notifications**
@@ -53,7 +53,10 @@ BackupHub is designed for IT administrators, providing secure, encrypted communi
 - **Purge Files Older Than**: Purges files older than a defined period (in days)
 - **Purge Files Matching Wildcard Older Than**: Purges files that match a wildcard and are older than a defined period (in days)
 - **Rsync Between Two Directories**: Performs a one-way Rsync between provided source and target directory
-- **Mount Threshold Exceeded**: Sample to use when a mounted volume uses storage greater than the value provided in settings
+- **Mount Threshold Exceeded**: Sample rule-based job for when a mounted volume uses storage greater than a specified threshold (see rule-based thresholds in documentation)
+  
+## Agent Concurrency
+- Each agent supports configurable concurrency (default: 3 jobs at once). Set `concurrency` in agent config to control this.
 - **Upload to Cloud Storage**: Using rclone, allows you to move files to many different cloud storage providers
 
 

@@ -1,3 +1,39 @@
+# Rule-Based Scheduling and Thresholds
+
+BackupHub supports rule-based scheduling, allowing jobs to be triggered by system metrics (CPU, disk usage, file count, etc.) using flexible rules. This replaces the old global threshold job system.
+
+## Example: Rule-Based Threshold
+
+To trigger a backup when disk usage exceeds 90%:
+
+```json
+{
+	"rules": [
+		{
+			"metric": { "type": "mount_usage", "agent": "agent1", "path": "/mnt/data" },
+			"condition": { "operator": ">=", "threshold": 90 },
+			"cooldown": 60,
+			"job": "backup-job-on-high-usage"
+		}
+	]
+}
+```
+
+See [settings-config.md](./settings-config.md) for full details and supported metrics.
+
+## Agent Concurrency
+
+Each agent can run multiple jobs in parallel, up to its concurrency limit (default: 3). You can set this per agent in its configuration:
+
+```json
+{
+	"name": "agent1",
+	"concurrency": 5
+}
+```
+
+If the limit is reached, new jobs are queued or skipped until capacity is available.
+
 # Backup Schedules
 
 Creating a backup schedule is a relatively simple task.  This guide will take you step by step through adding a schedule for a test job.
