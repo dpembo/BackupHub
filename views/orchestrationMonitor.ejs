@@ -796,6 +796,13 @@
     const executionIndex = urlParams.get('executionIndex') || 'latest';
     const executionId = urlParams.get('executionId');
 
+    console.log('[MONITOR-CLIENT] URL parameters:', {
+      jobId: jobId,
+      executionIndex: executionIndex,
+      executionId: executionId,
+      fullUrl: window.location.href
+    });
+
     if (!jobId) {
       M.toast({ html: 'No orchestration job specified', classes: 'error' });
     } else {
@@ -822,6 +829,7 @@
             let url = `/orchestration/execution/details?jobId=${encodeURIComponent(jobId)}&executionIndex=${encodeURIComponent(executionIndex)}`;
             if (executionId) {
               url += `&executionId=${encodeURIComponent(executionId)}`;
+              console.log('[MONITOR-CLIENT] Refresh with executionId:', executionId);
             }
             const response = await fetch(url);
             if (!response.ok) return;
@@ -1292,7 +1300,9 @@
         let url = `/orchestration/execution/details?jobId=${encodeURIComponent(jobId)}&executionIndex=${encodeURIComponent(executionIndex)}`;
         if (executionId) {
           url += `&executionId=${encodeURIComponent(executionId)}`;
+          console.log('[MONITOR-CLIENT] Loading execution with ID:', executionId);
         }
+        console.log('[MONITOR-CLIENT] Fetch URL:', url);
         const response = await fetch(url);
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);

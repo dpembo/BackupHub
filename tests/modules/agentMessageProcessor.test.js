@@ -25,7 +25,12 @@ jest.mock('../../running.js', () => ({
   createItem: jest.fn(),
   add: jest.fn(),
   removeItem: jest.fn(),
+  removeItemByExecutionId: jest.fn(),
+  removeItemByName: jest.fn(),
   getItemByName: jest.fn(),
+  getItemByExecutionId: jest.fn(),
+  getItems: jest.fn(),
+  getRunningCountForAgent: jest.fn(),
 }));
 
 // Mock orchestrationEngine module
@@ -93,7 +98,12 @@ describe('Agent Message Processor - Notification Logic', () => {
     running.createItem = jest.fn().mockReturnValue({ startTime: new Date().toISOString() });
     running.add = jest.fn();
     running.removeItem = jest.fn();
+    running.removeItemByExecutionId = jest.fn();
+    running.removeItemByName = jest.fn();
     running.getItemByName = jest.fn().mockReturnValue({ startTime: new Date().toISOString() });
+    running.getItemByExecutionId = jest.fn().mockReturnValue({ startTime: new Date().toISOString() });
+    running.getItems = jest.fn().mockReturnValue([]);
+    running.getRunningCountForAgent = jest.fn().mockReturnValue(0);
 
     orchestrationEngine.signalScriptCompletion = jest.fn();
 
@@ -268,6 +278,7 @@ describe('Agent Message Processor - Notification Logic', () => {
         name: 'test-agent',
         status: 'eta_submission',
         jobName: 'My-Orchestration-Backup-Job',
+        executionId: 'exec123',
         returnCode: 1,
         eta: 300,
         manual: false,
@@ -289,6 +300,7 @@ describe('Agent Message Processor - Notification Logic', () => {
         name: 'orchestration-agent',
         status: 'eta_submission',
         jobName: 'Orchestration [job] Execution [exec] Node [node1]',
+        executionId: 'exec',
         returnCode: 0,
         eta: 60,
         manual: false,
@@ -298,7 +310,7 @@ describe('Agent Message Processor - Notification Logic', () => {
       await agentMessageProcessor.processMessage('backup/agent/status', message, 'mqtt');
 
       expect(db.deleteData).toHaveBeenCalledWith(
-        'orchestration-agent_Orchestration [job] Execution [exec] Node [node1]_log'
+        'orchestration-agent_Orchestration [job] Execution [exec] Node [node1]_exec_log'
       );
     });
 
@@ -311,6 +323,7 @@ describe('Agent Message Processor - Notification Logic', () => {
         name: 'orchestration-agent',
         status: 'eta_submission',
         jobName: 'Orchestration [job] Execution [exec] Node [node1]',
+        executionId: 'exec',
         returnCode: 1,
         eta: 60,
         manual: false,

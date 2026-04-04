@@ -350,16 +350,34 @@ function noValue(inValue){
                       onchange="switchTriggerType('clock');">
                     <span><i class="material-icons" style="font-size:16px;vertical-align:middle;">schedule</i> Clock (Scheduled)</span>
                   </label>
-                  <label>
+                  <label style="margin-right: 30px;">
                     <input type="radio" id="triggerRule" name="triggerType" value="rule"
                       <%=(getSchedule().triggerType === 'rule' ? 'checked' : '')%>
                       onchange="switchTriggerType('rule');">
                     <span><i class="material-icons" style="font-size:16px;vertical-align:middle;">monitor_heart</i> Rule (Metric Threshold)</span>
                   </label>
+                  <label>
+                    <input type="radio" id="triggerWebhook" name="triggerType" value="webhook"
+                      <%=(getSchedule().triggerType === 'webhook' ? 'checked' : '')%>
+                      onchange="switchTriggerType('webhook');">
+                    <span><i class="material-icons" style="font-size:16px;vertical-align:middle;">cloud_queue</i> Webhook (External API)</span>
+                  </label>
                 </div>
               </div>
             </div>
           </div>
+
+          <!-- WEBHOOK TRIGGER SECTION -->
+          <div id="webhookTriggerSection" style="display:none;">
+            <div class="row">
+              <div class="col s12">
+                <div class="card-panel light-blue lighten-5">
+                  <p style="margin: 0; color: #0277bd;"><strong>Webhook Configuration:</strong> This job will only be triggered by external webhook calls. No schedule or metrics rules needed.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- END WEBHOOK TRIGGER SECTION -->
 
           <!-- CLOCK TRIGGER SECTION -->
           <div id="clockTriggerSection">
@@ -682,14 +700,17 @@ function noValue(inValue){
   // Function to validate an input, select, or textarea field using Materialize classes
   function validateInput(inputElement) {
     if(!inputElement){
+      console.error('[VALIDATE] ERROR: can not find element to validate!');
       alert("ERROR: can't find element to validate!")
       return false;
     }
 
     var value = inputElement.value.trim();
+    var elementId = inputElement.id || 'unknown';
     var inputWrapper = inputElement.parentNode;  // The parent div with class 'input-field'
 
     if (!value) {
+      console.warn('[VALIDATE]', elementId, 'FAILED - empty value');
       // Add invalid class to input wrapper
       inputWrapper.classList.add('invalid');
       inputElement.classList.add('invalid');
@@ -702,6 +723,7 @@ function noValue(inValue){
       }
       return false;  // Return false if validation fails
     } else {
+      console.log('[VALIDATE]', elementId, 'PASSED');
       // Add valid class and remove any existing error styling
       inputWrapper.classList.remove('invalid');
       inputElement.classList.remove('invalid');
@@ -735,15 +757,27 @@ function noValue(inValue){
   
   // Switch between Clock and Rule trigger types
   function switchTriggerType(triggerType) {
+    console.log('[SWITCH TRIGGER TYPE] Switching to:', triggerType);
     const clockSection = document.getElementById('clockTriggerSection');
     const ruleSection = document.getElementById('ruleTriggerSection');
+    const webhookSection = document.getElementById('webhookTriggerSection');
+    
     if (triggerType === 'rule') {
+      console.log('[SWITCH TRIGGER TYPE] Showing rule section');
       clockSection.style.display = 'none';
       ruleSection.style.display = 'block';
+      webhookSection.style.display = 'none';
       M.FormSelect.init(document.querySelectorAll('#ruleTriggerSection select'));
+    } else if (triggerType === 'webhook') {
+      console.log('[SWITCH TRIGGER TYPE] Showing webhook section');
+      clockSection.style.display = 'none';
+      ruleSection.style.display = 'none';
+      webhookSection.style.display = 'block';
     } else {
+      console.log('[SWITCH TRIGGER TYPE] Showing clock section');
       clockSection.style.display = 'block';
       ruleSection.style.display = 'none';
+      webhookSection.style.display = 'none';
       M.FormSelect.init(document.querySelectorAll('#clockTriggerSection select'));
     }
     syncRuleAgentVisibility();
@@ -817,6 +851,7 @@ function noValue(inValue){
   
   // Submit event handler
   document.getElementById('myForm').addEventListener('submit', function(event) {
+    console.log('[FORM SUBMIT] Form submission started');
 
     // Validate all input, select, and textarea elements within the form
     // var inputElements = document.querySelectorAll('#myForm input, #myForm select, #myForm textarea');
@@ -834,28 +869,57 @@ function noValue(inValue){
     const triggerTypeEl = document.querySelector('input[name="triggerType"]:checked');
     const triggerType = triggerTypeEl ? triggerTypeEl.value : 'clock';
 
+    console.log('[FORM SUBMIT] scheduleMode:', scheduleMode);
+    console.log('[FORM SUBMIT] triggerType:', triggerType);
+
     // Common validations
     isValid = validateInput(document.getElementById('jobName')) ? isValid : false;
+    console.log('[FORM SUBMIT] jobName valid:', isValid);
+    
     isValid = validateInput(document.getElementById('description')) ? isValid : false;
-    isValid = validateInput(document.getElementById('icon_select')) ? isValid : false;
+    console.log('[FORM SUBMIT] description valid:', isValid);
+    
+    // Icon/color only required for classic mode (orchestration gets icon from job itself)
+    if (scheduleMode === 'classic') {
+      isValid = validateInput(document.getElementById('icon_select')) ? isValid : false;
+      console.log('[FORM SUBMIT] icon_select valid:', isValid);
+    } else {
+      console.log('[FORM SUBMIT] Orchestration mode - skipping icon_select validation');
+      resetValidation(document.getElementById('icon_select'));
+    }
 
     if (triggerType === 'clock') {
-      // Clock-specific: frequency, time, day fields
-      isValid = validateInput(document.getElementById('scheduleType')) ? isValid : false;
-      resetValidation(document.getElementById('scheduleTime'));
-      resetValidation(document.getElementById('dayOfWeek'));
-      resetValidation(document.getElementById('dayInMonth'));
+      console.log('[FORM SUBMIT] Validating CLOCK trigger');
+      // Clock-specific: frequency, time, day fields (only for classic mode)
+      if (scheduleMode === 'classic') {
+        console.log('[FORM SUBMIT] Classic mode - validating scheduleType');
+        isValid = validateInput(document.getElementById('scheduleType')) ? isValid : false;
+        resetValidation(document.getElementById('scheduleTime'));
+        resetValidation(document.getElementById('dayOfWeek'));
+        resetValidation(document.getElementById('dayInMonth'));
 
-      if (document.getElementById('scheduleType').selectedIndex == 1) {
-        isValid = validateInput(document.getElementById('scheduleTime')) ? isValid : false;
-      }
-      if (document.getElementById('scheduleType').selectedIndex == 2) {
-        isValid = validateInput(document.getElementById('dayOfWeek')) ? isValid : false;
-      }
-      if (document.getElementById('scheduleType').selectedIndex == 3) {
-        isValid = validateInput(document.getElementById('dayInMonth')) ? isValid : false;
+        if (document.getElementById('scheduleType').selectedIndex == 1) {
+          console.log('[FORM SUBMIT] Validating scheduleTime');
+          isValid = validateInput(document.getElementById('scheduleTime')) ? isValid : false;
+        }
+        if (document.getElementById('scheduleType').selectedIndex == 2) {
+          console.log('[FORM SUBMIT] Validating dayOfWeek');
+          isValid = validateInput(document.getElementById('dayOfWeek')) ? isValid : false;
+        }
+        if (document.getElementById('scheduleType').selectedIndex == 3) {
+          console.log('[FORM SUBMIT] Validating dayInMonth');
+          isValid = validateInput(document.getElementById('dayInMonth')) ? isValid : false;
+        }
+      } else {
+        console.log('[FORM SUBMIT] Orchestration mode - skipping schedule field validation');
+        // Orchestration mode with clock trigger - no schedule fields needed
+        resetValidation(document.getElementById('scheduleType'));
+        resetValidation(document.getElementById('scheduleTime'));
+        resetValidation(document.getElementById('dayOfWeek'));
+        resetValidation(document.getElementById('dayInMonth'));
       }
     } else if (triggerType === 'rule') {
+      console.log('[FORM SUBMIT] Validating RULE trigger');
       // Rule-specific: metric type, operator, threshold, poll, cooldown
       // Agent: for classic the agentselect handles it; for orchestration validate the dedicated dropdown
       resetValidation(document.getElementById('scheduleType'));
@@ -863,37 +927,61 @@ function noValue(inValue){
       resetValidation(document.getElementById('dayOfWeek'));
       resetValidation(document.getElementById('dayInMonth'));
       if (scheduleMode === 'orchestration') {
+        console.log('[FORM SUBMIT] Rule + Orchestration - validating ruleAgentSelect');
         isValid = validateInput(document.getElementById('ruleAgentSelect')) ? isValid : false;
       }
+      console.log('[FORM SUBMIT] Validating rule fields');
       isValid = validateInput(document.getElementById('ruleMetricType')) ? isValid : false;
       isValid = validateInput(document.getElementById('ruleConditionOperator')) ? isValid : false;
       isValid = validateInput(document.getElementById('ruleConditionThreshold')) ? isValid : false;
       isValid = validateInput(document.getElementById('rulePollIntervalMins')) ? isValid : false;
       isValid = validateInput(document.getElementById('ruleCooldownMins')) ? isValid : false;
+    } else if (triggerType === 'webhook') {
+      console.log('[FORM SUBMIT] Validating WEBHOOK trigger - no schedule/rule validation needed');
+      // Webhook trigger: no schedule or rule fields needed
+      resetValidation(document.getElementById('scheduleType'));
+      resetValidation(document.getElementById('scheduleTime'));
+      resetValidation(document.getElementById('dayOfWeek'));
+      resetValidation(document.getElementById('dayInMonth'));
+      resetValidation(document.getElementById('ruleMetricType'));
+      resetValidation(document.getElementById('ruleConditionOperator'));
+      resetValidation(document.getElementById('ruleConditionThreshold'));
+      resetValidation(document.getElementById('rulePollIntervalMins'));
+      resetValidation(document.getElementById('ruleCooldownMins'));
     }
 
     if (scheduleMode === 'classic') {
+      console.log('[FORM SUBMIT] Validating CLASSIC mode agent/command');
       resetValidation(document.getElementById('agentcommand'));
       isValid = validateInput(document.getElementById('agentselect')) ? isValid : false;
+      console.log('[FORM SUBMIT] agentselect valid:', isValid);
       if (document.getElementById('agentcommand').selectedIndex == 0) {
         isValid = validateInput(document.getElementById('agentcommand')) ? isValid : false;
+        console.log('[FORM SUBMIT] agentcommand required, valid:', isValid);
       } else {
         resetValidation(document.getElementById('agentcommand'));
       }
       if (document.getElementById('agentcommand').selectedIndex == 1) {
         isValid = validateInput(document.getElementById('commandparams')) ? isValid : false;
+        console.log('[FORM SUBMIT] commandparams required, valid:', isValid);
       } else {
         resetValidation(document.getElementById('commandparams'));
       }
     } else if (scheduleMode === 'orchestration') {
+      console.log('[FORM SUBMIT] Validating ORCHESTRATION mode');
       isValid = validateInput(document.getElementById('orchestrationId')) ? isValid : false;
+      console.log('[FORM SUBMIT] orchestrationId valid:', isValid);
       resetValidation(document.getElementById('agentselect'));
       resetValidation(document.getElementById('agentcommand'));
       resetValidation(document.getElementById('commandparams'));
     }
 
+    console.log('[FORM SUBMIT] Final isValid:', isValid);
     if (!isValid) {
+      console.log('[FORM SUBMIT] VALIDATION FAILED - preventing form submission');
       event.preventDefault();  // Prevent form submission if any validation fails
+    } else {
+      console.log('[FORM SUBMIT] VALIDATION PASSED - allowing form submission');
     }
   });
 </script>

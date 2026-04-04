@@ -2,24 +2,79 @@
 
 BackupHub supports rule-based scheduling, allowing jobs to be triggered by system metrics (CPU, disk usage, file count, etc.) using flexible rules. This replaces the old global threshold job system.
 
-## Example: Rule-Based Threshold
+## Trigger Context System
 
-To trigger a backup when disk usage exceeds 90%:
+When a rule-based threshold triggers a job, the metric data is automatically passed to scripts and orchestrations as **trigger context**. This allows your scripts to make intelligent decisions based on the metric that triggered them.
+
+### Scripts Accessing Metric Data
+
+When your script is triggered by a threshold rule, these environment variables are available:
+
+```bash
+# Metric Information
+$BACKUPHUB_METRIC_TYPE              # "cpu", "mount_usage", "file_count", etc.
+$BACKUPHUB_METRIC_VALUE             # Actual numeric value (92.5)
+$BACKUPHUB_METRIC_UNIT              # Unit ("%", "bytes", "count", etc.)
+$BACKUPHUB_METRIC_PATH              # Path being monitored (if applicable)
+
+# Condition Information
+$BACKUPHUB_CONDITION_OPERATOR       # ">=", "<=", ">", "<", "==", "!="
+$BACKUPHUB_CONDITION_THRESHOLD      # Threshold value (90)
+$BACKUPHUB_CONDITION_MET            # "true" or "false"
+
+# Execution Tracking
+$BACKUPHUB_EXECUTION_ID             # Unique execution ID for this run
+$BACKUPHUB_TRIGGER_TYPE             # "rule", "webhook", or "sample"
+$BACKUPHUB_TRIGGER_CONTEXT          # Full JSON context object
+```
+
+### Example: Smart Disk Cleanup
+
+```bash
+#!/bin/bash
+# Only respond if triggered by a rule (not manual execution)
+if [ "$BACKUPHUB_TRIGGER_TYPE" = "rule" ] && [ "$BACKUPHUB_METRIC_TYPE" = "mount_usage" ]; then
+    
+    # Only proceed if threshold actually met
+    if [ "$BACKUPHUB_CONDITION_MET" = "true" ]; then
+        echo "Disk alert on ${BACKUPHUB_METRIC_PATH}: ${BACKUPHUB_METRIC_VALUE}% usage"
+        
+        # Only clean up if we're truly over threshold
+        if (( $(echo "$BACKUPHUB_METRIC_VALUE > 85" | bc -l) )); then
+            echo "Usage exceeds 85% - starting cleanup"
+            
+            # Remove old backups
+            find "${BACKUPHUB_METRIC_PATH}/backups" -type f -mtime +7 -delete
+            
+            # Compress old logs
+            find "${BACKUPHUB_METRIC_PATH}/logs" -type f -name "*.log" -mtime +3 | xargs gzip
+            
+            echo "Cleanup complete"
+        fi
+    fi
+fi
+```
+
+### Orchestrations with Dynamic Parameters
+
+In orchestration builder, you can use template syntax to inject metric values into script parameters:
 
 ```json
 {
-	"rules": [
-		{
-			"metric": { "type": "mount_usage", "agent": "agent1", "path": "/mnt/data" },
-			"condition": { "operator": ">=", "threshold": 90 },
-			"cooldown": 60,
-			"job": "backup-job-on-high-usage"
-		}
-	]
+  "type": "execute",
+  "data": {
+    "script": "tiered_cleanup.sh",
+    "parameters": "--mount #{context.metric.path} --usage #{context.metric.value} --threshold #{context.condition.threshold}"
+  }
 }
 ```
 
-See [settings-config.md](./settings-config.md) for full details and supported metrics.
+When triggered by the rule, this becomes:
+```bash
+tiered_cleanup.sh --mount /mnt/data --usage 92.5 --threshold 90
+```
+
+For more details and examples, see [TRIGGER_CONTEXT_GUIDE.md](../TRIGGER_CONTEXT_GUIDE.md).
 
 ## Agent Concurrency
 

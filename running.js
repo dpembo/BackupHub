@@ -50,7 +50,7 @@ function add(item) {
     updateDb();
 }
 
-function createItem(jobName, startTime, mode, executionId, agentName){
+function createItem(jobName, startTime, mode, executionId, agentName, orchestrationId, icon, color){
     if(mode===undefined)mode=false;
     logger.debug("Creating running item [" + jobName + "]");
     
@@ -65,6 +65,16 @@ function createItem(jobName, startTime, mode, executionId, agentName){
     item.manual=mode;
     item.executionId=executionId || null;
     item.agentName=agentName || null;
+    if (orchestrationId) {
+      item.orchestrationId = orchestrationId;
+    }
+    // Store icon and color for orchestrations
+    if (icon) {
+      item.icon = icon;
+    }
+    if (color) {
+      item.color = color;
+    }
     logger.debug("running Item:\n" + JSON.stringify(item));
     return item;
 }

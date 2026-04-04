@@ -32,17 +32,29 @@ BackupHub is designed for IT administrators, providing secure, encrypted communi
 - Agent provisioning: cron, system service, Docker, or PM2
 - Centralized agent management and user management (multi-user, RBAC)
 - Dashboard insights: visualize job performance and system status
+- Webhook job triggers with UUID-based API key security
+- Webhook management interface in settings (create, edit, rotate keys, delete)
 
 **Execution & Scheduling**
 - Secure, token-based script execution
 - Inline script editor with templates
 - Flexible scheduling: daily, weekly, monthly, and rule-based metric thresholds
+- **Trigger Context System**: Scripts and orchestrations receive metric data when triggered by rules
 - Timezone support for global operations
 
 **Communication & Notifications**
 - Real-time updates via WebSocket/MQTT
 - Alerts: email, webhooks, in-app, and console
 - Customizable UI
+- Dynamic parameter substitution in orchestrations based on trigger metrics
+
+## Webhook System (All 3 Phases Complete)
+
+BackupHub includes a complete webhook system:
+
+1. **Phase 1: Trigger Context** — Metric data flows to scripts/orchestrations
+2. **Phase 2: Database & REST API** — Persistent webhook storage and management endpoints
+3. **Phase 3: Management UI** — User-friendly webhook management in settings
 
 
 ## Backup Templates Included
@@ -57,7 +69,27 @@ BackupHub is designed for IT administrators, providing secure, encrypted communi
   
 ## Agent Concurrency
 - Each agent supports configurable concurrency (default: 3 jobs at once). Set `concurrency` in agent config to control this.
-- **Upload to Cloud Storage**: Using rclone, allows you to move files to many different cloud storage providers
+
+## Trigger Context System
+- **Rule-Based Triggers**: When a threshold rule fires, scripts receive metric data (CPU, disk usage, file count) as environment variables
+- **Webhook Triggers**: External systems can trigger jobs via API (`/api/webhook/trigger/:jobName`)
+- **Dynamic Parameter Substitution**: Orchestrations can use template syntax: `#{context.metric.value}`, `#{context.metric.path}`
+- **Environment Variables**: Scripts access metrics via `$BACKUPHUB_METRIC_VALUE`, `$BACKUPHUB_METRIC_PATH`, etc.
+
+**Example**: Disk cleanup script triggered when usage hits 90%:
+```bash
+if [ "$BACKUPHUB_METRIC_TYPE" = "mount_usage" ]; then
+    echo "Cleaning up $BACKUPHUB_METRIC_PATH (${BACKUPHUB_METRIC_VALUE}% usage)"
+    find "$BACKUPHUB_METRIC_PATH" -type f -mtime +30 -delete
+fi
+```
+
+**Getting Started with Webhooks?** See [WEBHOOK_QUICKSTART.md](./WEBHOOK_QUICKSTART.md) for a step-by-step guide to create your first webhook-triggered job!
+
+**Documentation**: See [TRIGGER_CONTEXT_GUIDE.md](./TRIGGER_CONTEXT_GUIDE.md) for detailed examples, webhook API, template substitution, and more.
+
+## Upload to Cloud Storage
+- Using rclone, allows you to move files to many different cloud storage providers
 
 
 ## Technology Stack

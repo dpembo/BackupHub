@@ -7,6 +7,7 @@ const db = require('./db.js');
 const fs = require('fs').promises;
 const EventEmitter = require('events');
 const wsBrowser = require('./communications/wsBrowserTransport.js');
+const triggerContext = require('./triggerContext.js');
 
 // Global store for pending script executions
 // Keyed by jobName (which includes orchestration jobId, executionId, and node id)
@@ -134,7 +135,7 @@ function evaluateNumericCondition(actual, operator, expected) {
  * @param {string} executionId - Optional execution ID to use (generated if not provided)
  * @returns {Promise<Object>} Execution result with logs
  */
-async function executeJob(jobId, isManual = false, executionId = null, onNodeComplete = null) {
+async function executeJob(jobId, isManual = false, executionId = null, onNodeComplete = null, triggerContextParam = null) {
   const crypto = require('crypto');
   // Use provided executionId or generate a new one
   const finalExecutionId = executionId || crypto.randomBytes(8).toString('hex');
@@ -153,7 +154,8 @@ async function executeJob(jobId, isManual = false, executionId = null, onNodeCom
     nodeMetrics: {},  // NEW: Unified timing for all node types
     errors: [],
     finalStatus: null,
-    manual: isManual  // Track whether this was a manual execution
+    manual: isManual,  // Track whether this was a manual execution
+    triggerContext: triggerContextParam || null  // Store trigger context for template substitution and logging
   };
 
   try {
@@ -266,8 +268,31 @@ async function executeJob(jobId, isManual = false, executionId = null, onNodeCom
       } else if (currentNode.type === 'execute') {
         // Execute node: send script to agent and wait for completion
         let scriptPath = currentNode.data.script;
-        const parameters = currentNode.data.parameters || '';
+        let parameters = currentNode.data.parameters || '';
         const agentId = currentNode.data.agent;
+
+        // Apply template substitution with context or default test context
+        if (parameters.includes('#{')) {
+          let contextForSubstitution = executionLog.triggerContext;
+          
+          // If no trigger context (manual execution), create default test context
+          if (!contextForSubstitution) {
+            contextForSubstitution = {
+              type: 'manual',
+              timestamp: new Date().toISOString(),
+              executionId: executionLog.executionId,
+              webhook: {
+                payload: { data: 'test' }
+              },
+              metric: { value: 0 },
+              condition: { threshold: 0 }
+            };
+            logger.debug(`[ORCHESTRATION] No trigger context - using default test context for template substitution`);
+          }
+          
+          parameters = triggerContext.substituteTemplate(parameters, contextForSubstitution);
+          logger.debug(`[ORCHESTRATION] Applied template substitution to parameters. Result: [${parameters}]`);
+        }
 
         if (!scriptPath) {
           throw new Error(`Execute node [${currentNodeId}] has no script configured`);
@@ -791,12 +816,21 @@ async function saveExecutionResult(executionLog) {
 async function getExecutionIndexById(jobId, executionId) {
   try {
     const executions = await getExecutionHistory(jobId);
-    if (!executions) return -1;
+    if (!executions) {
+      logger.warn(`[MONITOR] No execution history found for job [${jobId}]`);
+      return -1;
+    }
+    
+    logger.debug(`[MONITOR] Searching for executionId [${executionId}] in ${executions.length} executions:`);
+    executions.forEach((exec, idx) => {
+      logger.debug(`  [${idx}] executionId=${exec.executionId}, startTime=${exec.startTime}`);
+    });
     
     const index = executions.findIndex(exec => exec.executionId === executionId);
+    logger.info(`[MONITOR] Search result: executionId [${executionId}] found at index [${index}]`);
     return index;
   } catch (err) {
-    logger.error(`Failed to find execution index: ${err.message}`);
+    logger.error(`Failed to find execution index for [${jobId}:${executionId}]: ${err.message}`);
     return -1;
   }
 }
