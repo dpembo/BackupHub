@@ -230,8 +230,14 @@ function getScheduleObject(jobName, colour, description, scheduleType, scheduleT
       schedule.scheduleTime = null;
       schedule.ruleMetric = ruleMetric || null;
       schedule.ruleCondition = ruleCondition || null;
-      schedule.rulePollIntervalMins = parseInt(rulePollIntervalMins) || 15;
-      schedule.ruleCooldownMins = parseInt(ruleCooldownMins) || 60;
+      
+      // Parse and validate rule polling interval (clamp to minimum 1 minute)
+      const parsedRulePollIntervalMins = parseInt(rulePollIntervalMins, 10);
+      schedule.rulePollIntervalMins = Number.isFinite(parsedRulePollIntervalMins) ? Math.max(1, parsedRulePollIntervalMins) : 15;
+      
+      // Parse and validate rule cooldown (clamp to minimum 1 minute)
+      const parsedRuleCooldownMins = parseInt(ruleCooldownMins, 10);
+      schedule.ruleCooldownMins = Number.isFinite(parsedRuleCooldownMins) ? Math.max(1, parsedRuleCooldownMins) : 60;
     }
 
     if (schedule.scheduleMode === 'classic') {

@@ -1,7 +1,6 @@
 // Unit tests for rule-based job scheduling (metric thresholds)
-const scheduler = require('../../scheduler.js');
 
-// Mock dependencies
+// Mock dependencies (must be before requiring modules that depend on them)
 jest.mock('../../db.js');
 jest.mock('../../agents.js');
 jest.mock('../../running.js');
@@ -13,6 +12,8 @@ jest.mock('../../communications/mqttTransport.js', () => ({
 }));
 jest.mock('node-schedule');
 
+// Require modules after mocks are set up to ensure they receive mocked dependencies
+const scheduler = require('../../scheduler.js');
 const db = require('../../db.js');
 const agents = require('../../agents.js');
 const running = require('../../running.js');

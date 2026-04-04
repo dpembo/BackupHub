@@ -70,9 +70,9 @@ async function processMessage(topic, message,protocol) {
         );
         
         if (!existingItem) {
-          logger.info(`Creating new running item for [${obj.jobName}] with executionId [${obj.executionId}]`);
-          var item = running.createItem(obj.jobName, obj.lastStatusReport, obj.manual, obj.executionId);
-          logger.info(`Created running item: jobName=[${item.jobName}], executionId=[${item.executionId}]`);
+          logger.info(`Creating new running item for [${obj.jobName}] with executionId [${obj.executionId}] on agent [${obj.name}]`);
+          var item = running.createItem(obj.jobName, obj.lastStatusReport, obj.manual, obj.executionId, obj.name);
+          logger.info(`Created running item: jobName=[${item.jobName}], executionId=[${item.executionId}], agentName=[${item.agentName}]`);
           running.add(item);
         } else {
           logger.info(`Running item already exists for [${obj.jobName}] with executionId [${obj.executionId}], skipping duplicate add`);
@@ -88,6 +88,14 @@ async function processMessage(topic, message,protocol) {
         logger.debug("--------------------------------------");
         const agentRunningCount = running.getRunningCountForAgent(obj.name);
         const agentConcurrencyLimit = agents.getConcurrency(obj.name);
+        
+        // Defensive check: log warning if we have running items but they lack agentName
+        const allRunningItems = running.getItems();
+        const itemsWithoutAgent = allRunningItems.filter(item => !item.agentName);
+        if (itemsWithoutAgent.length > 0) {
+          logger.warn(`[CONCURRENCY] WARNING: Found ${itemsWithoutAgent.length} running items without agentName - concurrency enforcement may be bypassed`);
+        }
+        
         agents.updateAgentStatus(obj.name, agentRunningCount > 0 ? "running" : "online", "Ping response returned", null, null, null, message, protocol);
         if (agentRunningCount < agentConcurrencyLimit) {
           thresholdJobs.checkExecuteThresholdJob(obj.name, message);

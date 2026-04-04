@@ -1240,18 +1240,18 @@ app.get('/rest/agent/:id/ping', User.isAuthenticated, (req, res) => {
   res.send('{"status":"ok"}');  
 });
 
-app.get('/rest/agent/:id/ping', User.isAuthenticated, (req, res) => {
-  const user = req.session.user;
-  if (!user) {
-    return res.redirect('/register.html');
-  }
-  const id = req.params.id;
-  logger.info("Pinging Agent with ID: " + id);
-  //notificationData.deleteItem(index);
-  pingIndividualRuntime(id);
-  res.setHeader("Content-Type","Application/JSON");
-  res.send('{"status":"ok"}');  
-});
+// app.get('/rest/agent/:id/ping', User.isAuthenticated, (req, res) => {
+//   const user = req.session.user;
+//   if (!user) {
+//     return res.redirect('/register.html');
+//   }
+//   const id = req.params.id;
+//   logger.info("Pinging Agent with ID: " + id);
+//   //notificationData.deleteItem(index);
+//   pingIndividualRuntime(id);
+//   res.setHeader("Content-Type","Application/JSON");
+//   res.send('{"status":"ok"}');  
+// });
 
 /**
  * POST /rest/agent/:id/metric
@@ -1291,6 +1291,13 @@ app.post('/rest/agent/:id/metric', User.isAuthenticated, asyncHandler(async (req
 
   try {
     const payload = await waitPromise;
+    
+    // Check if the agent returned an error (e.g., JSON parse failure)
+    if (payload.error) {
+      logger.error(`[METRIC] Agent [${payload.agent}] returned error for [${jobName}]: ${payload.error}`);
+      return res.status(400).json({ success: false, message: `Agent error: ${payload.error}` });
+    }
+    
     logger.info(`[METRIC] Got result for [${jobName}]: ${JSON.stringify(payload.result)}`);
     res.json({ success: true, agent: payload.agent, jobName, result: payload.result });
   } catch (err) {
@@ -1897,10 +1904,40 @@ app.post('/scheduler.html', validateCsrf, User.isAuthenticated, asyncHandler(asy
         path: ruleMetricPath ? sanitizeHtml(ruleMetricPath) : null,
         pattern: ruleMetricPattern ? sanitizeHtml(ruleMetricPattern) : null,
       };
+      
+      // Validate and parse ruleConditionThreshold
+      const parsedThreshold = parseFloat(ruleConditionThreshold);
+      if (isNaN(parsedThreshold) || !isFinite(parsedThreshold)) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Error: Threshold must be a valid finite number' 
+        });
+      }
       ruleCondition = {
         operator: ruleConditionOperator,
-        threshold: parseFloat(ruleConditionThreshold),
+        threshold: parsedThreshold,
       };
+      
+      // Validate and parse rulePollIntervalMins
+      const pollInterval = parseInt(rulePollIntervalMins, 10);
+      if (isNaN(pollInterval) || pollInterval < 1) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Error: Poll interval must be a positive integer (minimum 1 minute)' 
+        });
+      }
+      rulePollIntervalMins = pollInterval;
+      
+      // Validate and parse ruleCooldownMins
+      const cooldown = parseInt(ruleCooldownMins, 10);
+      if (isNaN(cooldown) || cooldown < 1) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Error: Cooldown must be a positive integer (minimum 1 minute)' 
+        });
+      }
+      ruleCooldownMins = cooldown;
+      
       // Rule jobs have no clock schedule
       scheduleType = null;
       scheduleTime = null;
@@ -2046,9 +2083,9 @@ app.get('/runSchedule.html',User.isAuthenticated, asyncHandler(async (req, res) 
         }
         
         // Add to running queue so it shows in running list with link to monitor
-        const runningItem = running.createItem(orchestrationName, new Date().toISOString(), 'manual');
+        // Note: Orchestrations span multiple agents, so we pass null for agentName (concurrency not enforced per-agent)
+        const runningItem = running.createItem(orchestrationName, new Date().toISOString(), 'manual', executionId, null);
         runningItem.orchestrationId = orchestrationId;
-        runningItem.executionId = executionId;
         running.add(runningItem);
         logger.info(`Added orchestration to running queue: [${orchestrationName}] with execution [${executionId}]`);
         
@@ -2861,9 +2898,9 @@ app.post('/rest/orchestration/jobs/:jobId/execute', User.isAuthenticated, asyncH
   logger.info(`Created in-progress execution for [${jobId}] with ID [${executionId}]`);
   
   // Add to running queue so it shows in running list with link to monitor
-  const runningItem = running.createItem(orchestrationName, new Date().toISOString(), 'manual');
+  // Note: Orchestrations span multiple agents, so we pass null for agentName (concurrency not enforced per-agent)
+  const runningItem = running.createItem(orchestrationName, new Date().toISOString(), 'manual', executionId, null);
   runningItem.orchestrationId = jobId;
-  runningItem.executionId = executionId;
   running.add(runningItem);
   logger.info(`Added orchestration to running queue: [${orchestrationName}] with execution [${executionId}]`);
   

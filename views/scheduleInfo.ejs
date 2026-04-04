@@ -139,7 +139,8 @@
           var returnCode = inData.hist.histLastRun ? inData.hist.histLastRun.returnCode : 'unknown';
           statusElem.title="Failure (Return Code: " + returnCode + ") - Historical";
         }
-        document.getElementById('jobInProgressDiv').style.visibility="hidden";
+        //document.getElementById('jobInProgressDiv').style.visibility="hidden";
+        document.getElementById('jobInProgressDiv').style.display="none";
         stopProgressUpdateTimer();
         document.getElementById("refreshindicator").style.display="none";
         document.getElementById('loader-container').style.display="none";
@@ -175,7 +176,8 @@
         statusElem.className="blinking orange-text material-icons";
         statusElem.title="Running";
         document.getElementById('schedule-log').innerHTML=inData.log;
-        document.getElementById('jobInProgressDiv').style.visibility="visible";
+        //document.getElementById('jobInProgressDiv').style.visibility="visible";
+        document.getElementById('jobInProgressDiv').style.display="block";
         startProgressUpdateTimer();
       }
       else{
@@ -192,7 +194,7 @@
         statusElem.innerHTML="flag_circle";
         statusElem.className="grey-text material-icons";
         statusElem.title="Unknown";
-        document.getElementById('jobInProgressDiv').style.visibility="hidden";
+        document.getElementById('jobInProgressDiv').style.display="none";
         stopProgressUpdateTimer();
         document.getElementById("refreshindicator").style.display="none";
       }

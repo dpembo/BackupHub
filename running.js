@@ -53,6 +53,12 @@ function add(item) {
 function createItem(jobName, startTime, mode, executionId, agentName){
     if(mode===undefined)mode=false;
     logger.debug("Creating running item [" + jobName + "]");
+    
+    // Defensive check: warn if agentName is missing (needed for concurrency enforcement)
+    if (!agentName) {
+      logger.warn(`[CONCURRENCY] Running item [${jobName}] with executionId [${executionId}] created without agentName - concurrency enforcement will be bypassed`);
+    }
+    
     var item = {};
     item.jobName=jobName;
     item.startTime=startTime;
@@ -64,6 +70,15 @@ function createItem(jobName, startTime, mode, executionId, agentName){
 }
 
 function getRunningCountForAgent(agentName) {
+    // Defensive check: warn if there are running items without agentName (indicates a bug in item creation)
+    const itemsWithoutAgent = historyItems.filter(item => !item.agentName);
+    if (itemsWithoutAgent.length > 0) {
+      logger.warn(`[CONCURRENCY] Found ${itemsWithoutAgent.length} running items without agentName - filtering by agent may be inaccurate`);
+      itemsWithoutAgent.forEach(item => {
+        logger.warn(`  - Job [${item.jobName}] with executionId [${item.executionId}] has no agentName`);
+      });
+    }
+    
     return historyItems.filter(item => item.agentName === agentName).length;
 }
 

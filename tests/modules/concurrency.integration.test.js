@@ -1,12 +1,13 @@
 // Unit tests for server-side concurrency management and rule-based job triggers
-const running = require('../../running.js');
 
-// Mock dependencies
+// Mock dependencies (must be before requiring modules that depend on them)
 jest.mock('../../db.js');
 jest.mock('../../agents.js');
 jest.mock('../../scheduler.js');
 jest.mock('../../communications/wsBrowserTransport.js');
 
+// Require modules after mocks are set up to ensure they receive mocked dependencies
+const running = require('../../running.js');
 const db = require('../../db.js');
 const agents = require('../../agents.js');
 
