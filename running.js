@@ -50,16 +50,36 @@ function add(item) {
     updateDb();
 }
 
-function createItem(jobName, startTime, mode, executionId){
+function createItem(jobName, startTime, mode, executionId, agentName){
     if(mode===undefined)mode=false;
     logger.debug("Creating running item [" + jobName + "]");
+    
+    // Defensive check: warn if agentName is missing (needed for concurrency enforcement)
+    if (!agentName) {
+      logger.warn(`[CONCURRENCY] Running item [${jobName}] with executionId [${executionId}] created without agentName - concurrency enforcement will be bypassed`);
+    }
+    
     var item = {};
     item.jobName=jobName;
     item.startTime=startTime;
     item.manual=mode;
-    item.executionId=executionId || null;  // Add execution ID
+    item.executionId=executionId || null;
+    item.agentName=agentName || null;
     logger.debug("running Item:\n" + JSON.stringify(item));
     return item;
+}
+
+function getRunningCountForAgent(agentName) {
+    // Defensive check: warn if there are running items without agentName (indicates a bug in item creation)
+    const itemsWithoutAgent = historyItems.filter(item => !item.agentName);
+    if (itemsWithoutAgent.length > 0) {
+      logger.warn(`[CONCURRENCY] Found ${itemsWithoutAgent.length} running items without agentName - filtering by agent may be inaccurate`);
+      itemsWithoutAgent.forEach(item => {
+        logger.warn(`  - Job [${item.jobName}] with executionId [${item.executionId}] has no agentName`);
+      });
+    }
+    
+    return historyItems.filter(item => item.agentName === agentName).length;
 }
 
 function getItems() {
@@ -95,6 +115,18 @@ function searchItemWithName(searchTerm)
         }
     }
 
+    return null;
+}
+
+function getItemByExecutionId(executionId)
+{
+    if (!executionId) return null;
+    logger.debug("Getting Running item with Execution ID [" + executionId + "]");
+    for(var i=0;i<historyItems.length;i++){
+        if(historyItems[i].executionId === executionId){
+            return historyItems[i];
+        }
+    }
     return null;
 }
 
@@ -174,4 +206,4 @@ async function deleteAll()
     return { success: true, deletedCount: deletedCount };
 }
 
-module.exports = { init, add, getItems,getItemsUsingTZ, getItemByName, searchItemWithName, getItem , createItem, removeItem, removeItemByExecutionId, deleteAll};
+module.exports = { init, add, getItems, getItemsUsingTZ, getItemByName, getItemByExecutionId, searchItemWithName, getItem, createItem, getRunningCountForAgent, removeItem, removeItemByExecutionId, deleteAll};

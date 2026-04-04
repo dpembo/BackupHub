@@ -7,6 +7,22 @@ jest.mock('../../db.js', () => ({
   deleteData: jest.fn(),
 }));
 
+// Mock running module before importing scheduler
+jest.mock('../../running.js', () => ({
+  getRunningCountForAgent: jest.fn(() => 0),
+  createItem: jest.fn(( jobName, startTime, isManual, executionId, agent) => ({
+    jobName,
+    startTime,
+    isManual,
+    executionId,
+    agent,
+  })),
+  add: jest.fn(async (item) => {
+    // Mock implementation - just resolve
+    return Promise.resolve();
+  }),
+}));
+
 // Mock dateTimeUtils module before importing scheduler
 jest.mock('../../utils/dateTimeUtils.js', () => ({
   displayFormatDate: jest.fn().mockReturnValue('2026-03-21T12:00:00.000'),
@@ -87,6 +103,7 @@ describe('Scheduler Module', () => {
       getDict: jest.fn().mockReturnValue({
         'test-agent': { name: 'test-agent', status: 'online' },
       }),
+      getConcurrency: jest.fn().mockReturnValue(3), // Default concurrency limit
     };
 
     // Mock history as a global object (named 'hist' in production)
@@ -382,7 +399,7 @@ describe('Scheduler Module', () => {
       expect(result.executionId).toBeNull();
       expect(global.notifier.sendNotification).toHaveBeenCalledWith(
         expect.stringContaining('Unable to execute job'),
-        expect.stringContaining('not in the correct state'),
+        expect.stringContaining('is offline'),
         expect.anything(),
         expect.anything()
       );
@@ -430,6 +447,8 @@ describe('Scheduler Module', () => {
       });
 
       fs.promises.readFile.mockResolvedValue('#!/bin/bash\necho "test"');
+
+      await scheduler.init(); // Initialize schedules
 
       const result = await scheduler.runJob('test-job', true);
 
@@ -518,7 +537,7 @@ describe('Scheduler Module', () => {
         expect.any(String),
         9998,
         0,
-        expect.stringContaining('not in the correct state'),
+        expect.stringContaining('is offline'),
         false
       );
       expect(mockHistory.add).toHaveBeenCalled();

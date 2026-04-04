@@ -100,6 +100,9 @@ function displaySecs(secs) {
               if(runningList[i].manual!==undefined && runningList[i].manual=="threshold-disk"){
                 runType="disc_full";runDesc="Mount Threshold Exceeded";
               }
+              if(runningList[i].manual!==undefined && runningList[i].manual=="rule"){
+                runType="monitor_heart";runDesc="Metric Rule Triggered";
+              }
               %>
               <span title="<%=runDesc%>" class="orange-text blinking material-icons"><%=runType%></span>
             </td>

@@ -56,7 +56,7 @@ function noValue(inValue){
   <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0"/>
   
-  <title>BackupHub | Scheduler</title>
+  <title>BackupHub | Job</title>
 
   <%- include('./partials/_head'); %>
   <%- include('./partials/_scripts'); %>
@@ -221,7 +221,7 @@ function noValue(inValue){
   <!-- Modal Structure -->
   <div id="confirmationModal" class="modal">
     <div class="modal-content">
-        <h4>Delete Schedule Job?</h4>
+        <h4>Delete Job?</h4>
         <p>Are you sure you want to Delete the Scheduled Job<br><br><b>Job Name:</b> <%=getSchedule().jobName%>?</p>
         
     </div>
@@ -234,7 +234,7 @@ function noValue(inValue){
   <div class="section no-pad-bot" id="index-banner">
     <div class="container">
 
-      <h5 class="header orange-text">Scheduler</h5>
+      <h5 class="header orange-text">Job</h5>
       <br>
       <div >
         <form action="/scheduler.html" method="POST" id="myForm" novalidate>
@@ -335,54 +335,166 @@ function noValue(inValue){
               <input type="text" id="picker" name="picker" value="<%=savedcolor%>" onchange="document.getElementById('colour').value=this.value;document.querySelector('span#preview').style.color=this.value;">
             </div>
             </div>
+          </div>
+          <!-- /icon-color outer row -->
 
-
-
+          <!-- TRIGGER TYPE SELECTION -->
           <div class="row">
-            <div class="input-field col s12 m3">
-            <label class="active" for="scheduleType">Schedule Frequency</label>
-            <select id="scheduleType" name="scheduleType">
-              <option value="" <%=noValue(getSchedule().scheduleType)%>disabled>Choose your option</option>
-              <option value="daily" <%=isSelected("daily",getSchedule().scheduleType)%>>Daily</option>
-              <option value="weekly" <%=isSelected("weekly",getSchedule().scheduleType)%>>Weekly</option>
-              <option value="monthly" <%=isSelected("monthly",getSchedule().scheduleType)%>>Monthly</option>
-              <option value="cputhreshold" <%=isSelected("cputhreshold",getSchedule().scheduleType)%>>CPU Threshold</option>
-              <option value="storagethreshold" <%=isSelected("storagethreshold",getSchedule().scheduleType)%>>Storage Threshold</option>
-            </select>
-            <span class="helper-text" data-error="Please select an option"></span>
-          </div>
-          
-          
-          <div class="input-field col s12 m3">          
-            <div class="input-wrapper">
-              <label class="active" for="scheduleTime">Schedule Time</label>
-              <input value="<%=getSchedule().scheduleTime%>" type="time" step="1800" id="scheduleTime" name="scheduleTime">
-              <span class="helper-text" data-error="Please select a schedule time"></span>
+            <div class="input-field col s12">
+              <div class="input-wrapper">
+                <label>Trigger Type*</label>
+                <div style="margin-bottom: 20px;">
+                  <label style="margin-right: 30px;">
+                    <input type="radio" id="triggerClock" name="triggerType" value="clock"
+                      <%=((!getSchedule().triggerType || getSchedule().triggerType === 'clock') ? 'checked' : '')%>
+                      onchange="switchTriggerType('clock');">
+                    <span><i class="material-icons" style="font-size:16px;vertical-align:middle;">schedule</i> Clock (Scheduled)</span>
+                  </label>
+                  <label>
+                    <input type="radio" id="triggerRule" name="triggerType" value="rule"
+                      <%=(getSchedule().triggerType === 'rule' ? 'checked' : '')%>
+                      onchange="switchTriggerType('rule');">
+                    <span><i class="material-icons" style="font-size:16px;vertical-align:middle;">monitor_heart</i> Rule (Metric Threshold)</span>
+                  </label>
+                </div>
+              </div>
             </div>
           </div>
 
-            <div class="input-field col s12 m3">
-            <label class="active" for="dayOfWeek">Day of Week</label>
-            <select id="dayOfWeek" name="dayOfWeek">
-              <option <%=noValue(getSchedule().dayOfWeek)%> value="" disabled selected>Choose your option</option>
-              <option <%=isSelected("0",getSchedule().dayOfWeek)%>value="0">Sunday</option>
-              <option <%=isSelected("1",getSchedule().dayOfWeek)%>value="1">Monday</option>
-              <option <%=isSelected("2",getSchedule().dayOfWeek)%>value="2">Tuesday</option>
-              <option <%=isSelected("3",getSchedule().dayOfWeek)%>value="3">Wednesday</option>
-              <option <%=isSelected("4",getSchedule().dayOfWeek)%>value="4">Thursday</option>
-              <option <%=isSelected("5",getSchedule().dayOfWeek)%>value="5">Friday</option>
-              <option <%=isSelected("6",getSchedule().dayOfWeek)%>value="6">Saturday</option>
-            </select>
-            <span class="helper-text" data-error="Required when 'weekly' schedule type is selected"></span>
-            </div>
-          
-          
-            <div class="input-field col s12 m3">
-            <label for="dayInMonth">Schedule Day</label>
-            <input type="number" id="dayInMonth" name="dayInMonth" min="1" max="31" value="<%=getSchedule().dayInMonth%>">
-            <span class="helper-text" data-error="Provide Enter day in month (e.g. 1 through 28") "></span>
+          <!-- CLOCK TRIGGER SECTION -->
+          <div id="clockTriggerSection">
+            <div class="row">
+              <div class="input-field col s12 m3">
+                <label class="active" for="scheduleType">Schedule Frequency</label>
+                <select id="scheduleType" name="scheduleType">
+                  <option value="" <%=noValue(getSchedule().scheduleType)%>disabled>Choose your option</option>
+                  <option value="daily" <%=isSelected("daily",getSchedule().scheduleType)%>>Daily</option>
+                  <option value="weekly" <%=isSelected("weekly",getSchedule().scheduleType)%>>Weekly</option>
+                  <option value="monthly" <%=isSelected("monthly",getSchedule().scheduleType)%>>Monthly</option>
+                </select>
+                <span class="helper-text" data-error="Please select an option"></span>
+              </div>
+
+              <div class="input-field col s12 m3">
+                <div class="input-wrapper">
+                  <label class="active" for="scheduleTime">Schedule Time</label>
+                  <input value="<%=getSchedule().scheduleTime%>" type="time" step="1800" id="scheduleTime" name="scheduleTime">
+                  <span class="helper-text" data-error="Please select a schedule time"></span>
+                </div>
+              </div>
+
+              <div class="input-field col s12 m3">
+                <label class="active" for="dayOfWeek">Day of Week</label>
+                <select id="dayOfWeek" name="dayOfWeek">
+                  <option <%=noValue(getSchedule().dayOfWeek)%> value="" disabled selected>Choose your option</option>
+                  <option <%=isSelected("0",getSchedule().dayOfWeek)%>value="0">Sunday</option>
+                  <option <%=isSelected("1",getSchedule().dayOfWeek)%>value="1">Monday</option>
+                  <option <%=isSelected("2",getSchedule().dayOfWeek)%>value="2">Tuesday</option>
+                  <option <%=isSelected("3",getSchedule().dayOfWeek)%>value="3">Wednesday</option>
+                  <option <%=isSelected("4",getSchedule().dayOfWeek)%>value="4">Thursday</option>
+                  <option <%=isSelected("5",getSchedule().dayOfWeek)%>value="5">Friday</option>
+                  <option <%=isSelected("6",getSchedule().dayOfWeek)%>value="6">Saturday</option>
+                </select>
+                <span class="helper-text" data-error="Required when 'weekly' schedule type is selected"></span>
+              </div>
+
+              <div class="input-field col s12 m3">
+                <label for="dayInMonth">Schedule Day</label>
+                <input type="number" id="dayInMonth" name="dayInMonth" min="1" max="31" value="<%=getSchedule().dayInMonth%>">
+                <span class="helper-text" data-error="Enter day in month (e.g. 1 through 28)"></span>
+              </div>
             </div>
           </div>
+          <!-- END CLOCK TRIGGER SECTION -->
+
+          <!-- RULE TRIGGER SECTION -->
+          <% var rm = getSchedule().ruleMetric || {}; var rc = getSchedule().ruleCondition || {}; %>
+          <!-- Hidden field always submitted - populated by agentselect (classic) or ruleAgentSelect (orchestration) -->
+          <input type="hidden" name="ruleMetricAgent" id="ruleMetricAgent" value="<%=rm.agent||''%>">
+          <div id="ruleTriggerSection" style="display:none;">
+            <div class="row">
+              <div class="col s12"><h6 class="orange-text">Rule Configuration</h6></div>
+            </div>
+            <!-- Shown only for Orchestration + Rule (classic uses the existing agentselect above) -->
+            <div class="row" id="ruleAgentSelectRow" style="display:none;">
+              <div class="input-field col s12">
+                <select id="ruleAgentSelect" onchange="document.getElementById('ruleMetricAgent').value=this.value;">
+                  <option value="" disabled <%=(rm.agent ? '' : 'selected')%>>Select Agent</option>
+                  <% for (const [key, value] of Object.entries(agents)) { %>
+                    <option value="<%=value.name%>" <%=(rm.agent === value.name ? 'selected' : '')%>><%=value.name%></option>
+                  <% } %>
+                </select>
+                <label for="ruleAgentSelect">Agent to Monitor*</label>
+                <span class="helper-text" data-error="Please select an agent"></span>
+              </div>
+            </div>
+            <div class="row">
+              <div class="input-field col s12">
+                <select name="ruleMetricType" id="ruleMetricType" onchange="updateRuleMetricUI()">
+                  <option value="" disabled <%=(rm.type ? '' : 'selected')%>>Select Metric</option>
+                  <option value="cpu" <%=(rm.type === 'cpu' ? 'selected' : '')%>>CPU Load %</option>
+                  <option value="mount_usage" <%=(rm.type === 'mount_usage' ? 'selected' : '')%>>Mount Usage %</option>
+                  <option value="dir_size" <%=(rm.type === 'dir_size' ? 'selected' : '')%>>Directory Size (bytes)</option>
+                  <option value="file_size" <%=(rm.type === 'file_size' ? 'selected' : '')%>>File Size (bytes)</option>
+                  <option value="file_count" <%=(rm.type === 'file_count' ? 'selected' : '')%>>File Count</option>
+                  <option value="file_age" <%=(rm.type === 'file_age' ? 'selected' : '')%>>File Age (seconds)</option>
+                </select>
+                <label for="ruleMetricType">Metric Type*</label>
+                <span class="helper-text" data-error="Please select a metric type"></span>
+              </div>
+            </div>
+            <div class="row">
+              <div class="input-field col s12 m8">
+                <input type="text" name="ruleMetricPath" id="ruleMetricPath" value="<%=rm.path || ''%>">
+                <label class="active" for="ruleMetricPath">Path</label>
+                <span class="helper-text">Required for dir_size, file_size, file_count, file_age. Optional for mount_usage.</span>
+              </div>
+              <div class="input-field col s12 m4" id="rulePatternCol">
+                <input type="text" name="ruleMetricPattern" id="ruleMetricPattern" value="<%=rm.pattern || ''%>">
+                <label class="active" for="ruleMetricPattern">Pattern (glob)</label>
+                <span class="helper-text">e.g. *.bak &mdash; file_count only</span>
+              </div>
+            </div>
+            <div class="row">
+              <div class="input-field col s12 m4">
+                <select name="ruleConditionOperator" id="ruleConditionOperator">
+                  <option value=">=" <%=(rc.operator === '>=' ? 'selected' : '')%>>&ge; Greater than or equal</option>
+                  <option value=">" <%=(rc.operator === '>' ? 'selected' : '')%>>&gt; Greater than</option>
+                  <option value="<=" <%=(rc.operator === '<=' ? 'selected' : '')%>>&le; Less than or equal</option>
+                  <option value="<" <%=(rc.operator === '<' ? 'selected' : '')%>>< Less than</option>
+                  <option value="==" <%=(rc.operator === '==' ? 'selected' : '')%>>= Equals</option>
+                  <option value="!=" <%=(rc.operator === '!=' ? 'selected' : '')%>>&ne; Not equal</option>
+                </select>
+                <label for="ruleConditionOperator">Condition Operator*</label>
+                <span class="helper-text" data-error="Please select an operator"></span>
+              </div>
+              <div class="input-field col s12 m4">
+                <input type="number" step="any" name="ruleConditionThreshold" id="ruleConditionThreshold"
+                  value="<%=(rc.threshold !== undefined && rc.threshold !== null ? rc.threshold : '')%>">
+                <label class="active" for="ruleConditionThreshold">Threshold Value*</label>
+                <span class="helper-text" id="ruleThresholdHint" data-error="Please enter a threshold value">Value to compare against</span>
+              </div>
+              <div class="input-field col s12 m4">
+                <input type="text" readonly id="ruleUnitDisplay" value="">
+                <label class="active" for="ruleUnitDisplay">Unit (informational)</label>
+              </div>
+            </div>
+            <div class="row">
+              <div class="input-field col s12 m6">
+                <input type="number" min="1" name="rulePollIntervalMins" id="rulePollIntervalMins"
+                  value="<%=(getSchedule().rulePollIntervalMins || 15)%>">
+                <label class="active" for="rulePollIntervalMins">Poll Interval (minutes)*</label>
+                <span class="helper-text" data-error="Please enter a poll interval">How often to check the metric</span>
+              </div>
+              <div class="input-field col s12 m6">
+                <input type="number" min="1" name="ruleCooldownMins" id="ruleCooldownMins"
+                  value="<%=(getSchedule().ruleCooldownMins || 60)%>">
+                <label class="active" for="ruleCooldownMins">Cooldown (minutes)*</label>
+                <span class="helper-text" data-error="Please enter a cooldown period">Minimum time between job triggers</span>
+              </div>
+            </div>
+          </div>
+          <!-- END RULE TRIGGER SECTION -->
 
           
 
@@ -390,7 +502,7 @@ function noValue(inValue){
           <div id="classicModeSection">
             <div class="row">
               <div class="input-field col s12">
-                <select name="agentselect" id="agentselect">
+                <select name="agentselect" id="agentselect" onchange="syncRuleAgent(this)">
                   <option value="" disabled selected>Agent</option>
                   <% for (const [key, value] of Object.entries(agents)) { %>
                     <option <%=isSelected(value.name,getSchedule().agent)%> value="<%=value.name%>"><%=value.name%></option>
@@ -517,6 +629,10 @@ function noValue(inValue){
     // Initialize schedule mode display
     const currentMode = document.querySelector('input[name="scheduleMode"]:checked').value;
     switchScheduleMode(currentMode);
+    // Initialize trigger type display
+    const currentTrigger = document.querySelector('input[name="triggerType"]:checked');
+    if (currentTrigger) switchTriggerType(currentTrigger.value);
+    updateRuleMetricUI();
 });
 
   // Add icons to the select options
@@ -617,6 +733,59 @@ function noValue(inValue){
     }
   });
   
+  // Switch between Clock and Rule trigger types
+  function switchTriggerType(triggerType) {
+    const clockSection = document.getElementById('clockTriggerSection');
+    const ruleSection = document.getElementById('ruleTriggerSection');
+    if (triggerType === 'rule') {
+      clockSection.style.display = 'none';
+      ruleSection.style.display = 'block';
+      M.FormSelect.init(document.querySelectorAll('#ruleTriggerSection select'));
+    } else {
+      clockSection.style.display = 'block';
+      ruleSection.style.display = 'none';
+      M.FormSelect.init(document.querySelectorAll('#clockTriggerSection select'));
+    }
+    syncRuleAgentVisibility();
+  }
+
+  // Sync the ruleMetricAgent hidden field from agentselect (called on agentselect change)
+  function syncRuleAgent(agentSelect) {
+    document.getElementById('ruleMetricAgent').value = agentSelect.value;
+  }
+
+  // Show/hide the orchestration-only rule agent select, and sync hidden field for classic mode
+  function syncRuleAgentVisibility() {
+    const triggerType = (document.querySelector('input[name="triggerType"]:checked') || {}).value || 'clock';
+    const scheduleMode = (document.querySelector('input[name="scheduleMode"]:checked') || {}).value || 'classic';
+    const ruleAgentRow = document.getElementById('ruleAgentSelectRow');
+
+    if (triggerType === 'rule' && scheduleMode === 'orchestration') {
+      // Orchestration has no agentselect — show dedicated rule agent select
+      ruleAgentRow.style.display = '';
+      M.FormSelect.init(document.getElementById('ruleAgentSelect'));
+    } else {
+      ruleAgentRow.style.display = 'none';
+      // Classic + rule: sync hidden ruleMetricAgent from agentselect
+      if (triggerType === 'rule' && scheduleMode === 'classic') {
+        const agentSel = document.getElementById('agentselect');
+        if (agentSel && agentSel.value) {
+          document.getElementById('ruleMetricAgent').value = agentSel.value;
+        }
+      }
+    }
+  }
+
+  // Update rule section UI based on selected metric type
+  function updateRuleMetricUI() {
+    const metricType = document.getElementById('ruleMetricType') ? document.getElementById('ruleMetricType').value : '';
+    const unitDisplay = document.getElementById('ruleUnitDisplay');
+    const patternCol = document.getElementById('rulePatternCol');
+    const units = { cpu: '%', mount_usage: '%', dir_size: 'bytes', file_size: 'bytes', file_count: 'files', file_age: 'seconds' };
+    if (unitDisplay) unitDisplay.value = units[metricType] || '';
+    if (patternCol) patternCol.style.display = (metricType === 'file_count') ? '' : 'none';
+  }
+
   // Switch between Classic and Orchestration modes
   function switchScheduleMode(mode) {
     const classicSection = document.getElementById('classicModeSection');
@@ -643,6 +812,7 @@ function noValue(inValue){
       // Reinitialize Materialize selects for orchestration mode elements
       M.FormSelect.init(document.querySelectorAll('#orchestrationModeSection select'));
     }
+    syncRuleAgentVisibility();
   }
   
   // Submit event handler
@@ -661,67 +831,66 @@ function noValue(inValue){
     
     let isValid = true;
     const scheduleMode = document.querySelector('input[name="scheduleMode"]:checked').value;
-    
+    const triggerTypeEl = document.querySelector('input[name="triggerType"]:checked');
+    const triggerType = triggerTypeEl ? triggerTypeEl.value : 'clock';
+
     // Common validations
     isValid = validateInput(document.getElementById('jobName')) ? isValid : false;
-    isValid = validateInput(document.getElementById('description')) ? isValid : false; 
+    isValid = validateInput(document.getElementById('description')) ? isValid : false;
     isValid = validateInput(document.getElementById('icon_select')) ? isValid : false;
-    isValid = validateInput(document.getElementById('scheduleType')) ? isValid : false;
-    
+
+    if (triggerType === 'clock') {
+      // Clock-specific: frequency, time, day fields
+      isValid = validateInput(document.getElementById('scheduleType')) ? isValid : false;
+      resetValidation(document.getElementById('scheduleTime'));
+      resetValidation(document.getElementById('dayOfWeek'));
+      resetValidation(document.getElementById('dayInMonth'));
+
+      if (document.getElementById('scheduleType').selectedIndex == 1) {
+        isValid = validateInput(document.getElementById('scheduleTime')) ? isValid : false;
+      }
+      if (document.getElementById('scheduleType').selectedIndex == 2) {
+        isValid = validateInput(document.getElementById('dayOfWeek')) ? isValid : false;
+      }
+      if (document.getElementById('scheduleType').selectedIndex == 3) {
+        isValid = validateInput(document.getElementById('dayInMonth')) ? isValid : false;
+      }
+    } else if (triggerType === 'rule') {
+      // Rule-specific: metric type, operator, threshold, poll, cooldown
+      // Agent: for classic the agentselect handles it; for orchestration validate the dedicated dropdown
+      resetValidation(document.getElementById('scheduleType'));
+      resetValidation(document.getElementById('scheduleTime'));
+      resetValidation(document.getElementById('dayOfWeek'));
+      resetValidation(document.getElementById('dayInMonth'));
+      if (scheduleMode === 'orchestration') {
+        isValid = validateInput(document.getElementById('ruleAgentSelect')) ? isValid : false;
+      }
+      isValid = validateInput(document.getElementById('ruleMetricType')) ? isValid : false;
+      isValid = validateInput(document.getElementById('ruleConditionOperator')) ? isValid : false;
+      isValid = validateInput(document.getElementById('ruleConditionThreshold')) ? isValid : false;
+      isValid = validateInput(document.getElementById('rulePollIntervalMins')) ? isValid : false;
+      isValid = validateInput(document.getElementById('ruleCooldownMins')) ? isValid : false;
+    }
+
     if (scheduleMode === 'classic') {
-      // Classic mode validations
       resetValidation(document.getElementById('agentcommand'));
       isValid = validateInput(document.getElementById('agentselect')) ? isValid : false;
-      
-      if(document.getElementById('agentcommand').selectedIndex==0){
-        //alert("nothing selected");
+      if (document.getElementById('agentcommand').selectedIndex == 0) {
         isValid = validateInput(document.getElementById('agentcommand')) ? isValid : false;
-      }
-      else{
-        //alert("selected so resetting");
+      } else {
         resetValidation(document.getElementById('agentcommand'));
       }
-
-      if(document.getElementById('agentcommand').selectedIndex==1){
+      if (document.getElementById('agentcommand').selectedIndex == 1) {
         isValid = validateInput(document.getElementById('commandparams')) ? isValid : false;
-      }
-      else {
+      } else {
         resetValidation(document.getElementById('commandparams'));
       }
     } else if (scheduleMode === 'orchestration') {
-      // Orchestration mode validations
       isValid = validateInput(document.getElementById('orchestrationId')) ? isValid : false;
-      
-      // Clear/reset classic mode validations
       resetValidation(document.getElementById('agentselect'));
       resetValidation(document.getElementById('agentcommand'));
       resetValidation(document.getElementById('commandparams'));
     }
-
-    resetValidation(document.getElementById('scheduleTime'));
-    resetValidation(document.getElementById('dayOfWeek'));
-    resetValidation(document.getElementById('dayInMonth'));
-
-    if(document.getElementById("scheduleType").selectedIndex==1){
-       isValid = validateInput(document.getElementById('scheduleTime')) ? isValid : false;   
-    }
-    
-    if(document.getElementById("scheduleType").selectedIndex==2){
-      isValid = validateInput(document.getElementById('dayOfWeek')) ? isValid : false;   
-      //resetValidation(document.getElementById('dayInMonth'));
-    }
-
-    if(document.getElementById("scheduleType").selectedIndex==3){
-      isValid = validateInput(document.getElementById('dayInMonth')) ? isValid : false;   
-    }
-
-    if(document.getElementById("scheduleType").selectedIndex>3){
-    }
-
-    // if(document.getElementById("scheduleType").value=="monthly"){
-    //   resetValidation(document.getElementById('dayofWeek'));
-    //   isValid = validateInput(document.getElementById('dayInMonth')) ? isValid : false;  
-    // }
 
     if (!isValid) {
       event.preventDefault();  // Prevent form submission if any validation fails

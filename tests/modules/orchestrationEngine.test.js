@@ -670,10 +670,10 @@ describe('Orchestration Engine Module', () => {
       // Mock fs.readFile for script reading
       require('fs').promises.readFile.mockResolvedValue('#!/bin/bash\necho "test"');
       
-      // Mock agents.getAgent
+      // Mock agents.getAgent - MUST include status: 'online' or orchestrationEngine treats it as offline
       const agents = require('../../agents.js');
-      agents.getAgent.mockReturnValue({ name: 'test-agent', id: 'agent1' });
-      agents.getDict.mockReturnValue({ agent1: { name: 'test-agent' } });
+      agents.getAgent.mockReturnValue({ name: 'test-agent', id: 'agent1', status: 'online' });
+      agents.getDict.mockReturnValue({ agent1: { name: 'test-agent', status: 'online' } });
     });
 
     describe('Happy Path Scenarios', () => {

@@ -1,3 +1,9 @@
+# Rule-Based Triggers and Concurrency
+
+Orchestrations can be triggered by rule-based thresholds (see [settings-config.md](./settings-config.md)). You can design orchestrations to run automatically when a metric rule is met.
+
+Orchestration executions also respect agent concurrency limits. If an agent is at its concurrency limit, orchestration steps targeting that agent will be queued or skipped until capacity is available.
+
 # Orchestrations
 
 Orchestrations allow you to create complex backup workflows by chaining multiple backup scripts together with conditional logic. Instead of running a single script per schedule, you can design sophisticated multi-step processes with decision branches, error handling, and complex execution paths.

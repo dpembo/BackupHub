@@ -167,7 +167,7 @@ function addDateSuffix(date) {
   <%- include('./partials/_header'); %>
   <div id="confirmationModal" class="modal">
     <div class="modal-content">
-        <h4>Delete Schedule Job?</h4>
+        <h4>Delete Job?</h4>
         <p>Are you sure you want to Delete the Scheduled Job<br><br><b>Job Name: </b><span id='inJobName'></span></p>
     </div>
     <div class="modal-footer">
@@ -180,7 +180,7 @@ function addDateSuffix(date) {
     <div class="container wide-table">
       <div class="row">
         <div class="col s6">
-          <h5 class="header orange-text">Schedule</h5>
+          <h5 class="header orange-text">Jobs</h5>
         </div>
         <div class="col s6" style="text-align: right;padding-top:20px;">
           <a class="tableIconButton" style="position:relative;left:-10px;" title="add" href="scheduler.html"><span class="material-icons vertTop">add</span></a>
@@ -226,37 +226,36 @@ function addDateSuffix(date) {
                   <% } %>
                 </td>
                 <td>
-                  <!-- SCHEDULE TYPE -->
+                  <!-- PERIOD / TRIGGER TYPE -->
                   <% var schedTypedisplay = schedules[i].scheduleType;
-                     if(schedTypedisplay=="storagethreshold" || schedTypedisplay=="cputhreshold")schedTypedisplay="data_thresholding";
-                     if(schedTypedisplay=="daily")schedTypedisplay="calendar_month";
-                     if(schedTypedisplay=="weekly")schedTypedisplay="date_range";
-                     if(schedTypedisplay=="monthly")schedTypedisplay="today";
+                     var effectiveTrigger = schedules[i].triggerType || (
+                       (schedTypedisplay === 'daily' || schedTypedisplay === 'weekly' || schedTypedisplay === 'monthly') ? 'clock' : 'legacy_threshold'
+                     );
+                     if (effectiveTrigger === 'rule') schedTypedisplay = 'monitor_heart';
+                     else if(schedTypedisplay=='storagethreshold' || schedTypedisplay=='cputhreshold') schedTypedisplay='data_thresholding';
+                     else if(schedTypedisplay=='daily') schedTypedisplay='calendar_month';
+                     else if(schedTypedisplay=='weekly') schedTypedisplay='date_range';
+                     else if(schedTypedisplay=='monthly') schedTypedisplay='today';
                   %>
-                  <span class="material-icons-two-tone" title="<%=schedules[i].scheduleType%>"><%=schedTypedisplay%></span>
+                  <span class="material-icons-two-tone" title="<%=(schedules[i].triggerType||schedules[i].scheduleType||'clock')%>"><%=schedTypedisplay%></span>
                 </td>
                 <td>
-                  <%if (schedules[i].scheduleType == "daily") {%>
+                  <% if (effectiveTrigger === 'rule') { %>
+                    <% var rm = schedules[i].ruleMetric || {}; var rc = schedules[i].ruleCondition || {}; %>
+                    <span class="material-icons" style="font-size:14px;vertical-align:middle;">monitor_heart</span>
+                    <%=rm.type||'metric'%> <%=rc.operator||''%> <%=rc.threshold||''%>
+                    <% if (rm.path) { %><br/><small style="color:#888"><%=rm.path%></small><% } %>
+                  <% } else if (schedules[i].scheduleType == "daily") { %>
                     Every day at <%= schedules[i].scheduleTime %>
-                  <%}%>
-
-                  <%if (schedules[i].scheduleType == "weekly") {%>
-                    Every <%=getDayName(schedules[i].dayOfWeek);%> at <%= schedules[i].scheduleTime %> 
-                  <%}%>
-
-                  <% if (schedules[i].scheduleType == "monthly") {%>
-                    Every <%=addDateSuffix(schedules[i].dayInMonth);%> of the Month at <%= schedules[i].scheduleTime %> 
-                  <%}%>
-
-                  <% if(schedules[i].scheduleType=="storagethreshold" || schedules[i].scheduleType=="cputhreshold"){%>
+                  <% } else if (schedules[i].scheduleType == "weekly") { %>
+                    Every <%=getDayName(schedules[i].dayOfWeek);%> at <%= schedules[i].scheduleTime %>
+                  <% } else if (schedules[i].scheduleType == "monthly") { %>
+                    Every <%=addDateSuffix(schedules[i].dayInMonth);%> of the Month at <%= schedules[i].scheduleTime %>
+                  <% } else { %>
                     N/A
-                  <%}%>
+                  <% } %>
                 </td>
-                <td><% if(schedules[i].scheduleType=="storagethreshold" || schedules[i].scheduleType=="cputhreshold"){%>
-                  N/A
-                <%} else {%>
-                  <%= schedules[i].nextRunDate %></td>
-                <%}%>
+                <td><%= schedules[i].nextRunDate %></td>
                 <td><%= schedules[i].lastUpdated %></td>
                 <% var pct = schedules[i].successPercentage;
                 if(!isNaN(pct))pct=pct+"%";

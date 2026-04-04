@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0"/>
+  <title>BackupHub | Metric Test</title>
+
+  <%- include('./partials/_head'); %>
+  <%- include('./partials/_scripts'); %>
+
+  <style>
+    .metric-card { margin-top: 1rem; }
+    .result-box {
+      background: #1e1e1e;
+      color: #d4d4d4;
+      font-family: monospace;
+      font-size: 0.9rem;
+      border-radius: 4px;
+      padding: 1rem;
+      white-space: pre-wrap;
+      word-break: break-all;
+      min-height: 80px;
+    }
+    .result-box.error { color: #f48771; }
+    .result-box.success { color: #b5cea8; }
+    .result-row { margin-bottom: 0.75rem; }
+    .chip.type-chip { cursor: pointer; margin: 0.25rem; }
+    .chip.type-chip.active { background-color: #e65100; color: #fff; }
+    #path-row, #pattern-row { display: none; }
+    .note-banner {
+      border-left: 4px solid #e65100;
+      padding: 0.5rem 1rem;
+      background: #fff3e0;
+      margin-bottom: 1rem;
+      border-radius: 0 4px 4px 0;
+    }
+    .timing { font-size: 0.78rem; color: #888; margin-top: 0.25rem; }
+    table.result-table { width: 100%; border-collapse: collapse; font-family: monospace; }
+    table.result-table th { text-align: left; padding: 0.3rem 0.6rem; background: #333; color: #ccc; }
+    table.result-table td { padding: 0.3rem 0.6rem; border-bottom: 1px solid #2e2e2e; }
+    table.result-table tr:hover td { background: #2a2a2a; }
+  </style>
+</head>
+<body>
+  <%- include('./partials/_header'); %>
+
+  <div class="section no-pad-bot" id="index-banner">
+    <div class="container fillWidth">
+
+      <h5 class="header orange-text">
+        <span class="material-icons vertMid" style="font-size:1.5rem;">science</span>
+        Agent Metric Test
+        <span class="badge grey white-text" style="font-size:0.65rem;vertical-align:middle;padding:0.2rem 0.5rem;border-radius:4px;">TEMPORARY</span>
+      </h5>
+
+      <div class="note-banner">
+        <strong>Developer-only page.</strong>
+        This page tests the <code>queryMetric</code> agent command and should be removed once the Rules Engine is built.
+        <br><br>
+        <strong>URL Parameters:</strong> You can pre-fill and auto-run queries using URL parameters.
+        <br>Example: <code>?agent=backup-01&type=dir_size&path=/var/backups&auto=1</code>
+        <br>Supported params: <code>agent</code>, <code>type</code>, <code>path</code>, <code>pattern</code>, <code>auto=1</code> (auto-run)
+      </div>
+
+      <div class="row">
+        <!-- Left column: controls -->
+        <div class="col s12 m4">
+          <div class="card">
+            <div class="card-content">
+              <span class="card-title">Query Builder</span>
+
+              <div class="result-row">
+                <label for="agentSelect">Agent</label>
+                <select id="agentSelect" class="browser-default">
+                  <option value="" disabled selected>— select agent —</option>
+                  <% for (const [name, agent] of Object.entries(agents)) { %>
+                    <option value="<%= name %>" data-status="<%= agent.status %>">
+                      <%= name %> (<%= agent.status %>)
+                    </option>
+                  <% } %>
+                </select>
+              </div>
+
+              <div class="result-row" style="margin-top:1rem;">
+                <label>Metric Type</label>
+                <div>
+                  <% const types = ['cpu','mount_usage','dir_size','file_size','file_count','file_age']; %>
+                  <% types.forEach(t => { %>
+                    <div class="chip type-chip" data-type="<%= t %>" onclick="selectType('<%= t %>')"><%= t %></div>
+                  <% }); %>
+                </div>
+                <input type="hidden" id="selectedType" value="">
+              </div>
+
+              <div class="result-row">
+                <label for="pathInput">Path <small>(file or directory)</small></label>
+                <input type="text" id="pathInput" placeholder="e.g. /var/backups, /tmp, /var/log/app.log, or /" class="browser-default">
+              </div>
+
+              <div class="result-row" id="pattern-row">
+                <label for="patternInput">File Pattern <small>(optional glob)</small></label>
+                <input type="text" id="patternInput" placeholder="e.g. *.bak" class="browser-default">
+              </div>
+
+              <div class="result-row" id="path-row" style="display:none;">
+              </div>
+
+              <div class="result-row" style="margin-top:1.5rem;">
+                <button class="btn orange darken-1 waves-effect waves-light" id="runBtn" onclick="runQuery()" disabled>
+                  <span class="material-icons vertMid" style="font-size:1.1rem;">send</span>
+                  Run Query
+                </button>
+                <button class="btn grey waves-effect waves-light" style="margin-left:0.5rem;" onclick="clearResult()">Clear</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Quick presets -->
+          <div class="card">
+            <div class="card-content">
+              <span class="card-title">Quick Presets</span>
+              <div id="presetList"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right column: results -->
+        <div class="col s12 m8">
+          <div class="card metric-card">
+            <div class="card-content">
+              <span class="card-title">Result</span>
+              <div id="spinner" style="display:none;text-align:center;padding:2rem;">
+                <div class="preloader-wrapper small active">
+                  <div class="spinner-layer spinner-orange-only">
+                    <div class="circle-clipper left"><div class="circle"></div></div>
+                    <div class="gap-patch"><div class="circle"></div></div>
+                    <div class="circle-clipper right"><div class="circle"></div></div>
+                  </div>
+                </div>
+                <p class="grey-text" style="margin-top:0.5rem;">Waiting for agent response…</p>
+              </div>
+              <div id="resultFormatted" style="display:none;"></div>
+              <div id="resultRaw" class="result-box" style="display:none;"></div>
+              <div id="resultPlaceholder" class="grey-text" style="padding:1rem;">
+                Select an agent and metric type, then click <strong>Run Query</strong>.
+              </div>
+              <div class="timing" id="timing"></div>
+            </div>
+          </div>
+
+          <!-- History of this session -->
+          <div class="card metric-card">
+            <div class="card-content">
+              <span class="card-title">Session History</span>
+              <table class="result-table" id="historyTable">
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>Agent</th>
+                    <th>Type</th>
+                    <th>Path</th>
+                    <th>Value</th>
+                    <th>Unit</th>
+                  </tr>
+                </thead>
+                <tbody id="historyBody">
+                  <tr><td colspan="6" class="grey-text" style="text-align:center;padding:0.5rem;">No queries yet</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <%- include('./partials/_footer'); %>
+
+  <script>
+    const CSRF_TOKEN = '<%= csrf %>';
+    let historyEmpty = true;
+
+    const PRESETS = [
+      { label: 'CPU Load',               type: 'cpu',         path: '',                pattern: '' },
+      { label: 'Root Disk Usage',        type: 'mount_usage', path: '/',               pattern: '' },
+      { label: 'All Mount Usage',        type: 'mount_usage', path: '',                pattern: '' },
+      { label: '/tmp Dir Size',          type: 'dir_size',    path: '/tmp',            pattern: '' },
+      { label: '/tmp File Count',        type: 'file_count',  path: '/tmp',            pattern: '' },
+      { label: '*.log count in /var/log',type: 'file_count',  path: '/var/log',        pattern: '*.log' },
+      { label: '/var/log Dir Size',      type: 'dir_size',    path: '/var/log',        pattern: '' },
+      { label: 'resolv.conf Age',        type: 'file_age',    path: '/etc/resolv.conf',pattern: '' },
+      { label: 'resolv.conf Size',       type: 'file_size',   path: '/etc/resolv.conf',pattern: '' },
+    ];
+
+    // Render preset list
+    (function buildPresets() {
+      const container = document.getElementById('presetList');
+      PRESETS.forEach((p, i) => {
+        const div = document.createElement('div');
+        div.style.marginBottom = '0.4rem';
+        const a = document.createElement('a');
+        a.href = '#';
+        a.className = 'orange-text';
+        a.innerHTML = '<span class="material-icons" style="font-size:0.9rem;vertical-align:middle;">play_arrow</span> ' + escapeHtml(p.label);
+        a.addEventListener('click', (e) => { e.preventDefault(); applyPreset(p); });
+        div.appendChild(a);
+        container.appendChild(div);
+      });
+    })();
+
+    const PATH_TYPES = new Set(['dir_size', 'file_size', 'file_count', 'file_age', 'mount_usage']);
+    const PATTERN_TYPES = new Set(['file_count']);
+
+    function selectType(type) {
+      document.querySelectorAll('.type-chip').forEach(c => c.classList.remove('active'));
+      const chip = document.querySelector(`.type-chip[data-type="${type}"]`);
+      if (chip) chip.classList.add('active');
+      document.getElementById('selectedType').value = type;
+
+      // Only show pattern input for file_count type
+      document.getElementById('pattern-row').style.display = PATTERN_TYPES.has(type) ? '' : 'none';
+
+      // Update placeholder hint based on type
+      const pathInput = document.getElementById('pathInput');
+      if (type === 'mount_usage') pathInput.placeholder = 'e.g. / or /home (leave blank for all)';
+      else if (type === 'dir_size') pathInput.placeholder = 'e.g. /var/backups';
+      else if (type === 'file_size') pathInput.placeholder = 'e.g. /var/log/app.log';
+      else if (type === 'file_count') pathInput.placeholder = 'e.g. /var/log';
+      else if (type === 'file_age') pathInput.placeholder = 'e.g. /var/log/syslog';
+
+      updateRunBtn();
+    }
+
+    function updateRunBtn() {
+      const agent = document.getElementById('agentSelect').value;
+      const type = document.getElementById('selectedType').value;
+      document.getElementById('runBtn').disabled = !(agent && type);
+    }
+
+    document.getElementById('agentSelect').addEventListener('change', updateRunBtn);
+
+    function applyPreset(preset) {
+      selectType(preset.type);
+      document.getElementById('pathInput').value = preset.path || '';
+      document.getElementById('patternInput').value = preset.pattern || '';
+      updateRunBtn();
+    }
+
+    function clearResult() {
+      document.getElementById('resultFormatted').style.display = 'none';
+      document.getElementById('resultRaw').style.display = 'none';
+      document.getElementById('resultPlaceholder').style.display = '';
+      document.getElementById('timing').textContent = '';
+    }
+
+    function humanBytes(bytes) {
+      if (bytes === null || bytes === undefined) return 'n/a';
+      const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+      let val = bytes;
+      let i = 0;
+      while (val >= 1024 && i < units.length - 1) { val /= 1024; i++; }
+      return `${val.toFixed(2)} ${units[i]}`;
+    }
+
+    function humanSeconds(secs) {
+      if (secs === null || secs === undefined) return 'n/a';
+      if (secs < 60) return `${secs}s`;
+      if (secs < 3600) return `${Math.floor(secs/60)}m ${secs%60}s`;
+      return `${Math.floor(secs/3600)}h ${Math.floor((secs%3600)/60)}m`;
+    }
+
+    function formatResult(result, agentName) {
+      if (result.error) {
+        return `<div class="result-box error">Error: ${escapeHtml(result.error)}</div>`;
+      }
+
+      const type = result.type;
+      let rows = '';
+
+      if (type === 'mount_usage' && result.allMounts) {
+        // Render a mini table of all mounts
+        rows = result.allMounts.map(m => {
+          const bar = `<div style="width:${m.usage}%;max-width:100%;height:8px;background:${m.usage>=90?'#e53935':m.usage>=70?'#fb8c00':'#43a047'};border-radius:4px;"></div>`;
+          return `<tr>
+            <td>${escapeHtml(m.mount)}</td>
+            <td>${m.usage}%</td>
+            <td style="width:120px;">${bar}</td>
+          </tr>`;
+        }).join('');
+
+        return `<table class="result-table">
+          <thead><tr><th>Mount</th><th>Used %</th><th>Bar</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+        ${result.path ? `<p class="grey-text" style="font-size:0.8rem;margin-top:0.5rem;">Requested mount: ${escapeHtml(result.path)} → ${result.value !== null ? result.value + '%' : 'not found'}</p>` : ''}`;
+      }
+
+      // Generic single-value display
+      let displayValue = result.value;
+      let extra = '';
+      if (type === 'dir_size' || type === 'file_size') {
+        displayValue = humanBytes(result.value);
+        extra = `<span class="grey-text" style="font-size:0.8rem;">(${result.value} bytes)</span>`;
+      } else if (type === 'file_age') {
+        displayValue = humanSeconds(result.value);
+        extra = `<span class="grey-text" style="font-size:0.8rem;">(${result.value}s)</span>`;
+      } else if (type === 'cpu') {
+        displayValue = result.value !== null ? result.value.toFixed(2) + '%' : 'n/a';
+      } else if (type === 'file_count') {
+        displayValue = result.value + ' files';
+      }
+
+      return `<div style="padding:1rem;">
+        <div style="font-size:2rem;font-weight:bold;color:#e65100;">${escapeHtml(String(displayValue))} ${extra}</div>
+        <div class="grey-text" style="margin-top:0.5rem;">
+          Type: <strong>${escapeHtml(type)}</strong>
+          ${result.path ? ` &nbsp;|&nbsp; Path: <code>${escapeHtml(result.path)}</code>` : ''}
+          ${result.pattern ? ` &nbsp;|&nbsp; Pattern: <code>${escapeHtml(result.pattern)}</code>` : ''}
+          ${result.unit ? ` &nbsp;|&nbsp; Unit: ${escapeHtml(result.unit)}` : ''}
+        </div>
+      </div>`;
+    }
+
+    function escapeHtml(str) {
+      if (str === null || str === undefined) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function addHistory(agentName, type, path, result, durationMs) {
+      const body = document.getElementById('historyBody');
+      if (historyEmpty) {
+        body.innerHTML = '';
+        historyEmpty = false;
+      }
+      const time = new Date().toLocaleTimeString();
+      let valueDisplay = result.error ? `<span class="red-text">Error</span>` : escapeHtml(String(result.value));
+      if (!result.error && (type === 'dir_size' || type === 'file_size')) valueDisplay = humanBytes(result.value);
+      if (!result.error && type === 'file_age') valueDisplay = humanSeconds(result.value);
+      if (!result.error && type === 'cpu') valueDisplay = (result.value || 0).toFixed(2) + '%';
+
+      const row = `<tr>
+        <td>${time} <small class="grey-text">(${durationMs}ms)</small></td>
+        <td>${escapeHtml(agentName)}</td>
+        <td><code>${escapeHtml(type)}</code></td>
+        <td><code>${escapeHtml(path || '-')}</code></td>
+        <td>${valueDisplay}</td>
+        <td>${escapeHtml(result.unit || '')}</td>
+      </tr>`;
+      body.insertAdjacentHTML('afterbegin', row);
+    }
+
+    async function runQuery() {
+      const agentId = document.getElementById('agentSelect').value;
+      const type = document.getElementById('selectedType').value;
+      const path = document.getElementById('pathInput').value.trim();
+      const pattern = document.getElementById('patternInput').value.trim();
+
+      if (!agentId || !type) { M.toast({html: 'Select an agent and metric type first'}); return; }
+
+      // Show spinner
+      document.getElementById('spinner').style.display = '';
+      document.getElementById('resultFormatted').style.display = 'none';
+      document.getElementById('resultRaw').style.display = 'none';
+      document.getElementById('resultPlaceholder').style.display = 'none';
+      document.getElementById('timing').textContent = '';
+      document.getElementById('runBtn').disabled = true;
+
+      const body = { type };
+      if (path) body.path = path;
+      if (pattern) body.pattern = pattern;
+
+      const startTime = Date.now();
+
+      try {
+        const resp = await fetch(`/rest/agent/${encodeURIComponent(agentId)}/metric`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': CSRF_TOKEN,
+          },
+          body: JSON.stringify(body),
+        });
+
+        const durationMs = Date.now() - startTime;
+        const data = await resp.json();
+
+        document.getElementById('spinner').style.display = 'none';
+        document.getElementById('timing').textContent = `Round-trip: ${durationMs}ms`;
+
+        if (data.success) {
+          document.getElementById('resultFormatted').innerHTML = formatResult(data.result, agentId);
+          document.getElementById('resultFormatted').style.display = '';
+          document.getElementById('resultRaw').textContent = JSON.stringify(data.result, null, 2);
+          document.getElementById('resultRaw').className = 'result-box success';
+          document.getElementById('resultRaw').style.display = '';
+          addHistory(agentId, type, path || null, data.result, durationMs);
+        } else {
+          document.getElementById('resultRaw').textContent = `Error: ${data.message}`;
+          document.getElementById('resultRaw').className = 'result-box error';
+          document.getElementById('resultRaw').style.display = '';
+        }
+      } catch (err) {
+        document.getElementById('spinner').style.display = 'none';
+        document.getElementById('resultRaw').textContent = `Network error: ${err.message}`;
+        document.getElementById('resultRaw').className = 'result-box error';
+        document.getElementById('resultRaw').style.display = '';
+      } finally {
+        document.getElementById('runBtn').disabled = false;
+      }
+    }
+
+    // Allow Enter key in text inputs to trigger the query
+    ['pathInput', 'patternInput'].forEach(id => {
+      document.getElementById(id).addEventListener('keydown', e => {
+        if (e.key === 'Enter') runQuery();
+      });
+    });
+
+    // Parse URL parameters and apply them
+    function applyURLParameters() {
+      const params = new URLSearchParams(window.location.search);
+      const agent = params.get('agent');
+      const type = params.get('type');
+      const path = params.get('path');
+      const pattern = params.get('pattern');
+      const autoRun = params.get('auto');
+
+      let changed = false;
+
+      if (agent) {
+        const agentSelect = document.getElementById('agentSelect');
+        agentSelect.value = agent;
+        changed = true;
+      }
+
+      if (type) {
+        selectType(type);
+        changed = true;
+      }
+
+      if (path) {
+        document.getElementById('pathInput').value = path;
+        changed = true;
+      }
+
+      if (pattern) {
+        document.getElementById('patternInput').value = pattern;
+        changed = true;
+      }
+
+      if (changed) {
+        updateRunBtn();
+      }
+
+      // Auto-run if requested and all required fields are set
+      if (autoRun === '1' && agent && type) {
+        setTimeout(() => runQuery(), 500);
+      }
+    }
+
+    // Call on page load
+    document.addEventListener('DOMContentLoaded', applyURLParameters);
+    // Also call immediately in case DOM is already ready
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', applyURLParameters);
+    } else {
+      applyURLParameters();
+    }
+
+  </script>
+</body>
+</html>

@@ -95,13 +95,64 @@ Settings for webhook URL, used if the alert notification type is set to webhook.
 ---
 
 
-## Threshold Jobs
-Settings that control threshold jobs such as CPU consumption or storage space.
-| Name      | Description | Example  | Default |
-|---|---|---|---|
-| CPU Threshold | Percentage CPU consumption which results in any CPU threshold jobs being executed  | 90 (%) | 90 |
-| Storage Threshold | Percentage storage consumption for any mounted volumes which results in any storage threshold jobs being executed | 25 (%) | 25 |
-| Threshold Job Cooldown | Time in minutes before a threshold job would be repeated if the condition hasn't changed | 30 (mins) | 30 |
+
+## Rule-Based Thresholds (Metric Rules)
+BackupHub now uses a flexible rule-based system for threshold jobs. Instead of global threshold settings, you define rules for each job or agent. Rules can trigger jobs based on metrics like CPU, storage, file count, file age, and more.
+
+### Example Rule Configuration
+Add a `rules` section to your job or agent config:
+
+```json
+{
+	"rules": [
+		{
+			"metric": {
+				"type": "mount_usage",
+				"agent": "agent1",
+				"path": "/mnt/data"
+			},
+			"condition": {
+				"operator": ">=",
+				"threshold": 90
+			},
+			"cooldown": 60, // minutes between triggers
+			"job": "backup-job-on-high-usage"
+		}
+	]
+}
+```
+
+#### Supported Metrics
+- `cpu` (CPU usage %)
+- `mount_usage` (disk usage % for a mount path)
+- `dir_size` (directory size in bytes)
+- `file_size` (file size in bytes)
+- `file_count` (number of files in a directory)
+- `file_age` (age of newest/oldest file)
+
+#### Supported Operators
+- `>`, `>=`, `<`, `<=`, `==`, `!=`
+
+#### Cooldown
+Prevents the rule from triggering repeatedly within the cooldown period (in minutes).
+
+#### Migration Note
+Old threshold job settings are deprecated. Migrate to the new rule format for all threshold-based automations.
+
+---
+---
+
+## Agent Concurrency
+You can control how many jobs each agent can run at the same time. By default, each agent allows up to 3 concurrent jobs. To change this, set the `concurrency` property in the agent configuration:
+
+```json
+{
+	"name": "agent1",
+	"concurrency": 5
+}
+```
+
+If not set, the default is 3. When the limit is reached, new jobs will be queued or skipped until capacity is available.
 
 ---
 ---

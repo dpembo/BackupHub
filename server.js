@@ -374,6 +374,24 @@ async function getSchedulerData(index, executionId = null)
       errorMessage: `Agent '${schedule.agent}' is not registered or offline`
     };
   }
+
+  // Pre-format jobStarted with server timezone (same approach as history.getLastRun via getItemsUsingTZ)
+  if (data.agent.jobStarted) {
+    data.agent.jobStartedDisplay = dateTimeUtils.displayFormatDate(new Date(data.agent.jobStarted), false, serverConfig.server.timezone, 'YYYY-MM-DDTHH:mm:ss.SSS', false);
+  }
+
+  // When a specific execution is being viewed, use the running item's exact startTime so the
+  // ETA progress bar reflects this execution's elapsed time, not the shared agent jobStarted
+  // which can be overwritten by whichever concurrent run sent the most recent status message.
+  if (executionId) {
+    const runningItem = running.getItemByExecutionId(executionId);
+    if (runningItem && runningItem.startTime) {
+      // Clone agent to avoid mutating shared state
+      data.agent = Object.assign({}, data.agent);
+      data.agent.jobStarted = runningItem.startTime;
+      data.agent.jobStartedDisplay = dateTimeUtils.displayFormatDate(new Date(runningItem.startTime), false, serverConfig.server.timezone, 'YYYY-MM-DDTHH:mm:ss.SSS', false);
+    }
+  }
   
   data.schedule = schedule;
   data.index = index;
@@ -412,7 +430,10 @@ async function getSchedulerData(index, executionId = null)
   if (data.executionMode !== 'historical' && data.executionMode !== 'historical_not_found') {
     //return logEvent.name + "_" + logEvent.jobName + "_" + type;
     var key1 = schedule.agent + "_" + schedule.jobName + "_" + "stats";
-    var key2 = schedule.agent + "_" + schedule.jobName + "_" + "log";
+    // Use executionId-scoped log key when available (matches agentMessageProcessor.js getDbKey)
+    var key2 = executionId
+      ? schedule.agent + "_" + schedule.jobName + "_" + executionId + "_log"
+      : schedule.agent + "_" + schedule.jobName + "_log";
 
     var stats = null;
     var log = null;
@@ -1219,6 +1240,90 @@ app.get('/rest/agent/:id/ping', User.isAuthenticated, (req, res) => {
   res.send('{"status":"ok"}');  
 });
 
+// app.get('/rest/agent/:id/ping', User.isAuthenticated, (req, res) => {
+//   const user = req.session.user;
+//   if (!user) {
+//     return res.redirect('/register.html');
+//   }
+//   const id = req.params.id;
+//   logger.info("Pinging Agent with ID: " + id);
+//   //notificationData.deleteItem(index);
+//   pingIndividualRuntime(id);
+//   res.setHeader("Content-Type","Application/JSON");
+//   res.send('{"status":"ok"}');  
+// });
+
+/**
+ * POST /rest/agent/:id/metric
+ * Send a queryMetric command to an agent and wait for the result.
+ * Body: { type, path?, pattern? }
+ * Supported types: cpu, mount_usage, dir_size, file_size, file_count, file_age
+ * NOTE: This is a temporary test endpoint - remove once Rules Engine is built.
+ */
+app.post('/rest/agent/:id/metric', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { type, path: targetPath, pattern } = req.body;
+
+  if (!type) {
+    return res.status(400).json({ success: false, message: 'Missing required field: type' });
+  }
+
+  const agent = agents.getAgent(id);
+  if (!agent) {
+    return res.status(404).json({ success: false, message: `Agent [${id}] not found` });
+  }
+  if (agent.status === 'offline') {
+    return res.status(503).json({ success: false, message: `Agent [${id}] is currently offline` });
+  }
+
+  const crypto = require('crypto');
+  const jobName = `MetricQuery_${id}_${crypto.randomBytes(6).toString('hex')}`;
+  const metricConfig = { type };
+  if (targetPath) metricConfig.path = targetPath;
+  if (pattern) metricConfig.pattern = pattern;
+
+  logger.info(`[METRIC] Sending queryMetric [${type}] to agent [${id}] with jobName [${jobName}]`);
+
+  const agentMsgProcessor = require('./agentMessageProcessor.js');
+  const waitPromise = agentMsgProcessor.waitForMetricResult(jobName, 30000);
+
+  agentComms.sendCommand(id, mqttTransport.getCommandTopic(), 'queryMetric', JSON.stringify(metricConfig), jobName, undefined, false, null);
+
+  try {
+    const payload = await waitPromise;
+    
+    // Check if the agent returned an error (e.g., JSON parse failure)
+    if (payload.error) {
+      logger.error(`[METRIC] Agent [${payload.agent}] returned error for [${jobName}]: ${payload.error}`);
+      return res.status(400).json({ success: false, message: `Agent error: ${payload.error}` });
+    }
+    
+    logger.info(`[METRIC] Got result for [${jobName}]: ${JSON.stringify(payload.result)}`);
+    res.json({ success: true, agent: payload.agent, jobName, result: payload.result });
+  } catch (err) {
+    logger.error(`[METRIC] Query timed out or failed for [${jobName}]: ${err.message}`);
+    res.status(408).json({ success: false, message: err.message });
+  }
+}));
+
+/**
+ * GET /metric-test.html  — Temporary test page for queryMetric exploration.
+ * NOTE: Remove this page once the Rules Engine is built.
+ */
+app.get('/metric-test.html', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const user = req.session.user;
+  if (!user) {
+    return res.redirect('/login.html');
+  }
+  const agentList = agents.getDict();
+  res.render('metrictest', {
+    version,
+    user,
+    agents: agentList,
+    csrf: req.csrfToken(),
+  });
+}));
+
 app.get('/rest/notifications', User.isAuthenticated, (req, res) => {
   const user = req.session.user;
   if (!user) {
@@ -1757,18 +1862,87 @@ app.get('/scheduleInfo.html',User.isAuthenticated, async(req, res) => {
 app.post('/scheduler.html', validateCsrf, User.isAuthenticated, asyncHandler(async (req, res) => {
   
   let { jobName, colour, description, scheduleType, scheduleTime, dayOfWeek,
-    dayInMonth, agentselect, agentcommand, commandparams, index, redir, icon, scheduleMode, orchestrationId } = req.body;
+    dayInMonth, agentselect, agentcommand, commandparams, index, redir, icon, scheduleMode, orchestrationId,
+    // Rule trigger fields
+    triggerType,
+    ruleMetricAgent, ruleMetricType, ruleMetricPath, ruleMetricPattern,
+    ruleConditionOperator, ruleConditionThreshold,
+    rulePollIntervalMins, ruleCooldownMins
+  } = req.body;
     jobName = sanitizeHtml(jobName);
     colour = sanitizeHtml(colour);
-    
+
     // Normalize and validate scheduleMode to allow-list
     scheduleMode = scheduleMode === 'orchestration' ? 'orchestration' : 'classic';
-    
+
+    // Normalize and validate triggerType
+    triggerType = triggerType === 'rule' ? 'rule' : 'clock';
+
     // Sanitize orchestrationId
     if (orchestrationId) {
       orchestrationId = sanitizeHtml(orchestrationId);
     }
-    
+
+    // Build rule config objects when triggerType is 'rule'
+    let ruleMetric = null;
+    let ruleCondition = null;
+    if (triggerType === 'rule') {
+      if (!ruleMetricAgent || !ruleMetricType || !ruleConditionOperator || ruleConditionThreshold === undefined) {
+        return res.status(400).send('Error: Agent, metric type, operator, and threshold are required for rule-based jobs');
+      }
+      const allowedMetricTypes = ['cpu', 'mount_usage', 'dir_size', 'file_size', 'file_count', 'file_age'];
+      const allowedOperators = ['>', '>=', '<', '<=', '==', '!='];
+      if (!allowedMetricTypes.includes(ruleMetricType)) {
+        return res.status(400).send('Error: Invalid metric type');
+      }
+      if (!allowedOperators.includes(ruleConditionOperator)) {
+        return res.status(400).send('Error: Invalid condition operator');
+      }
+      ruleMetric = {
+        agent: sanitizeHtml(ruleMetricAgent),
+        type: ruleMetricType,
+        path: ruleMetricPath ? sanitizeHtml(ruleMetricPath) : null,
+        pattern: ruleMetricPattern ? sanitizeHtml(ruleMetricPattern) : null,
+      };
+      
+      // Validate and parse ruleConditionThreshold
+      const parsedThreshold = parseFloat(ruleConditionThreshold);
+      if (isNaN(parsedThreshold) || !isFinite(parsedThreshold)) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Error: Threshold must be a valid finite number' 
+        });
+      }
+      ruleCondition = {
+        operator: ruleConditionOperator,
+        threshold: parsedThreshold,
+      };
+      
+      // Validate and parse rulePollIntervalMins
+      const pollInterval = parseInt(rulePollIntervalMins, 10);
+      if (isNaN(pollInterval) || pollInterval < 1) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Error: Poll interval must be a positive integer (minimum 1 minute)' 
+        });
+      }
+      rulePollIntervalMins = pollInterval;
+      
+      // Validate and parse ruleCooldownMins
+      const cooldown = parseInt(ruleCooldownMins, 10);
+      if (isNaN(cooldown) || cooldown < 1) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Error: Cooldown must be a positive integer (minimum 1 minute)' 
+        });
+      }
+      ruleCooldownMins = cooldown;
+      
+      // Rule jobs have no clock schedule
+      scheduleType = null;
+      scheduleTime = null;
+    }
+
     // Validate based on schedule mode
     if (scheduleMode === 'orchestration') {
       if (!orchestrationId || orchestrationId.length === 0) {
@@ -1777,7 +1951,7 @@ app.post('/scheduler.html', validateCsrf, User.isAuthenticated, asyncHandler(asy
       else{
         const job = await orchestration.getJob(orchestrationId);
         icon = job.icon;
-        colour = job.color
+        colour = job.color;
       }
     } else {
       // Classic mode validation
@@ -1785,11 +1959,10 @@ app.post('/scheduler.html', validateCsrf, User.isAuthenticated, asyncHandler(asy
         return res.status(400).send('Error: Agent is required for classic schedules');
       }
     }
-    
-
 
     scheduler.upsertSchedule(index, jobName, colour, description, scheduleType, scheduleTime, dayOfWeek,
-      dayInMonth, agentselect, agentcommand, commandparams, icon, scheduleMode, orchestrationId); 
+      dayInMonth, agentselect, agentcommand, commandparams, icon, scheduleMode, orchestrationId,
+      triggerType, ruleMetric, ruleCondition, rulePollIntervalMins, ruleCooldownMins);
 
   if(redir===undefined || redir === null || redir.length<=0)redir="/scheduleList.htm";
   res.redirect(redir);
@@ -1910,9 +2083,9 @@ app.get('/runSchedule.html',User.isAuthenticated, asyncHandler(async (req, res) 
         }
         
         // Add to running queue so it shows in running list with link to monitor
-        const runningItem = running.createItem(orchestrationName, new Date().toISOString(), 'manual');
+        // Note: Orchestrations span multiple agents, so we pass null for agentName (concurrency not enforced per-agent)
+        const runningItem = running.createItem(orchestrationName, new Date().toISOString(), 'manual', executionId, null);
         runningItem.orchestrationId = orchestrationId;
-        runningItem.executionId = executionId;
         running.add(runningItem);
         logger.info(`Added orchestration to running queue: [${orchestrationName}] with execution [${executionId}]`);
         
@@ -1972,13 +2145,19 @@ app.get('/runSchedule.html',User.isAuthenticated, asyncHandler(async (req, res) 
       errorMessage = `Failed to start orchestration: ${err.message}`;
     }
   } else {
-    // Classic mode: Check if agent is online before attempting to run
+    // Classic mode: Check if agent is reachable and under concurrency limit
     if (schedule && schedule.scheduleMode !== 'orchestration') {
       const agent = agents.getAgent(schedule.agent);
       
       if (agent) {
-        if (agent.status !== "online") {
-          errorMessage = `Agent '${schedule.agent}' is ${agent.status} - cannot execute job`;
+        if (agent.status === 'offline') {
+          errorMessage = `Agent '${schedule.agent}' is offline - cannot execute job`;
+        } else {
+          const concurrencyLimit = agents.getConcurrency(schedule.agent);
+          const runningCount = running.getRunningCountForAgent(schedule.agent);
+          if (runningCount >= concurrencyLimit) {
+            errorMessage = `Agent '${schedule.agent}' is at concurrency limit (${runningCount}/${concurrencyLimit})`;
+          }
         }
       } else {
         errorMessage = `Agent '${schedule.agent}' does not exist`;
@@ -2272,8 +2451,11 @@ app.post('/agentEdit.html', validateCsrf, User.isAuthenticated, async (req, res)
     var name = req.body.agentname;
     var description = req.body.agentdescription;
     var imageurl = req.body.imageurl;
+    var concurrency = parseInt(req.body.concurrency, 10);
+    if (isNaN(concurrency) || concurrency < 1) concurrency = 3;
     var agentObj = agents.getAgent(name);
     agentObj.display = description;
+    agentObj.concurrency = concurrency;
     await agents.addObjToAgentStatusDict(agentObj);
 
     //agents.registerAgent(name,description,command,imageurl,undefined,description);
@@ -2716,9 +2898,9 @@ app.post('/rest/orchestration/jobs/:jobId/execute', User.isAuthenticated, asyncH
   logger.info(`Created in-progress execution for [${jobId}] with ID [${executionId}]`);
   
   // Add to running queue so it shows in running list with link to monitor
-  const runningItem = running.createItem(orchestrationName, new Date().toISOString(), 'manual');
+  // Note: Orchestrations span multiple agents, so we pass null for agentName (concurrency not enforced per-agent)
+  const runningItem = running.createItem(orchestrationName, new Date().toISOString(), 'manual', executionId, null);
   runningItem.orchestrationId = jobId;
-  runningItem.executionId = executionId;
   running.add(runningItem);
   logger.info(`Added orchestration to running queue: [${orchestrationName}] with execution [${executionId}]`);
   

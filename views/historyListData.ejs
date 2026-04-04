@@ -188,6 +188,9 @@ function displaySecs(secs) {
                 if(historyList[i].manual!==undefined && historyList[i].manual=="threshold-disk"){
                   runType="disc_full";runDesc="Mount Threshold Exceeded";
                 }
+                if(historyList[i].manual!==undefined && historyList[i].manual=="rule"){
+                  runType="monitor_heart";runDesc="Metric Rule Triggered";
+                }
                 %>
                 <span title="<%=runDesc%>" class="material-icons"><%=runType%></span>
               </td>
@@ -322,6 +325,9 @@ function displaySecs(secs) {
               }
               if(historyList[i].manual!==undefined && historyList[i].manual=="threshold-disk"){
                 runType="disc_full";runDesc="Mount Threshold Exceeded";
+              }
+              if(historyList[i].manual!==undefined && historyList[i].manual=="rule"){
+                runType="monitor_heart";runDesc="Metric Rule Triggered";
               }
               %>
               <span title="<%=runDesc%>" class="material-icons"><%=runType%></span>
