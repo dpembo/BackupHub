@@ -590,7 +590,7 @@ async function processMessage(topic, message,protocol) {
     
     // Calculate actual runtime in seconds from startDate to now
     var runTime = Math.round((Date.now() - new Date(startDate).getTime()) / 1000);
-    var histObj = hist.createHistoryItem(obj.jobName,startDate,returnCode,runTime,log,obj.manual,executionId);
+    var histObj = hist.createHistoryItem(obj.jobName,startDate,returnCode,runTime,log,obj.manual,executionId,obj.rerunFrom);
     logger.debug("Adding History obj: " + JSON.stringify(histObj));
     hist.add(histObj);
 

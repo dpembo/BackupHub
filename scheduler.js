@@ -94,8 +94,8 @@ async function init() {
   }
 }
 
-function publishExecute(agent_id, command, commandParams, jobName, isManual, executionId, triggerContextParam = null) {
-  logger.info(`Executing Scheduled command on Agent [${agent_id}] with executionId [${executionId}]`);
+function publishExecute(agent_id, command, commandParams, jobName, isManual, executionId, triggerContextParam = null, rerunFrom = null) {
+  logger.info(`Executing Scheduled command on Agent [${agent_id}] with executionId [${executionId}]` + (rerunFrom ? ` [rerunFrom: ${rerunFrom}]` : ""));
   
   // Convert trigger context to environment variables for the script
   let contextEnvVars = {};
@@ -104,7 +104,7 @@ function publishExecute(agent_id, command, commandParams, jobName, isManual, exe
     logger.debug(`[TRIGGER CONTEXT] Injecting ${Object.keys(contextEnvVars).length} environment variables for job [${jobName}]`);
   }
   
-  agentComms.sendCommand(agent_id, mqttTransport.getCommandTopic(), command, commandParams, jobName, undefined, isManual, executionId, triggerContextParam, contextEnvVars);
+  agentComms.sendCommand(agent_id, mqttTransport.getCommandTopic(), command, commandParams, jobName, undefined, isManual, executionId, triggerContextParam, contextEnvVars, rerunFrom);
 }
 
 /**
@@ -509,10 +509,10 @@ function runUpdateJob(agentId,inCommandParams) {
 
 
 // Run the job function
-async function runJob(jobName, isManual, inData, triggerContextParam = null) {
+async function runJob(jobName, isManual, inData, triggerContextParam = null, rerunFrom = null) {
   try {
     if (isManual === undefined) { isManual = false; }
-    logger.info(`Running job: ${jobName}`);
+    logger.info(`Running job: ${jobName}` + (rerunFrom ? ` [rerunFrom: ${rerunFrom}]` : ""));
     var schedItem = getSchedule(jobName);
     if (!schedItem) {
       throw new AppError(`Schedule item not found for job: ${jobName}`, 404);
@@ -565,7 +565,8 @@ async function runJob(jobName, isManual, inData, triggerContextParam = null) {
           errors: [],
           finalStatus: null,
           manual: isManual,
-          isStub: true  // Mark as temporary stub execution
+          isStub: true,  // Mark as temporary stub execution
+          rerunFrom: rerunFrom || null  // Track if this is a rerun
         };
         
         // Cache the stub in-memory so monitor page can find it before completion
@@ -578,8 +579,14 @@ async function runJob(jobName, isManual, inData, triggerContextParam = null) {
         };
         
         const orchestration = require('./orchestrationEngine.js');
-        const executionLog = await orchestration.executeJob(schedItem.orchestrationId, isManual, executionId, onNodeComplete, triggerContextParam);
+        const executionLog = await orchestration.executeJob(schedItem.orchestrationId, isManual, executionId, onNodeComplete, triggerContextParam, rerunFrom);
         await orchestration.saveExecutionResult(executionLog);
+        
+        // If this was a re-run, mark the original execution as having been re-run
+        if (rerunFrom) {
+          const hist = require('./history.js');
+          await hist.markAsRerun(rerunFrom);
+        }
         
         // Remove from running queue after completion
         running.removeItemByExecutionId(executionId);
@@ -661,7 +668,7 @@ async function runJob(jobName, isManual, inData, triggerContextParam = null) {
           commandParams += inData;
         }
         
-        publishExecute(schedItem.agent, data, commandParams, jobName, isManual, executionId, triggerContextParam);
+        publishExecute(schedItem.agent, data, commandParams, jobName, isManual, executionId, triggerContextParam, rerunFrom);
       } catch (err) {
         logger.error(`Error reading script file for job [${jobName}]:`, err.message);
         if (serverConfig.server.jobFailEnabled == "true") {
@@ -670,7 +677,7 @@ async function runJob(jobName, isManual, inData, triggerContextParam = null) {
         return { status: "error", executionId: null };
       }
     } else {
-      publishExecute(schedItem.agent, commandParams, "", jobName, isManual, executionId, triggerContextParam);
+      publishExecute(schedItem.agent, commandParams, "", jobName, isManual, executionId, triggerContextParam, rerunFrom);
     }
 
     // Add to running queue to track this execution
@@ -687,9 +694,9 @@ async function runJob(jobName, isManual, inData, triggerContextParam = null) {
 }
 
 // Manual execution of job
-async function manualJobRun(index, jobName) {
+async function manualJobRun(index, jobName, rerunFrom = null) {
   try {
-    logger.debug('Initiating Manual Run of Job With name [' + jobName + "] and Index [" + index + "]");
+    logger.debug('Initiating Manual Run of Job With name [' + jobName + "] and Index [" + index + "]" + (rerunFrom ? ` [RerunFrom: ${rerunFrom}]` : ""));
 
     if (Array.isArray(jobName)) {
       logger.error("Error: jobName was an array");
@@ -710,8 +717,8 @@ async function manualJobRun(index, jobName) {
     }
 
     logger.debug('Requesting Manual Run of:' + jobName);
-    logger.info(`Starting manual run of job: ${jobName}`);
-    const result = await runJob(jobName, "manual");
+    logger.info(`Starting manual run of job: ${jobName}` + (rerunFrom ? ` (rerun from: ${rerunFrom})` : ""));
+    const result = await runJob(jobName, "manual", null, null, rerunFrom);
     logger.info(`Manual run completed with result: ${JSON.stringify(result)}`);
     return result;
   } catch (err) {

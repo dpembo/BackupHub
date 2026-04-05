@@ -135,7 +135,7 @@ function evaluateNumericCondition(actual, operator, expected) {
  * @param {string} executionId - Optional execution ID to use (generated if not provided)
  * @returns {Promise<Object>} Execution result with logs
  */
-async function executeJob(jobId, isManual = false, executionId = null, onNodeComplete = null, triggerContextParam = null) {
+async function executeJob(jobId, isManual = false, executionId = null, onNodeComplete = null, triggerContextParam = null, rerunFrom = null) {
   const crypto = require('crypto');
   // Use provided executionId or generate a new one
   const finalExecutionId = executionId || crypto.randomBytes(8).toString('hex');
@@ -155,7 +155,8 @@ async function executeJob(jobId, isManual = false, executionId = null, onNodeCom
     errors: [],
     finalStatus: null,
     manual: isManual,  // Track whether this was a manual execution
-    triggerContext: triggerContextParam || null  // Store trigger context for template substitution and logging
+    triggerContext: triggerContextParam || null,  // Store trigger context for template substitution and logging
+    rerunFrom: rerunFrom || null  // NEW: Track if this is a rerun of a failed execution
   };
 
   try {

@@ -244,7 +244,11 @@ function displaySecs(secs) {
                 </a>
                 <a title="Edit Orchestration" href="/orchestrationBuilder.html?id=<%=encodeURIComponent(historyList[i].jobId)%>&redir=<%=encodeURIComponent('/history.html')%>"><i class="material-icons <%=classVal%> vertTop">edit</i></a>
                 <% if(parseInt(historyList[i].returnCode)!=0) {%>
-                  <a title="Re-run Orchestration" onclick="runOrchestrationFromHistory('<%=historyList[i].jobId%>')"><i class="material-icons <%=classVal%> vertTop" style="cursor:pointer;">play_circle</i></a>
+                  <% if(!historyList[i].wasRerunAt) {%>
+                    <a title="Re-run Orchestration" onclick="runOrchestrationFromHistory('<%=historyList[i].jobId%>','<%=historyList[i].executionId%>')"><i class="material-icons <%=classVal%> vertTop" style="cursor:pointer;">play_circle</i></a>
+                  <% } else {%>
+                    <span title="Re-run executed on <%=historyList[i].wasRerunAt%>" class="material-icons <%=classVal%> vertTop" style="cursor: help;">done</span>
+                  <% } %>
                 <% } %>
               </td>
             </tr>
@@ -388,7 +392,13 @@ function displaySecs(secs) {
 
               <% if(itemInternal == false)  {%>
               <% if(!deleted){%><a title="Edit Job" href="/scheduler.html?jobname=<%=historyList[i].jobName%>&redir=<%=encodeURIComponent('/history.html')%>"><i class="material-icons <%=logclass%> vertTop">edit</i></a><%}%>
-              <% if(!deleted && historyList[i].manual!=="webhook" && parseInt(historyList[i].returnCode)!=0){%><a title="Re-run Job" href="/runSchedule.html?jobname=<%=historyList[i].jobName%>&redir=<%=encodeURIComponent('/history.html')%>"><i class="material-icons <%=logclass%> vertTop">play_circle</i></a><%}%>
+              <% if(!deleted && historyList[i].manual!=="webhook" && parseInt(historyList[i].returnCode)!=0){%>
+                <% if(!historyList[i].wasRerunAt) {%>
+                  <a title="Re-run Job" onclick="runClassicJobFromHistory('<%=historyList[i].jobName%>','<%=historyList[i].executionId%>')"><i class="material-icons <%=logclass%> vertTop" style="cursor:pointer;">play_circle</i></a>
+                <% } else {%>
+                  <span title="Re-run executed on <%=historyList[i].wasRerunAt%>" class="material-icons <%=logclass%> vertTop" style="cursor: help;">done</span>
+                <% } %>
+              <% } %>
               <% } else { %> 
                 <% if(!deleted){%><a title="Internal Job"><i class="material-icons <%=logclass%> vertTop" style="display:inline; position:absolute">blocked</a>
                 <% } else {%>
