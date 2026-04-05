@@ -99,6 +99,27 @@ Settings for webhook URL, used if the alert notification type is set to webhook.
 ## Rule-Based Thresholds (Metric Rules)
 BackupHub now uses a flexible rule-based system for threshold jobs. Instead of global threshold settings, you define rules for each job or agent. Rules can trigger jobs based on metrics like CPU, storage, file count, file age, and more.
 
+When a rule triggers a job, the metric data and condition information are passed to the job as **trigger context**, making it available to scripts and orchestrations.
+
+### How Trigger Context Works
+
+When a rule fires and triggers a job:
+
+1. **Scripts receive environment variables** containing the metric data:
+   - `$BACKUPHUB_METRIC_TYPE` - Type of metric (cpu, mount_usage, file_count, etc.)
+   - `$BACKUPHUB_METRIC_VALUE` - Actual value (e.g., 92.5)
+   - `$BACKUPHUB_METRIC_PATH` - Path being monitored (if applicable)
+   - `$BACKUPHUB_CONDITION_OPERATOR` - The operator used (>=, <=, etc.)
+   - `$BACKUPHUB_CONDITION_THRESHOLD` - Threshold value
+   - And more (see [TRIGGER_CONTEXT_GUIDE.md](../TRIGGER_CONTEXT_GUIDE.md))
+
+2. **Orchestrations can use template substitution** in parameters:
+   - `#{context.metric.value}` - Gets replaced with actual metric value
+   - `#{context.metric.path}` - Gets replaced with the path
+   - Example: `--cleanup-percent #{context.metric.value}` becomes `--cleanup-percent 92.5`
+
+3. **Full JSON context** available as `$BACKUPHUB_TRIGGER_CONTEXT` for advanced processing
+
 ### Example Rule Configuration
 Add a `rules` section to your job or agent config:
 
@@ -211,7 +232,121 @@ The following items can be included in backups:
 ---
 ---
 
-# Data Directory
+## Webhook Management
+
+Webhooks allow external systems to trigger BackupHub jobs with custom data. Detailed webhook API documentation is available in the [REST API Reference](./REST_API_REFERENCE.md).
+
+### Using the Web Interface (Recommended)
+
+**For most users**, manage webhooks through the BackupHub settings interface:
+
+1. **Navigate to Settings → Webhooks tab**
+2. **Create Webhook** - Click "Create Webhook" button
+   - Enter webhook name and optional description
+   - System generates and displays API key (copy immediately - you won't see it again!)
+   - Webhook is instantly ready to use
+3. **Edit Webhook** - Click edit icon to rename or update description
+4. **Rotate API Key** - Click key icon to generate a new key (old key immediately invalidated)
+5. **Delete Webhook** - Click delete icon with confirmation
+6. **View Statistics** - See system-wide webhook trigger counts and last triggered times
+
+The UI shows for each webhook:
+- **Name & Description** - Identify and document the webhook
+- **Status** - Active (green) or Inactive (grey)
+- **Trigger Count** - Total times this webhook has been triggered
+- **Last Triggered** - Timestamp of most recent trigger
+
+**Webhook Table in Settings:**
+```
+Name                    | Description              | Status   | Triggers | Last Triggered
+External Alert          | Monitoring system alert  | ● Active | 12       | 2 hours ago
+GitHub Actions          | CI/CD pipeline trigger   | ● Active | 5        | 1 day ago
+Backup Sync             | File sync webhook        | ● Inactive | 0      | Never
+```
+
+### Creating a Webhook via API
+
+To manually create webhooks via API (for automation/scripting):
+
+```bash
+curl -X POST "http://your-server:8082/rest/webhooks/my-job" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "External System Alert",
+    "description": "Webhook for external monitoring system"
+  }'
+```
+
+Response includes the newly generated API key (UUID):
+```json
+{
+  "success": true,
+  "webhook": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "name": "External System Alert",
+    "apiKey": "a1b2c3d4-e5f6-4a5b-8c9d-e1f2g3h4i5j6",
+    "isActive": true,
+    "createdAt": "2026-04-04T10:30:00.000Z"
+  }
+}
+```
+
+### Managing Webhooks
+
+**List all webhooks for a job:**
+```bash
+curl "http://your-server:8082/rest/webhooks/my-job" \
+  -H "Authorization: Bearer session-cookie"
+```
+
+**Disable/enable webhook:**
+```bash
+curl -X PUT "http://your-server:8082/rest/webhooks/my-job/webhook-id" \
+  -d '{"isActive": false}'
+```
+
+**Rotate API key (generate new one):**
+```bash
+curl -X POST "http://your-server:8082/rest/webhooks/my-job/webhook-id/rotate-key" \
+  -d '{"oldKey": "old-uuid-here"}'
+```
+
+**Delete webhook:**
+```bash
+curl -X DELETE "http://your-server:8082/rest/webhooks/my-job/webhook-id"
+```
+
+### Using Webhook API Keys
+
+- **Keys are UUID v4 format** - example: `550e8400-e29b-41d4-a716-446655440000`
+- **Keys are only shown once** when created - save them securely
+- **Keys can be rotated** anytime without affecting webhook metadata
+- **Active/Inactive status** - disable webhooks without deleting them
+- **Trigger tracking** - system records last trigger time and total count
+
+### Webhook Payload in Jobs
+
+When external systems trigger a webhook, the JSON payload becomes available to:
+
+**Scripts:** Via environment variable
+```bash
+# $BACKUPHUB_TRIGGER_CONTEXT contains full JSON payload
+payload=$(echo "$BACKUPHUB_TRIGGER_CONTEXT" | jq '.payload')
+```
+
+**Orchestrations:** Via template substitution
+```json
+{
+  "parameters": "--event #{context.payload.event} --severity #{context.payload.severity}"
+}
+```
+
+For complete webhook examples and API reference, see [REST_API_REFERENCE.md](./REST_API_REFERENCE.md#webhook-triggers) and [TRIGGER_CONTEXT_GUIDE.md](../TRIGGER_CONTEXT_GUIDE.md).
+
+For developers integrating with the webhook UI, see [Phase 3: Webhook Management UI Developer Guide](./Developers/phase3-webhook-ui-guide.md).
+
+---
+---
 
 Configuration file can be found in `data/server-config.json`.
 

@@ -74,10 +74,9 @@ function displaySecs(secs) {
 
           <tr class="runningHighlight runningItem">
             <td>
-              <% if (runningList[i].orchestrationId) { %>
-                <span class="material-icons vertMid blinking" style="color:#ff9800;font-size:24pt" title="Orchestration">schema</span>
-              <% } else { %>
-                <span class="material-icons vertMid" style="color:<%=runningList[i].color%>;font-size:24pt"><%=runningList[i].icon%></span>
+              <span class="material-icons vertMid blinking" style="color:<%=runningList[i].color%>;font-size:24pt" title="<%=runningList[i].orchestrationId ? 'Orchestration' : 'Job'%>"><%=runningList[i].icon%></span>
+              <%  if(runningList[i].orchestrationId) { %>
+                <span class="material-icons icon-indicator" style="color: #000000; font-size: 14pt;left: -17px !important;top: 22px !important;" title="Orchestration">schema</span>
               <% } %>
             </td>
             <td><span class="orange-text blinking"><%=runningList[i].jobName%></span></td>
@@ -103,6 +102,9 @@ function displaySecs(secs) {
               if(runningList[i].manual!==undefined && runningList[i].manual=="rule"){
                 runType="monitor_heart";runDesc="Metric Rule Triggered";
               }
+              if(runningList[i].manual!==undefined && runningList[i].manual=="webhook"){
+                runType="cloud_queue";runDesc="Webhook Triggered";
+              }
               %>
               <span title="<%=runDesc%>" class="orange-text blinking material-icons"><%=runType%></span>
             </td>
@@ -122,12 +124,16 @@ function displaySecs(secs) {
               <td>-</td>
               <td><span title="Running" class="blinking orange-text material-icons">pending</span></td>
               <td>
-                <% if (runningList[i].orchestrationId && runningList[i].executionId) { %>
-                  <a href="/orchestration/monitor.html?jobId=<%=encodeURIComponent(runningList[i].orchestrationId)%>&executionId=<%=encodeURIComponent(runningList[i].executionId)%>" title="view orchestration monitor" class="modal-trigger"><span class="material-icons vertTop runningIcons">visibility</span></a>
+                <% if (runningList[i].orchestrationId) { %>
+                  <% if (runningList[i].executionId) { %>
+                    <a href="/orchestration/monitor.html?jobId=<%=encodeURIComponent(runningList[i].orchestrationId)%>&executionId=<%=encodeURIComponent(runningList[i].executionId)%>" title="view orchestration execution [<%=runningList[i].executionId%>]" class="modal-trigger"><span class="material-icons vertTop runningIcons">visibility</span></a>
+                  <% } else { %>
+                    <span class="material-icons vertTop runningIcons" style="color: #999;" title="execution ID not available">visibility_off</span>
+                  <% } %>
                 <% } else { %>
                   <a href="scheduleInfo.html?index=<%=getSchedule(runningList[i].jobName)%><% if(runningList[i].executionId) { %>&executionId=<%=encodeURIComponent(runningList[i].executionId)%><% } %>" title="view log" class="modal-trigger"><span class="material-icons vertTop runningIcons">visibility</span></a>
                 <% } %>
-          </tr>
+              </td>
           <%}%>
 
         

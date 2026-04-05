@@ -4,6 +4,59 @@ Orchestrations can be triggered by rule-based thresholds (see [settings-config.m
 
 Orchestration executions also respect agent concurrency limits. If an agent is at its concurrency limit, orchestration steps targeting that agent will be queued or skipped until capacity is available.
 
+## Trigger Context System
+
+When an orchestration is triggered by a rule-based threshold, **trigger context** (metric data) is automatically passed through the entire workflow. This allows your orchestration to make intelligent decisions based on the metric that triggered it.
+
+### Template Substitution in Parameters
+
+You can use template syntax in execute node parameters to inject metric values:
+
+```
+#{context.metric.type}         → "cpu", "mount_usage", etc.
+#{context.metric.value}        → Actual value (92.5)
+#{context.metric.unit}         → "%", "bytes", "count", etc.
+#{context.metric.path}         → "/mnt/data", etc.
+#{context.condition.operator}  → ">=", "<=", etc.
+#{context.condition.threshold} → 90
+```
+
+**Example**: An orchestration triggered by "disk usage ≥ 90%" on /mnt/data:
+
+Execute node parameters:
+```
+--mount #{context.metric.path} --cleanup-percent #{context.metric.value}
+```
+
+Becomes:
+```
+--mount /mnt/data --cleanup-percent 92.5
+```
+
+### Conditional Branching Based on Metrics
+
+Use condition nodes to branch based on metric values:
+
+```
+✗ If metric.value >= 95
+  → Run aggressive cleanup
+  
+✓ Else (metric.value 90-94)
+  → Run standard cleanup
+```
+
+### Available Trigger Context Fields
+
+All metric and condition information used by the rule is available throughout orchestration execution:
+
+- `context.type` → "rule", "webhook", "sample"
+- `context.metric.{type, value, unit, path, agent}`
+- `context.condition.{operator, threshold, met}`
+- `context.executionId` → Unique execution tracking ID
+- `context.timestamp` → When the rule triggered
+
+For detailed examples and webhook trigger usage, see [TRIGGER_CONTEXT_GUIDE.md](../TRIGGER_CONTEXT_GUIDE.md).
+
 # Orchestrations
 
 Orchestrations allow you to create complex backup workflows by chaining multiple backup scripts together with conditional logic. Instead of running a single script per schedule, you can design sophisticated multi-step processes with decision branches, error handling, and complex execution paths.

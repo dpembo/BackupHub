@@ -13,6 +13,19 @@ This document describes the main REST API endpoints exposed by the BackupHub ser
   - [Backup Create](#backup-create)
   - [Backup Restore](#backup-restore)
 
+- [Webhook Triggers](#webhook-triggers)
+  - [Webhook Trigger Job](#webhook-trigger-job)
+  - [Check Webhook Execution Status](#check-webhook-execution-status)
+
+- [Webhook Management](#webhook-management)
+  - [List All Webhooks (System-wide)](#list-all-webhooks-system-wide)
+  - [List Webhooks for Job](#list-webhooks-for-job)
+  - [Create Webhook](#create-webhook)
+  - [Update Webhook](#update-webhook)
+  - [Rotate Webhook Key](#rotate-webhook-key)
+  - [Delete Webhook](#delete-webhook)
+  - [Get Webhook Statistics](#get-webhook-statistics)
+
 - [Notifications](#notifications)
 
   - [Notifications List](#notifications-list)
@@ -170,6 +183,359 @@ All REST API endpoints require authentication unless otherwise noted. The Backup
 
 **Important:** After restoring a backup, restart the BackupHub server for all changes to take effect.
 
+---
+
+## Webhook Triggers
+
+### Public Endpoint (No Authentication Required)
+
+Webhooks allow external systems to trigger BackupHub jobs and pass custom data that becomes available to scripts and orchestrations.
+
+#### Webhook Trigger Job
+`POST /api/webhook/trigger/:jobName?key=<webhook-key>` | Trigger a job via webhook with custom JSON payload.
+
+| Property | Value | Example |
+|---|---|---|
+| **Authentication** | Webhook API Key (UUID v4 format) | `550e8400-e29b-41d4-a716-446655440000` |
+| **Key Location** | Query parameter `?key=` OR header `X-Webhook-Key` | `?key=UUID` or header value |
+| **Input** | JSON object with arbitrary payload | `{ "event": "alert", "usage": 95, "path": "/mnt/data" }` |
+| **Response Status** | 202 Accepted (job queued) | Async execution - returns immediately |
+| **Output** | JSON with execution details and status URL | `{ "success": true, "executionId": "...", "statusUrl": "..." }` |
+
+**Request examples:**
+
+Via Query Parameter:
+```bash
+curl -X POST "http://your-server:8082/api/webhook/trigger/backup-job?key=550e8400-e29b-41d4-a716-446655440000" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "status": "alert",
+    "metric": "disk_usage",
+    "value": 95,
+    "mount": "/mnt/data"
+  }'
+```
+
+Via Header:
+```bash
+curl -X POST "http://your-server:8082/api/webhook/trigger/backup-job" \
+  -H "Content-Type: application/json" \
+  -H "X-Webhook-Key: 550e8400-e29b-41d4-a716-446655440000" \
+  -d '{
+    "status": "alert",
+    "value": 95
+  }'
+```
+
+**Response example (202 Accepted - Job Queued):**
+```json
+{
+  "success": true,
+  "jobName": "backup-job",
+  "executionId": "a1b2c3d4e5f6g7h8",
+  "message": "Job triggered via webhook and queued for execution",
+  "statusUrl": "/rest/orchestration/executions/a1b2c3d4e5f6g7h8"
+}
+```
+
+**Response example (Error - 401/400):**
+```json
+{
+  "error": "Invalid webhook API key for this job"
+}
+```
+
+**Important Notes:**
+
+- **Async Execution**: Webhook returns **immediately** (202 Accepted) before job completes
+- **No Authentication Required**: Webhooks are publicly accessible — security relies on the UUID key
+- **Long-Running Jobs**: Perfect for orchestrations that take hours to complete
+- **Check Status**: Use the `statusUrl` to poll job execution status if needed
+- **Payload Available**: The webhook JSON payload is available to scripts and orchestrations as environment variables or through trigger context
+- **Trigger Context**: Webhook triggers create a trigger context that's passed to jobs, similar to rule-triggered jobs
+- **For scripts**: Payload data is available via `$BACKUPHUB_TRIGGER_CONTEXT` environment variable (as JSON)
+- **For orchestrations**: Payload data accessible via template substitution `#{context.payload.*}`
+
+#### Check Webhook Execution Status
+`GET /orchestration/execution/details?jobId=<jobId>&executionId=<executionId>` | Check the status and details of a webhook-triggered orchestration execution.
+
+| Property | Value | Example |
+|---|---|---|
+| **Authentication** | Required (User session) | |
+| **Input** | Query parameters: `jobId`, `executionId` | `?jobId=backup-db&executionId=a1b2c3d4e5f6g7h8` |
+| **Output** | JSON with execution details, nodes, and status | Full orchestration execution state |
+
+**Request example:**
+```bash
+curl -X GET "http://your-server:8082/orchestration/execution/details?jobId=backup-db&executionId=a1b2c3d4e5f6g7h8" \
+  -H "Cookie: session=<session-cookie>"
+```
+
+**Response example (Still Running - 200 OK):**
+```json
+{
+  "jobId": "backup-db",
+  "jobName": "Database Backup",
+  "execution": {
+    "executionId": "a1b2c3d4e5f6g7h8",
+    "status": "running",
+    "finalStatus": null,
+    "startTime": "2026-04-04T14:30:00.000Z",
+    "endTime": null,
+    "duration": 125000
+  },
+  "nodes": [...],
+  "edges": [...],
+  "visitedNodes": ["start", "execute-backup"],
+  "nodeScriptOutputs": {...}
+}
+```
+
+**Response example (Completed - 200 OK):**
+```json
+{
+  "jobId": "backup-db",
+  "jobName": "Database Backup",
+  "execution": {
+    "executionId": "a1b2c3d4e5f6g7h8",
+    "status": "completed",
+    "finalStatus": "success",
+    "startTime": "2026-04-04T14:30:00.000Z",
+    "endTime": "2026-04-04T14:32:15.000Z",
+    "duration": 135000
+  },
+  "nodes": [...],
+  "edges": [...],
+  "visitedNodes": ["start", "execute-backup", "end"],
+  "nodeScriptOutputs": {
+    "execute-backup": {
+      "status": "executed",
+      "exitCode": 0,
+      "output": "Backup completed successfully"
+    }
+  }
+}
+```
+
+**Common Status Values:**
+- `status`: `running` | `completed`
+- `finalStatus`: `success` | `error` | `null` (if still running)
+
+**Use Case:** Poll this endpoint to monitor webhook-triggered orchestration progress in real-time.
+
+---
+
+## Webhook Management
+
+### List All Webhooks (System-wide)
+`GET /rest/webhooks-all` | List all webhooks across all jobs with job name included.
+
+| Property | Value | Example |
+|---|---|---|
+| **Authentication** | Required (User session) | |
+| **Input** | None | |
+| **Output** | JSON array of webhooks with jobName | `[{ "id": "...", "jobName": "job1", "name": "Alert Webhook", "isActive": true }]` |
+
+**Response example:**
+```json
+[
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "jobName": "backup-database",
+    "name": "Alert Webhook",
+    "description": "External alerts",
+    "isActive": true,
+    "createdAt": "2026-04-04T10:30:00.000Z",
+    "lastTriggeredAt": "2026-04-04T12:15:00.000Z",
+    "triggerCount": 3
+  },
+  {
+    "id": "a1b2c3d4-e5f6-4a5b-8c9d-e1f2g3h4i5j6",
+    "jobName": "backup-files",
+    "name": "Jenkins webhook",
+    "description": "CI/CD pipeline trigger",
+    "isActive": true,
+    "createdAt": "2026-04-01T14:20:00.000Z",
+    "lastTriggeredAt": "2026-04-04T09:00:00.000Z",
+    "triggerCount": 15
+  }
+]
+```
+
+**Use Case**: View all webhooks configured across the entire system, useful for auditing and management.
+
+---
+
+### List Webhooks for Job
+`GET /rest/webhooks/:jobName` | List all webhooks configured for a specific job.
+
+| Property | Value | Example |
+|---|---|---|
+| **Authentication** | Required (User session) | |
+| **Input** | None (URL parameter only) | |
+| **Output** | JSON array of webhooks | `[{ "id": "...", "name": "Alert Webhook", "isActive": true }]` |
+
+**Response example:**
+```json
+[
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "name": "Alert Webhook",
+    "description": "External alerts",
+    "isActive": true,
+    "createdAt": "2026-04-04T10:30:00.000Z",
+    "lastTriggeredAt": "2026-04-04T12:15:00.000Z",
+    "triggerCount": 3
+  }
+]
+```
+
+**Note**: API keys are not returned in list responses for security. Keys are only shown when creating a new webhook.
+
+---
+
+### Create Webhook
+`POST /rest/webhooks/:jobName` | Create a new webhook for a job.
+
+| Property | Value | Example |
+|---|---|---|
+| **Authentication** | Required (User session) | |
+| **Input** | JSON with `name` and optional `description` | `{ "name": "External Alert", "description": "Slack webhook" }` |
+| **Output** | JSON with new webhook details (including API key) | `{ "success": true, "webhook": {...} }` |
+
+**Request body:**
+```json
+{
+  "name": "External Alert Webhook",
+  "description": "Sends alerts to external monitoring system"
+}
+```
+
+**Response example (API key only shown on creation):**
+```json
+{
+  "success": true,
+  "webhook": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "name": "External Alert Webhook",
+    "description": "Sends alerts to external monitoring system",
+    "apiKey": "550e8400-e29b-41d4-a716-446655440000",
+    "isActive": true,
+    "createdAt": "2026-04-04T10:30:00.000Z"
+  }
+}
+```
+
+**⚠️ Save the API key**: The key is only displayed once. Save it securely if you need to use it later.
+
+---
+
+### Update Webhook
+`PUT /rest/webhooks/:jobName/:webhookId` | Update webhook name, description, or status.
+
+| Property | Value | Example |
+|---|---|---|
+| **Authentication** | Required (User session) | |
+| **Input** | JSON with fields to update | `{ "name": "New Name", "isActive": false }` |
+| **Output** | Updated webhook object (without API key) | |
+
+**Request body (any combination):**
+```json
+{
+  "name": "Updated Webhook Name",
+  "description": "Updated description",
+  "isActive": false
+}
+```
+
+**Response example:**
+```json
+{
+  "success": true,
+  "webhook": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "name": "Updated Webhook Name",
+    "description": "Updated description",
+    "isActive": false,
+    "createdAt": "2026-04-04T10:30:00.000Z"
+  }
+}
+```
+
+---
+
+### Rotate Webhook Key
+`POST /rest/webhooks/:jobName/:webhookId/rotate-key` | Generate a new API key for the webhook.
+
+| Property | Value | Example |
+|---|---|---|
+| **Authentication** | Required (User session) | |
+| **Input** | JSON with `oldKey` (for verification) | `{ "oldKey": "550e8400-..." }` |
+| **Output** | Updated webhook with new API key | |
+
+**Request body:**
+```json
+{
+  "oldKey": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+**Response example:**
+```json
+{
+  "success": true,
+  "webhook": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "name": "External Alert Webhook",
+    "apiKey": "a1b2c3d4-e5f6-4a5b-8c9d-e1f2g3h4i5j6",
+    "keyRotatedAt": "2026-04-04T15:45:00.000Z"
+  }
+}
+```
+
+**Note**: The old key immediately becomes invalid. Update your webhook trigger code with the new key.
+
+---
+
+### Delete Webhook
+`DELETE /rest/webhooks/:jobName/:webhookId` | Delete a webhook.
+
+| Property | Value | Example |
+|---|---|---|
+| **Authentication** | Required (User session) | |
+| **Input** | None (URL parameter only) | |
+| **Output** | Confirmation message | |
+
+**Response example:**
+```json
+{
+  "success": true,
+  "message": "Webhook deleted successfully"
+}
+```
+
+---
+
+### Get Webhook Statistics
+`GET /rest/webhooks-stats` | Get system-wide webhook statistics.
+
+| Property | Value | Example |
+|---|---|---|
+| **Authentication** | Required (User session) | |
+| **Input** | None | |
+| **Output** | JSON with webhook statistics | |
+
+**Response example:**
+```json
+{
+  "jobsWithWebhooks": 5,
+  "totalWebhooks": 12,
+  "activeWebhooks": 10,
+  "inactiveWebhooks": 2
+}
+```
+
+---
 
 
 

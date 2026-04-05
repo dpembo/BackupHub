@@ -10,14 +10,21 @@ jest.mock('../../db.js', () => ({
 // Mock running module before importing scheduler
 jest.mock('../../running.js', () => ({
   getRunningCountForAgent: jest.fn(() => 0),
-  createItem: jest.fn(( jobName, startTime, isManual, executionId, agent) => ({
+  createItem: jest.fn(( jobName, startTime, isManual, executionId, agent, orchestrationId, icon, color) => ({
     jobName,
     startTime,
     isManual,
     executionId,
     agent,
+    orchestrationId,
+    icon,
+    color,
   })),
   add: jest.fn(async (item) => {
+    // Mock implementation - just resolve
+    return Promise.resolve();
+  }),
+  removeItemByExecutionId: jest.fn(async (executionId) => {
     // Mock implementation - just resolve
     return Promise.resolve();
   }),

@@ -191,6 +191,9 @@ function displaySecs(secs) {
                 if(historyList[i].manual!==undefined && historyList[i].manual=="rule"){
                   runType="monitor_heart";runDesc="Metric Rule Triggered";
                 }
+                if(historyList[i].manual!==undefined && historyList[i].manual=="webhook"){
+                  runType="cloud_queue";runDesc="Webhook Triggered";
+                }
                 %>
                 <span title="<%=runDesc%>" class="material-icons"><%=runType%></span>
               </td>
@@ -328,6 +331,9 @@ function displaySecs(secs) {
               }
               if(historyList[i].manual!==undefined && historyList[i].manual=="rule"){
                 runType="monitor_heart";runDesc="Metric Rule Triggered";
+              }
+              if(historyList[i].manual!==undefined && historyList[i].manual=="webhook"){
+                runType="cloud_queue";runDesc="Webhook Triggered";
               }
               %>
               <span title="<%=runDesc%>" class="material-icons"><%=runType%></span>

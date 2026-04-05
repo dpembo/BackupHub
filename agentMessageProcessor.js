@@ -120,8 +120,16 @@ async function processMessage(topic, message,protocol) {
       //Log submission received
       if (obj.status == "log_submission") {
         logger.info("Received Log event");
+        // Use executionId to build correct log key when multiple same-job runs are concurrent
+        // If agent didn't send executionId, resolve it from the running item so log key lookups work correctly
+        if (!obj.executionId) {
+          const runningItm = running.getItemByName(obj.jobName);
+          if (runningItm && runningItm.executionId) {
+            obj.executionId = runningItm.executionId;
+            logger.debug(`[LOG] Resolved executionId from running queue for [${obj.jobName}]: ${obj.executionId}`);
+          }
+        }
         //add log to db
-        //console.log("Received log event");
         updateLogRecord(obj).catch(err => logger.error('Failed to update log record:', err.message));
       }
   
@@ -170,7 +178,7 @@ async function processMessage(topic, message,protocol) {
             // Fetch the log from database using the same key structure as updateLogRecord
             let logOutput = '';
             try {
-              const logKey = `${obj.name}_${obj.jobName}_log`;
+              const logKey = `${obj.name}_${obj.jobName}_${obj.executionId}_log`;
               logger.debug(`[ORCHESTRATION] Fetching log with key: [${logKey}]`);
               const logData = await db.getData(logKey);
               logOutput = logData || '';

@@ -372,7 +372,7 @@ function getCurrentDateTimeFormatted() {
   return `${now.getFullYear().toString().padStart(4, '0')}-${(now.getMonth() + 1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')}_${now.getHours().toString().padStart(2, '0')}${now.getMinutes().toString().padStart(2, '0')}${now.getSeconds().toString().padStart(2, '0')}`;
 }
 
-function executeBackupCommand(command, commandParams, jobName, callback, manual, executionId = null) {
+function executeBackupCommand(command, commandParams, jobName, callback, manual, executionId = null, triggerContext = null, contextEnvVars = {}) {
   jobCount++;
   
   // Validate and sanitize commandParams to prevent shell injection
@@ -394,7 +394,18 @@ function executeBackupCommand(command, commandParams, jobName, callback, manual,
   const start = new Date().getTime();
   debug(DEBUG_LEVEL.INFO, `Starting backup: ${jobName}`);
 
-  childProcess = spawn('bash', ['-c', runCommand], { detached: true, stdio: 'ignore' });
+  // Prepare environment for child process
+  // Start with current process environment, then overlay trigger context variables
+  const spawnEnv = { ...process.env, ...contextEnvVars };
+  if (Object.keys(contextEnvVars).length > 0) {
+    debug(DEBUG_LEVEL.INFO, `[TRIGGER CONTEXT] Injecting ${Object.keys(contextEnvVars).length} environment variables into script`);
+  }
+
+  childProcess = spawn('bash', ['-c', runCommand], { 
+    detached: true, 
+    stdio: 'ignore',
+    env: spawnEnv  // Pass merged environment with context variables
+  });
   childProcess.unref();
   
   // Add error handler for spawn failures
@@ -535,7 +546,7 @@ async function handleCommand(message) {
   debug(DEBUG_LEVEL.TRACE, "Received Command from BackupHub Server");
   subCount++;
   validateJWTToken(message).then(async decodedPayload => {
-    const { name: agentId, command, manual = false, commandParams = "", jobName, executionId = null } = decodedPayload;
+    const { name: agentId, command, manual = false, commandParams = "", jobName, executionId = null, triggerContext = null, contextEnvVars = {} } = decodedPayload;
     debug(DEBUG_LEVEL.TRACE, `Job: [${jobName}] for agent: [${agentId}] with executionId: [${executionId}]`);
     debug(DEBUG_LEVEL.TRACE, `Command: ${command}, Manual: ${manual}, Params: ${commandParams}`);
 
@@ -563,7 +574,12 @@ async function handleCommand(message) {
       return;
     }
 
-    executeBackupCommand(command, commandParams, jobName, backupComplete, manual, executionId);
+    // Log trigger context details if present
+    if (triggerContext || Object.keys(contextEnvVars).length > 0) {
+      debug(DEBUG_LEVEL.INFO, `[TRIGGER CONTEXT] Job triggered with context. Type: [${triggerContext?.type || 'none'}], Env vars: [${Object.keys(contextEnvVars).length}]`);
+    }
+
+    executeBackupCommand(command, commandParams, jobName, backupComplete, manual, executionId, triggerContext, contextEnvVars);
     pushVerificationNotification = true;
   }).catch(error => {
     debug(DEBUG_LEVEL.ERROR, `Token validation failed: ${error.message}`);

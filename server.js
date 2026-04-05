@@ -198,6 +198,16 @@ else{
     logger.error('Error during initialization:', error.message);
     process.exit(1);
   }
+
+  // Initialize webhooks data
+  try {
+    const webhooksData = require("./webhooksData.js");
+    await webhooksData.init();
+    logger.info('Webhooks data initialized successfully');
+  } catch (error) {
+    logger.error('Error initializing webhooks data:', error.message);
+    // Continue - webhooks are optional
+  }
 })();
 
 const logpath = "/media/net/BackupHOMENAS/backups/";
@@ -1079,6 +1089,306 @@ app.post('/api/backup/restore', User.isAuthenticated, upload.single('backupFile'
   }
 }));
 
+// ============================================================================
+// WEBHOOK JOB TRIGGER API
+// ============================================================================
+/**
+ * POST /api/webhook/trigger
+ * Trigger a job via webhook with custom JSON payload
+ * 
+ * Authentication: Webhook API key (via ?key= parameter or X-Webhook-Key header)
+ * Body: Arbitrary JSON payload to pass to the job/orchestration
+ * 
+ * Example:
+ *   curl -X POST "http://server:8082/api/webhook/trigger/backup-job?key=<uuid>" \
+ *        -H "Content-Type: application/json" \
+ *        -d '{"status": "warning", "message": "Storage at 85% capacity"}'
+ */
+app.post('/api/webhook/trigger/:jobName', asyncHandler(async (req, res) => {
+  try {
+    const { jobName } = req.params;
+    const webhookManager = require('./webhookManager.js');
+    const webhooksData = require('./webhooksData.js');
+    const triggerContextModule = require('./triggerContext.js');
+    
+    // Extract webhook API key from request
+    const providedKey = webhookManager.extractWebhookKeyFromRequest(req);
+    
+    if (!providedKey) {
+      logger.warn(`[WEBHOOK] Trigger attempt on job [${jobName}] without API key`);
+      return res.status(401).json({ error: 'Webhook API key required (via ?key= or X-Webhook-Key header)' });
+    }
+    
+    if (!webhookManager.isValidWebhookKey(providedKey)) {
+      logger.warn(`[WEBHOOK] Trigger attempt on job [${jobName}] with invalid key format`);
+      return res.status(401).json({ error: 'Invalid webhook API key format' });
+    }
+    
+    // Validate webhook key against database
+    let validatedWebhook = null;
+    try {
+      validatedWebhook = await webhooksData.validateWebhookKey(jobName, providedKey);
+      if (!validatedWebhook) {
+        logger.warn(`[WEBHOOK] Webhook key not found for job [${jobName}]`);
+        return res.status(401).json({ error: 'Invalid webhook API key for this job' });
+      }
+    } catch (validateErr) {
+      logger.warn(`[WEBHOOK] Webhook key validation failed for job [${jobName}]: ${validateErr.message}`);
+      return res.status(401).json({ error: 'Webhook key validation failed' });
+    }
+    
+    const payload = req.body || {};
+    
+    if (!webhookManager.isValidWebhookPayload(payload)) {
+      logger.warn(`[WEBHOOK] Invalid payload for job [${jobName}]`);
+      return res.status(400).json({ error: 'Webhook payload must be a JSON object' });
+    }
+    
+    logger.info(`[WEBHOOK] Triggering job [${jobName}] from webhook [${validatedWebhook.id}]`);
+    
+    // Create webhook trigger context
+    const crypto = require('crypto');
+    const executionId = crypto.randomBytes(8).toString('hex');
+    
+    const webhookTriggerContext = triggerContextModule.createWebhookTriggerContext(
+      validatedWebhook.id,
+      jobName,
+      payload,
+      executionId
+    );
+    
+    // Record the trigger event
+    try {
+      await webhooksData.recordWebhookTrigger(jobName, validatedWebhook.id);
+    } catch (recordErr) {
+      logger.warn(`[WEBHOOK] Could not record trigger event: ${recordErr.message}`);
+      // Continue anyway - webhook still triggers
+    }
+    
+    // Trigger the job asynchronously (fire & forget) - don't await it
+    const scheduler = require('./scheduler.js');
+    scheduler.runJob(jobName, 'webhook', null, webhookTriggerContext).catch(err => {
+      logger.error(`[WEBHOOK] Job [${jobName}] execution failed: ${err.message}`);
+    });
+    
+    // Return immediately with 202 Accepted + executionId before job completes
+    logger.info(`[WEBHOOK] Job [${jobName}] queued for execution with executionId [${executionId}]`);
+    return res.status(202).json({
+      success: true,
+      jobName,
+      executionId,
+      message: `Job triggered via webhook and queued for execution`,
+      statusUrl: `/rest/orchestration/executions/${executionId}`
+    });
+    
+  } catch (err) {
+    logger.error(`[WEBHOOK] Error processing webhook trigger: ${err.message}`);
+    res.status(500).json({ error: 'Webhook processing error: ' + err.message });
+  }
+}));
+
+// ============================================================================
+// WEBHOOK MANAGEMENT API (Authenticated)
+// ============================================================================
+
+/**
+ * GET /rest/webhooks/:jobName
+ * Get all webhooks for a job
+ */
+app.get('/rest/webhooks/:jobName', User.isAuthenticated, asyncHandler(async (req, res) => {
+  try {
+    const { jobName } = req.params;
+    const webhooksData = require('./webhooksData.js');
+    
+    const webhooks = await webhooksData.getWebhooksForJob(jobName);
+    
+    // Return webhooks without exposing API keys
+    const safeWebhooks = webhooks.map(w => ({
+      id: w.id,
+      name: w.name,
+      description: w.description,
+      isActive: w.isActive,
+      createdAt: w.createdAt,
+      lastTriggeredAt: w.lastTriggeredAt,
+      triggerCount: w.triggerCount,
+      keyRotatedAt: w.keyRotatedAt
+    }));
+    
+    res.json(safeWebhooks);
+  } catch (err) {
+    logger.error(`[WEBHOOK API] Error fetching webhooks for [${req.params.jobName}]:`, err);
+    res.status(500).json({ error: err.message });
+  }
+}));
+
+/**
+ * POST /rest/webhooks/:jobName
+ * Create a new webhook for a job
+ */
+app.post('/rest/webhooks/:jobName', User.isAuthenticated, express.json(), asyncHandler(async (req, res) => {
+  try {
+    const { jobName } = req.params;
+    const { name, description } = req.body;
+    const webhooksData = require('./webhooksData.js');
+    
+    if (!name || typeof name !== 'string' || name.trim().length === 0) {
+      return res.status(400).json({ error: 'Webhook name is required' });
+    }
+    
+    const webhook = await webhooksData.createWebhook(jobName, name.trim(), description || '');
+    
+    logger.info(`[WEBHOOK API] Webhook created for job [${jobName}] by user`);
+    
+    res.status(201).json({
+      success: true,
+      webhook: {
+        id: webhook.id,
+        name: webhook.name,
+        description: webhook.description,
+        apiKey: webhook.apiKey,  // Only return key on creation
+        isActive: webhook.isActive,
+        createdAt: webhook.createdAt
+      }
+    });
+  } catch (err) {
+    logger.error(`[WEBHOOK API] Error creating webhook for [${req.params.jobName}]:`, err);
+    res.status(500).json({ error: err.message });
+  }
+}));
+
+/**
+ * PUT /rest/webhooks/:jobName/:webhookId
+ * Update webhook (name, description, enable/disable)
+ */
+app.put('/rest/webhooks/:jobName/:webhookId', User.isAuthenticated, express.json(), asyncHandler(async (req, res) => {
+  try {
+    const { jobName, webhookId } = req.params;
+    const { name, description, isActive } = req.body;
+    const webhooksData = require('./webhooksData.js');
+    
+    const updates = {};
+    if (name !== undefined) updates.name = name;
+    if (description !== undefined) updates.description = description;
+    if (isActive !== undefined) updates.isActive = isActive;
+    
+    const webhook = await webhooksData.updateWebhook(jobName, webhookId, updates);
+    
+    logger.info(`[WEBHOOK API] Webhook updated [${jobName}:${webhookId}] by user`);
+    
+    res.json({
+      success: true,
+      webhook: {
+        id: webhook.id,
+        name: webhook.name,
+        description: webhook.description,
+        isActive: webhook.isActive,
+        createdAt: webhook.createdAt
+      }
+    });
+  } catch (err) {
+    logger.error(`[WEBHOOK API] Error updating webhook [${req.params.jobName}:${req.params.webhookId}]:`, err);
+    res.status(500).json({ error: err.message });
+  }
+}));
+
+/**
+ * POST /rest/webhooks/:jobName/:webhookId/rotate-key
+ * Rotate webhook API key
+ */
+app.post('/rest/webhooks/:jobName/:webhookId/rotate-key', User.isAuthenticated, express.json(), asyncHandler(async (req, res) => {
+  try {
+    const { jobName, webhookId } = req.params;
+    const { oldKey } = req.body;
+    const webhooksData = require('./webhooksData.js');
+    
+    // For authenticated users, oldKey verification is optional
+    // Since user is already in admin panel, additional verification not needed
+    const webhook = await webhooksData.rotateWebhookKey(jobName, webhookId, oldKey);
+    
+    logger.info(`[WEBHOOK API] Webhook key rotated [${jobName}:${webhookId}] by user`);
+    
+    res.json({
+      success: true,
+      webhook: {
+        id: webhook.id,
+        name: webhook.name,
+        apiKey: webhook.apiKey,  // Return new key
+        keyRotatedAt: webhook.keyRotatedAt
+      }
+    });
+  } catch (err) {
+    logger.error(`[WEBHOOK API] Error rotating webhook key [${req.params.jobName}:${req.params.webhookId}]:`, err);
+    res.status(500).json({ error: err.message });
+  }
+}));
+
+/**
+ * DELETE /rest/webhooks/:jobName/:webhookId
+ * Delete a webhook
+ */
+app.delete('/rest/webhooks/:jobName/:webhookId', User.isAuthenticated, asyncHandler(async (req, res) => {
+  try {
+    const { jobName, webhookId } = req.params;
+    const webhooksData = require('./webhooksData.js');
+    
+    await webhooksData.deleteWebhook(jobName, webhookId);
+    
+    logger.info(`[WEBHOOK API] Webhook deleted [${jobName}:${webhookId}] by user`);
+    
+    res.json({
+      success: true,
+      message: `Webhook deleted successfully`
+    });
+  } catch (err) {
+    logger.error(`[WEBHOOK API] Error deleting webhook [${req.params.jobName}:${req.params.webhookId}]:`, err);
+    res.status(500).json({ error: err.message });
+  }
+}));
+
+/**
+ * GET /rest/webhooks-all
+ * Get all webhooks across all jobs
+ */
+app.get('/rest/webhooks-all', User.isAuthenticated, asyncHandler(async (req, res) => {
+  try {
+    const webhooksData = require('./webhooksData.js');
+    const webhooks = await webhooksData.getAllWebhooks();
+    
+    // Return without exposing API keys
+    const safeWebhooks = webhooks.map(w => ({
+      id: w.id,
+      name: w.name,
+      description: w.description,
+      jobName: w.jobName,
+      isActive: w.isActive,
+      createdAt: w.createdAt,
+      lastTriggeredAt: w.lastTriggeredAt,
+      triggerCount: w.triggerCount,
+      keyRotatedAt: w.keyRotatedAt
+    }));
+    
+    res.json(safeWebhooks);
+  } catch (err) {
+    logger.error(`[WEBHOOK API] Error fetching all webhooks:`, err);
+    res.status(500).json({ error: err.message });
+  }
+}));
+
+/**
+ * GET /rest/webhooks/stats
+ * Get webhook statistics
+ */
+app.get('/rest/webhooks-stats', User.isAuthenticated, asyncHandler(async (req, res) => {
+  try {
+    const webhooksData = require('./webhooksData.js');
+    const stats = await webhooksData.getWebhookStats();
+    res.json(stats);
+  } catch (err) {
+    logger.error(`[WEBHOOK API] Error getting webhook stats:`, err);
+    res.status(500).json({ error: err.message });
+  }
+}));
+
 app.delete('/rest/notifications', User.isAuthenticated, (req, res) => {
   logger.info("Delete all notifications");
   const user = req.session.user;
@@ -1396,26 +1706,64 @@ app.get('/about.html',User.isAuthenticated, async (req, res) => {
   
 });
 
-app.get('/runList/data',User.isAuthenticated, (req, res) => {
+app.get('/runList/data',User.isAuthenticated, asyncHandler(async (req, res) => {
   var format = "json"
   if(req.query.format !==undefined && req.query.format!=null)format = req.query.format;
 
   var runningList = running.getItemsUsingTZ();
   var schedules = scheduler.getSchedules();
+  
+  logger.debug(`[RunList] Retrieved ${runningList.length} running items from cache`);
+  runningList.forEach((item, idx) => {
+    logger.debug(`  [${idx}] jobName=${item.jobName}, executionId=${item.executionId}, orchestrationId=${item.orchestrationId}`);
+  });
+  
+  // Load orchestration definitions for icon/color lookup
+  let orchestrations = {};
+  try {
+    const orchestrationModule = require('./orchestration.js');
+    const allOrchestrations = await orchestrationModule.getAllJobs();
+    orchestrations = allOrchestrations;
+  } catch (err) {
+    logger.debug(`Could not load orchestrations for icon/color lookup: ${err.message}`);
+  }
 
   for(var x=0;x<runningList.length;x++)
   {
     var workJob = runningList[x].jobName;
-    for(var y=0;y<schedules.length;y++){
-      if(workJob == schedules[y].jobName){
-        runningList[x].icon=schedules[y].icon;
-        runningList[x].color=schedules[y].color;
-        break;
+    
+    // If this is an orchestration, fetch icon/color from orchestration definition
+    if (runningList[x].orchestrationId && orchestrations[runningList[x].orchestrationId]) {
+      const orchestrationJob = orchestrations[runningList[x].orchestrationId];
+      const currentVersionData = orchestrationJob.versions[orchestrationJob.versions.length - 1];
+      runningList[x].icon = orchestrationJob.icon || 'schema';
+      runningList[x].color = orchestrationJob.color || '#000000';
+    } else {
+      // For regular jobs, look up from schedules
+      for(var y=0;y<schedules.length;y++){
+        if(workJob == schedules[y].jobName){
+          runningList[x].icon=schedules[y].icon;
+          runningList[x].color=schedules[y].color;
+          break;
+        }
       }
     }
   }
 
+  logger.debug(`[RunList] After enrichment: ${runningList.length} items`);
+  runningList.forEach((item, idx) => {
+    logger.debug(`  [${idx}] jobName=${item.jobName}, executionId=${item.executionId}, orchId=${item.orchestrationId}, icon=${item.icon}`);
+  });
+
   if(format.toUpperCase()=="HTML"){
+    // Log orchestration running items for debugging
+    const orchestrationItems = runningList.filter(item => item.orchestrationId);
+    if (orchestrationItems.length > 0) {
+      logger.debug(`[RunList] Rendering ${orchestrationItems.length} orchestration items:`);
+      orchestrationItems.forEach(item => {
+        logger.debug(`  - Job: ${item.jobName}, OrchId: ${item.orchestrationId}, ExecId: ${item.executionId}`);
+      });
+    }
     res.render('runningListData',{
       runningList: runningList,
       schedules: schedules,
@@ -1429,7 +1777,7 @@ app.get('/runList/data',User.isAuthenticated, (req, res) => {
     data.schedules=schedules;
     res.send(data)
   }
-});
+}));
 
 
 app.get('/historyList/data',User.isAuthenticated, async (req, res) => {
@@ -1875,8 +2223,9 @@ app.post('/scheduler.html', validateCsrf, User.isAuthenticated, asyncHandler(asy
     // Normalize and validate scheduleMode to allow-list
     scheduleMode = scheduleMode === 'orchestration' ? 'orchestration' : 'classic';
 
-    // Normalize and validate triggerType
-    triggerType = triggerType === 'rule' ? 'rule' : 'clock';
+    // Normalize and validate triggerType to allow-list
+    const allowedTriggerTypes = ['rule', 'webhook'];
+    triggerType = allowedTriggerTypes.includes(triggerType) ? triggerType : 'clock';
 
     // Sanitize orchestrationId
     if (orchestrationId) {
@@ -3330,7 +3679,15 @@ function getInProgressKey(jobId, executionId) {
 // Helper to get in-progress execution if it exists
 function getInProgressExecution(jobId, executionId) {
   const key = getInProgressKey(jobId, executionId);
-  return inProgressExecutions[key];
+  let cachedExecution = inProgressExecutions[key];
+  
+  // If not found in server's cache, check scheduler's cache (for webhook-triggered orchestrations)
+  if (!cachedExecution && scheduler) {
+    cachedExecution = scheduler.getInProgressExecution(jobId, executionId);
+    logger.debug(`In-progress execution [${key}] found in scheduler cache`);
+  }
+  
+  return cachedExecution;
 }
 
 // Helper to save in-progress execution
@@ -3370,16 +3727,20 @@ function clearInProgressExecution(jobId, executionId) {
  */
 app.get('/orchestration/monitor.html', User.isAuthenticated, asyncHandler(async (req, res) => {
   const jobId = req.query.jobId;
-  const executionIndex = req.query.executionIndex || 'latest';
+  let executionIndex = req.query.executionIndex || 'latest';
+  const executionId = req.query.executionId;
   
   if (!jobId) {
     return res.status(400).send('Job ID is required');
   }
   
+  // If executionId is provided, we'll let the client handle it
+  // The JavaScript will read it from URL params and pass it to the API
   res.render('orchestrationMonitor', { 
     csrfToken: req.csrfToken(),
     jobId: jobId,
-    executionIndex: executionIndex
+    executionIndex: executionIndex,
+    executionId: executionId  // Pass executionId to template so it can be used in initial load
   });
 }));
 
@@ -3417,7 +3778,7 @@ app.get('/orchestration/execution/details', User.isAuthenticated, asyncHandler(a
             if (agent && (!cachedExecution.scriptOutputs[node.id] || !cachedExecution.scriptOutputs[node.id].stdout)) {
               // Node is executing or recently completed, try to fetch logs from database
               const jobName = `Orchestration [${jobId}] Execution [${executionId}] Node [${node.id}]`;
-              const logKey = `${agent.name}_${jobName}_log`;
+              const logKey = `${agent.name}_${jobName}_${executionId}_log`;
               try {
                 // Use simpleGetData to match agent's log storage mechanism
                 const logContent = await db.simpleGetData(logKey);
@@ -3480,9 +3841,13 @@ app.get('/orchestration/execution/details', User.isAuthenticated, asyncHandler(a
   // Normal execution history lookup (for completed executions)
   // If executionId is provided, resolve it to an index
   if (executionId && executionIndex === 'latest') {
+    logger.info(`[MONITOR] Resolving executionId [${executionId}] to index for job [${jobId}]`);
     const index = await orchestrationEngine.getExecutionIndexById(jobId, executionId);
     if (index >= 0) {
+      logger.info(`[MONITOR] Resolved executionId [${executionId}] to index [${index}]`);
       executionIndex = index;
+    } else {
+      logger.warn(`[MONITOR] Failed to resolve executionId [${executionId}] - using latest instead`);
     }
   }
   

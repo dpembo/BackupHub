@@ -7,13 +7,57 @@ var ruleIntervals = new Map(); // Track setInterval handles for rule-based jobs
 var mqttClient;
 var mqttCommand_topic;
 
+// In-progress execution cache for orchestrations being executed
+var inProgressExecutions = {};
+
+function getInProgressKey(jobId, executionId) {
+  return `${jobId}:${executionId}`;
+}
+
+function saveInProgressExecution(jobId, executionId, execution) {
+  const key = getInProgressKey(jobId, executionId);
+  inProgressExecutions[key] = execution;
+  logger.debug(`Cached in-progress execution [${key}]`);
+}
+
+function getInProgressExecution(jobId, executionId) {
+  const key = getInProgressKey(jobId, executionId);
+  return inProgressExecutions[key];
+}
+
+function removeInProgressExecution(jobId, executionId) {
+  const key = getInProgressKey(jobId, executionId);
+  delete inProgressExecutions[key];
+  logger.debug(`Removed in-progress execution cache [${key}]`);
+}
+
+function updateInProgressExecution(jobId, executionId, executionLog) {
+  const cachedExecution = getInProgressExecution(jobId, executionId);
+  if (!cachedExecution || !executionLog) {
+    return;
+  }
+
+  cachedExecution.visitedNodes = executionLog.visitedNodes;
+  cachedExecution.currentNode = executionLog.currentNode;
+  cachedExecution.status = executionLog.status;
+  cachedExecution.finalStatus = executionLog.finalStatus;
+  cachedExecution.endTime = executionLog.endTime;
+  cachedExecution.errors = executionLog.errors;
+  cachedExecution.scriptOutputs = executionLog.scriptOutputs;
+  cachedExecution.conditionEvaluations = executionLog.conditionEvaluations;
+  cachedExecution.nodeMetrics = executionLog.nodeMetrics;
+  saveInProgressExecution(jobId, executionId, cachedExecution);
+}
+
 const fs = require('fs').promises;
 const fsSync = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const dateTimeUtils = require('./utils/dateTimeUtils.js');
 const asyncUtils = require('./utils/asyncUtils.js');
 const { handleError, AppError } = require('./utils/errorHandler.js');
 const running = require('./running.js');
+const triggerContext = require('./triggerContext.js');
 
 function checkExecutePermissionCapability(directoryPath) {
   try {
@@ -50,9 +94,17 @@ async function init() {
   }
 }
 
-function publishExecute(agent_id, command, commandParams, jobName, isManual, executionId) {
+function publishExecute(agent_id, command, commandParams, jobName, isManual, executionId, triggerContextParam = null) {
   logger.info(`Executing Scheduled command on Agent [${agent_id}] with executionId [${executionId}]`);
-  agentComms.sendCommand(agent_id, mqttTransport.getCommandTopic(), command, commandParams, jobName, undefined, isManual, executionId);
+  
+  // Convert trigger context to environment variables for the script
+  let contextEnvVars = {};
+  if (triggerContextParam && triggerContext.isValidTriggerContext(triggerContextParam)) {
+    contextEnvVars = triggerContext.contextToEnvVars(triggerContextParam);
+    logger.debug(`[TRIGGER CONTEXT] Injecting ${Object.keys(contextEnvVars).length} environment variables for job [${jobName}]`);
+  }
+  
+  agentComms.sendCommand(agent_id, mqttTransport.getCommandTopic(), command, commandParams, jobName, undefined, isManual, executionId, triggerContextParam, contextEnvVars);
 }
 
 /**
@@ -199,7 +251,15 @@ function getSchedule(jobName){
         if(schedules[i].jobName==jobName)
         {
             var schedule = schedules[i];
-            schedule.nextRunDate = getNextRunDate(schedules[i]);
+            if (schedule.triggerType === 'clock') {
+              schedule.nextRunDate = getNextRunDate(schedules[i]);
+            } else if (schedule.triggerType === 'rule') {
+              schedule.nextRunDate = `Polls every ${schedule.rulePollIntervalMins || 15}m`;
+            } else if (schedule.triggerType === 'webhook') {
+              schedule.nextRunDate = 'Webhook Trigger';
+            } else {
+              schedule.nextRunDate = 'n/a';
+            }
             return schedule;
         }
     }
@@ -238,6 +298,14 @@ function getScheduleObject(jobName, colour, description, scheduleType, scheduleT
       // Parse and validate rule cooldown (clamp to minimum 1 minute)
       const parsedRuleCooldownMins = parseInt(ruleCooldownMins, 10);
       schedule.ruleCooldownMins = Number.isFinite(parsedRuleCooldownMins) ? Math.max(1, parsedRuleCooldownMins) : 60;
+    } else if (schedule.triggerType === 'webhook') {
+      // Webhook trigger: no schedule or rule fields
+      schedule.scheduleType = null;
+      schedule.dayOfWeek = null;
+      schedule.dayInMonth = null;
+      schedule.scheduleTime = null;
+      schedule.ruleMetric = null;
+      schedule.ruleCondition = null;
     }
 
     if (schedule.scheduleMode === 'classic') {
@@ -380,6 +448,8 @@ function getSchedules(index){
               schedules[i].nextRunDate = displayFormatDate(new Date(getNextRunDate(schedules[i])),true,serverConfig.server.timezone,"YYYY-MM-DDTHH:mm:ss",true);
             } else if (schedules[i].triggerType === 'rule') {
               schedules[i].nextRunDate = `Polls every ${schedules[i].rulePollIntervalMins || 15}m`;
+            } else if (schedules[i].triggerType === 'webhook') {
+              schedules[i].nextRunDate = 'Webhook Trigger';
             } else {
               schedules[i].nextRunDate = 'n/a';
             }
@@ -439,7 +509,7 @@ function runUpdateJob(agentId,inCommandParams) {
 
 
 // Run the job function
-async function runJob(jobName, isManual, inData) {
+async function runJob(jobName, isManual, inData, triggerContextParam = null) {
   try {
     if (isManual === undefined) { isManual = false; }
     logger.info(`Running job: ${jobName}`);
@@ -456,9 +526,67 @@ async function runJob(jobName, isManual, inData) {
       logger.info(`Running orchestration job [${jobName}] with orchestration ID [${schedItem.orchestrationId}]`);
       
       try {
+        // Fetch orchestration job to get icon and color
+        let orchestrationIcon = 'schema';
+        let orchestrationColor = '#000000';
+        try {
+          const orchestrationModule = require('./orchestration.js');
+          const orchestrationJob = await orchestrationModule.getJob(schedItem.orchestrationId);
+          orchestrationIcon = orchestrationJob.icon || 'schema';
+          orchestrationColor = orchestrationJob.color || '#000000';
+          logger.debug(`Fetched orchestration [${schedItem.orchestrationId}] icon=[${orchestrationIcon}] color=[${orchestrationColor}]`);
+        } catch (fetchErr) {
+          logger.warn(`Could not fetch orchestration [${schedItem.orchestrationId}] details: ${fetchErr.message}. Using defaults.`);
+        }
+        
+        // Generate execution ID for this orchestration run
+        const executionId = triggerContextParam && triggerContextParam.executionId ? triggerContextParam.executionId : crypto.randomBytes(8).toString('hex');
+        logger.info(`Generated execution ID for orchestration [${schedItem.orchestrationId}]: ${executionId}`);
+        
+        // Add to running queue to track this orchestration execution
+        const runningItem = running.createItem(jobName, new Date().toISOString(), isManual, executionId, null, schedItem.orchestrationId, orchestrationIcon, orchestrationColor);
+        running.add(runningItem);
+        logger.info(`Added orchestration to running queue: [${jobName}] with execution ID [${executionId}]`);
+        
+        // Create and cache a stub execution for in-progress tracking (before orchestration starts)
+        // This allows the monitor page to query the execution before it completes
+        const stubExecution = {
+          executionId: executionId,
+          jobId: schedItem.orchestrationId,
+          orchestrationVersion: 1,
+          startTime: new Date().toISOString(),
+          endTime: null,
+          status: 'running',
+          currentNode: null,
+          visitedNodes: [],
+          scriptOutputs: {},
+          conditionEvaluations: {},
+          nodeMetrics: {},
+          errors: [],
+          finalStatus: null,
+          manual: isManual,
+          isStub: true  // Mark as temporary stub execution
+        };
+        
+        // Cache the stub in-memory so monitor page can find it before completion
+        saveInProgressExecution(schedItem.orchestrationId, executionId, stubExecution);
+        logger.info(`Created and cached in-progress execution stub for [${schedItem.orchestrationId}] with ID [${executionId}]`);
+        
+        // Create callback to update cache as nodes complete (same pattern as manual execution)
+        const onNodeComplete = (executionLog) => {
+          updateInProgressExecution(schedItem.orchestrationId, executionId, executionLog);
+        };
+        
         const orchestration = require('./orchestrationEngine.js');
-        const executionLog = await orchestration.executeJob(schedItem.orchestrationId, isManual);
+        const executionLog = await orchestration.executeJob(schedItem.orchestrationId, isManual, executionId, onNodeComplete, triggerContextParam);
         await orchestration.saveExecutionResult(executionLog);
+        
+        // Remove from running queue after completion
+        running.removeItemByExecutionId(executionId);
+        logger.info(`Removed orchestration from running queue: [${jobName}] with execution ID [${executionId}]`);
+        
+        // Clean up the in-progress execution cache
+        removeInProgressExecution(schedItem.orchestrationId, executionId);
         
         logger.info(`Orchestration [${schedItem.orchestrationId}] execution completed with status [${executionLog.finalStatus}]`);
         return { status: (executionLog.finalStatus === 'success' ? 'ok' : 'error'), executionId: executionLog.executionId || null };
@@ -519,9 +647,8 @@ async function runJob(jobName, isManual, inData) {
     var commandParams = schedItem.commandParams;
     logger.info(`Command [${command}]`);
 
-    // Generate execution ID for this job run (at the beginning so we can return it)
-    const crypto = require('crypto');
-    const executionId = crypto.randomBytes(8).toString('hex');
+    // Generate execution ID for this job run (or use the one from trigger context if provided)
+    const executionId = triggerContextParam && triggerContextParam.executionId ? triggerContextParam.executionId : crypto.randomBytes(8).toString('hex');
     logger.info(`Generated execution ID for job [${jobName}]: ${executionId}`);
     
     if (command !== undefined && command !== null && command.length > 0) {
@@ -534,7 +661,7 @@ async function runJob(jobName, isManual, inData) {
           commandParams += inData;
         }
         
-        publishExecute(schedItem.agent, data, commandParams, jobName, isManual, executionId);
+        publishExecute(schedItem.agent, data, commandParams, jobName, isManual, executionId, triggerContextParam);
       } catch (err) {
         logger.error(`Error reading script file for job [${jobName}]:`, err.message);
         if (serverConfig.server.jobFailEnabled == "true") {
@@ -543,7 +670,7 @@ async function runJob(jobName, isManual, inData) {
         return { status: "error", executionId: null };
       }
     } else {
-      publishExecute(schedItem.agent, commandParams, "", jobName, isManual, executionId);
+      publishExecute(schedItem.agent, commandParams, "", jobName, isManual, executionId, triggerContextParam);
     }
 
     // Add to running queue to track this execution
@@ -715,7 +842,27 @@ async function pollRuleJob(schedItemRef) {
       persistSchedules().catch(err => logger.warn(`[RULE] Failed to persist ruleLastTriggered for [${jobName}]: ${err.message}`));
     }
 
-    runJob(jobName, 'rule').catch(err =>
+    // Create trigger context for the job execution
+    const executionId = crypto.randomBytes(8).toString('hex');
+    const ruleId = `rule_${jobName}_${Date.now()}`;
+    const metricResultWithContext = {
+      type,
+      agent: ruleAgent,
+      path: rulePath,
+      pattern,
+      value: metricValue,
+      previousValue: null
+    };
+    
+    const ruleTriggerContext = triggerContext.createRuleTriggerContext(
+      ruleId,
+      jobName,
+      metricResultWithContext,
+      ruleCondition,
+      executionId
+    );
+
+    runJob(jobName, 'rule', null, ruleTriggerContext).catch(err =>
       logger.error(`[RULE] Error executing triggered job [${jobName}]: ${err.message}`)
     );
 
@@ -882,4 +1029,4 @@ function getLast7DaysScheduleCount(){
   return array;
 }
 
-module.exports = { init, getSchedule, getSchedules, getScheduleIndex, upsertSchedule, deleteSchedule,deleteScheduleAtIndex, manualJobRun, runJob, getNextRunDate, runUpdateJob, getTodaysScheduleCount,getLast7DaysScheduleCount };
+module.exports = { init, getSchedule, getSchedules, getScheduleIndex, upsertSchedule, deleteSchedule,deleteScheduleAtIndex, manualJobRun, runJob, getNextRunDate, runUpdateJob, getTodaysScheduleCount,getLast7DaysScheduleCount, getInProgressExecution, saveInProgressExecution, removeInProgressExecution, updateInProgressExecution };
