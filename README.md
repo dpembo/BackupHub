@@ -5,7 +5,17 @@
 
 **A lightweight, secure, and flexible solution for managing and scheduling shell-based executions across your network.**
 
-BackupHub is designed for IT administrators, providing secure, encrypted communication between a central hub and remotely managed agents. It streamlines job execution, scheduling, monitoring, and notifications, making it an effective tool for backup and automation tasks.
+BackupHub is designed for IT administrators, providing secure automation of complex tasks across multiple systems. Execute simple jobs or build sophisticated multi-step workflows (orchestrations), schedule them reliably, trigger them from external systems via webhooks, and monitor everything in real-time from a centralized web dashboard.
+
+**Why Choose BackupHub?**
+- ✅ **Build Complex Workflows** — Multi-step orchestrations with conditional logic, parallel execution, and data flow between steps (not just single scripts)
+- ✅ **Real-Time Visibility** — Live monitoring dashboard shows job progress as it executes, not after completion
+- ✅ **Distributed Execution** — Manage and execute jobs across hundreds of remote agents from a single hub
+- ✅ **Webhook Integration** — Trigger jobs and orchestrations from external systems (monitoring tools, CI/CD pipelines, webhooks)
+- ✅ **Metric-Triggered Automation** — Jobs receive metric data automatically (disk usage, CPU, etc.) for intelligent automation
+- ✅ **Enterprise-Ready** — Multi-user with role-based access, encrypted communication, comprehensive audit logs
+- ✅ **Easy to Deploy** — Works with Docker (recommended), system services, PM2, or cron. Pre-built templates for common tasks.
+- ✅ **100% Open Source** — MIT Licensed, no vendor lock-in
 
 ![BackupHub Job Monitor Screenshot](https://github.com/dpembo/BackupHub/blob/main/docs/screens/job-monitor.png?raw=true "Job Monitor Dashboard")
 
@@ -28,68 +38,91 @@ BackupHub is designed for IT administrators, providing secure, encrypted communi
 
 ## Features
 
+**Complex Workflow Automation (Orchestrations)**
+- Design multi-step workflows with visual node editor (sequences, parallel branches, conditional logic)
+- Execute scripts across multiple agents with data flow between steps
+- Monitor live progress in real-time as workflows execute
+- Trigger entire orchestrations via webhooks with dynamic parameter substitution
+- Reusable workflow components for complex backup, migration, and operational tasks
+
 **Management Features**
 - Agent provisioning: cron, system service, Docker, or PM2
 - Centralized agent management and user management (multi-user, RBAC)
 - Dashboard insights: visualize job performance and system status
-- Webhook job triggers with UUID-based API key security
+- Webhook job triggers with API key security
 - Webhook management interface in settings (create, edit, rotate keys, delete)
+- Multi-agent distribution for scalable execution
 
 **Execution & Scheduling**
-- Secure, token-based script execution
-- Inline script editor with templates
+- Secure, token-based script execution across distributed agents
+- Inline script editor with templates for common tasks
 - Flexible scheduling: daily, weekly, monthly, and rule-based metric thresholds
 - **Trigger Context System**: Scripts and orchestrations receive metric data when triggered by rules
 - Timezone support for global operations
+- Concurrent job execution per agent (configurable, default: 3 jobs per agent)
 
-**Communication & Notifications**
-- Real-time updates via WebSocket/MQTT
-- Alerts: email, webhooks, in-app, and console
-- Customizable UI
-- Dynamic parameter substitution in orchestrations based on trigger metrics
+**Real-Time Monitoring & Notifications**
+- Live dashboard showing running jobs and orchestrations with progress tracking
+- View live execution logs as jobs run (no waiting for completion)
+- Real-time updates via WebSocket
+- Alerts: email, webhooks, in-app notifications, and console logging
+- Execution history with searchable logs and performance metrics
+- Failed job notifications with root cause analysis
 
-## Webhook System (All 3 Phases Complete)
+**Communication & Security**
+- Encrypted communication between hub and agents (shared secret)
+- MQTT/WebSocket support for flexible deployment scenarios
+- Webhook API with UUID-based API keys
+- Token-based authentication for all API endpoints
+- Per-user access control (RBAC)
 
-BackupHub includes a complete webhook system:
+## Webhook System
 
-1. **Phase 1: Trigger Context** — Metric data flows to scripts/orchestrations
-2. **Phase 2: Database & REST API** — Persistent webhook storage and management endpoints
-3. **Phase 3: Management UI** — User-friendly webhook management in settings
+BackupHub includes a complete webhook system allowing external data and metrics to flow into any job whether this is a single script or an orchestratinon, facilitated by a User-friendly webhook management section within the settings
 
 
-## Backup Templates Included
-- **Backup Proxmox VM**: Backs up a VM from Proxmox given the VM ID
-- **Backup MySQL/MariaDB DB**: Runs a MySQL dump of a database and moves it to a directory
-- **Delete Files**: Deletes files from a provided list
-- **Issue Reboot**: Issues a reboot after a given delay
-- **Purge Files Older Than**: Purges files older than a defined period (in days)
-- **Purge Files Matching Wildcard Older Than**: Purges files that match a wildcard and are older than a defined period (in days)
-- **Rsync Between Two Directories**: Performs a one-way Rsync between provided source and target directory
-- **Mount Threshold Exceeded**: Sample rule-based job for when a mounted volume uses storage greater than a specified threshold (see rule-based thresholds in documentation)
-  
-## Agent Concurrency
-- Each agent supports configurable concurrency (default: 3 jobs at once). Set `concurrency` in agent config to control this.
+## Key Capabilities & Use Cases
 
-## Trigger Context System
-- **Rule-Based Triggers**: When a threshold rule fires, scripts receive metric data (CPU, disk usage, file count) as environment variables
-- **Webhook Triggers**: External systems can trigger jobs via API (`/api/webhook/trigger/:jobName`)
-- **Dynamic Parameter Substitution**: Orchestrations can use template syntax: `#{context.metric.value}`, `#{context.metric.path}`
-- **Environment Variables**: Scripts access metrics via `$BACKUPHUB_METRIC_VALUE`, `$BACKUPHUB_METRIC_PATH`, etc.
+**Automated Backup & Recovery Workflows**
+- Orchestrate multi-step backups: pre-backup snapshots → backup execution → verification → cleanup
+- Trigger backups from external monitoring systems via webhooks
+- Execute backups across multiple systems in parallel
+- Live monitor backup progress with step-by-step execution tracking
 
-**Example**: Disk cleanup script triggered when usage hits 90%:
-```bash
-if [ "$BACKUPHUB_METRIC_TYPE" = "mount_usage" ]; then
-    echo "Cleaning up $BACKUPHUB_METRIC_PATH (${BACKUPHUB_METRIC_VALUE}% usage)"
-    find "$BACKUPHUB_METRIC_PATH" -type f -mtime +30 -delete
-fi
-```
+**Metric-Triggered Automation**
+- Automatically purge files when disk usage exceeds thresholds
+- Issue system reboots based on uptime or resource metrics
+- Spin up resources when CPU/memory reaches critical levels
+- All with metric data automatically passed to your scripts
 
-**Getting Started with Webhooks?** See [WEBHOOK_QUICKSTART.md](./WEBHOOK_QUICKSTART.md) for a step-by-step guide to create your first webhook-triggered job!
+**Distributed Operations**
+- Manage jobs across hundreds of agents from a single hub
+- Execute workflows with steps distributed across multiple systems
+- Parallel execution with data flow between sequential steps
+- Agent load balancing with per-agent concurrency control
 
-**Documentation**: See [TRIGGER_CONTEXT_GUIDE.md](./TRIGGER_CONTEXT_GUIDE.md) for detailed examples, webhook API, template substitution, and more.
+**Enterprise Integration**
+- Expose BackupHub capabilities via REST API for third-party integration
+- Chain orchestrations together for complex multi-stage operations
+- Notify external systems when orchestrations complete (email, webhooks, HTTP calls)
+- Audit trail of all job executions with detailed logs
 
-## Upload to Cloud Storage
-- Using rclone, allows you to move files to many different cloud storage providers
+
+## Pre-Built Templates (Get Started Instantly)
+
+Launch common backup and automation tasks in seconds:
+
+- **Backup Proxmox VM** — Automate VM snapshots and backups with Proxmox API integration
+- **Backup MySQL/MariaDB** — Dump databases with automatic compression and rotation
+- **Rsync Between Directories** — Synchronize data between systems with flexible filtering
+- **Delete Files** — Remove specified files with audit logging
+- **Issue Reboot** — Schedule system reboots with customizable delays
+- **Purge Files Older Than** — Automatic retention policies (clean up files older than X days)
+- **Purge Files by Pattern & Age** — Smart cleanup using wildcards (e.g., `*.log` files older than 30 days)
+- **Mount Threshold Exceeded** — Auto-trigger on disk usage alerts
+- **Cloud Storage Upload** — Deploy using rclone to AWS S3, Google Drive, Azure, Dropbox, etc.
+
+**Tips**: Use templates as-is for quick setup, or customize them for your environment. Create your own reusable templates for repeated tasks.
 
 
 ## Technology Stack
@@ -162,6 +195,66 @@ For comprehensive documentation on all features, see:
 - **[REST API Reference](docs/REST_API_REFERENCE.md)** — Programmatic API access
 - **[Screenshots & UI Reference](docs/screens/)** — Visual guide to the interface
 - **[Full Documentation](docs/README.MD)** — Complete documentation index
+
+## Trigger Context System (Smart Automation)
+
+Automatically pass metric data from rules to your scripts and orchestrations:
+
+**How It Works:**
+- **Rule-Based Triggers**: When a threshold rule fires (e.g., disk > 90%), scripts receive metric data as environment variables
+- **Webhook Triggers**: External systems trigger jobs with custom parameters via API
+- **Dynamic Parameter Substitution**: Orchestrations can use template syntax: `#{context.metric.value}`, `#{context.metric.path}`
+- **Environment Variables**: Scripts access metrics via `$BACKUPHUB_METRIC_VALUE`, `$BACKUPHUB_METRIC_PATH`, etc.
+
+**Real-World Example** — Disk Cleanup Script (auto-triggered when usage hits 90%):
+```bash
+#!/bin/bash
+if [ "$BACKUPHUB_METRIC_TYPE" = "mount_usage" ]; then
+    TARGET_DIR="$BACKUPHUB_METRIC_PATH"
+    USAGE="${BACKUPHUB_METRIC_VALUE}%"
+    echo "Alert: $TARGET_DIR is at $USAGE capacity. Cleaning up files older than 30 days..."
+    find "$TARGET_DIR" -type f -mtime +30 -delete
+    df -h "$TARGET_DIR"
+fi
+```
+
+The script automatically receives the mount path and usage percentage — no manual configuration needed!
+
+**Getting Started?** See [WEBHOOK_QUICKSTART.md](./WEBHOOK_QUICKSTART.md) for step-by-step guides.
+
+**Advanced Documentation**: See [TRIGGER_CONTEXT_GUIDE.md](./TRIGGER_CONTEXT_GUIDE.md) for detailed examples, webhook API, orchestration templates, and more.
+
+
+## Orchestrations: Building Complex Workflows
+
+Move beyond simple scripts. BackupHub's orchestration engine lets you build sophisticated multi-step workflows with:
+
+- **Visual Node Editor** — Design workflows graphically (no coding required for connection logic)
+- **Multiple Node Types**: 
+  - **Execute** — Run scripts on any agent
+  - **Condition** — Branch logic (if/then/else)
+  - **Parallel** — Run multiple steps simultaneously
+  - **Sequence** — Ensure steps run in order
+  - **Delay** — Add wait periods between steps
+  - **Notification** — Send alerts at any step
+- **Data Flow** — Pass results from one step to the next
+- **Error Handling** — Retry logic, skip-on-error, or fail-entire-workflow options
+- **Real-Time Monitoring** — Watch orchestrations execute step-by-step with live logs
+- **Webhook Triggering** — Trigger entire orchestrations from external systems
+
+**Example Workflow: Multi-System Database Backup**
+1. Pre-backup: Flush database caches (Execute on DB agent)
+2. Backup: Run mysqldump (Execute, passes data forward)
+3. Verify: Check backup integrity (Execute, conditional based on backup output)
+4. Archive: Compress backup (Execute)
+5. In Parallel:
+   - Upload to S3 (Execute via rclone)
+   - Send notification (Notification node)
+6. Cleanup: Remove old backups (Execute)
+
+All with live progress tracking and automatic error handling. Plus: trigger the entire workflow via webhook from your CI/CD pipeline!
+
+See [docs/orchestrations.md](docs/orchestrations.md) for detailed documentation and examples.
 
 
 ## Configuration
