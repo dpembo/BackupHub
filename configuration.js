@@ -59,15 +59,6 @@ function loadConfigJson(filename) {
       const data = fs.readFileSync(filename, 'utf8');
       var configObj = JSON.parse(data);
 
-      if(configObj.threshold===undefined){
-        configObj.threshold={};
-
-        //threshold
-        configObj.threshold.cpu_percent=80;
-        configObj.threshold.filesystem_percent=80;
-        configObj.threshold.cooldown_mins=60;
-      }
-
       return configObj;
     } catch (error) {
       // Handle file not found or parsing errors
@@ -106,13 +97,7 @@ function loadConfigJson(filename) {
     inConfigObj.smtp={};
     inConfigObj.webhook={};
     inConfigObj.websocket_server={}
-    inConfigObj.threshold={};
     inConfigObj.templates={};
-
-    //threshold
-    inConfigObj.threshold.cpu_percent=80;
-    inConfigObj.threshold.filesystem_percent=80;
-    inConfigObj.threshold.cooldown_mins=60;
 
     //Notification
     inConfigObj.server.minDisconnectDurationForNotification=0;
@@ -156,6 +141,8 @@ function loadConfigJson(filename) {
 
   function saveServerConfig(){
     logger.debug("Saving server config");
+    logger.debug(`[CONFIG_SAVE] Current job_icons in serverConfig: ${JSON.stringify(serverConfig.job_icons)}`);
+    
     //encrypt passwords if they're plaintext
     //SMTP
     var encSMTPpw = null;
@@ -178,6 +165,8 @@ function loadConfigJson(filename) {
 
     const updatedConfig = JSON.stringify(serverConfig, null, 2); // Convert object to JSON string with indentation
 
+    logger.debug(`[CONFIG_SAVE] Writing config with job_icons count: ${serverConfig.job_icons ? serverConfig.job_icons.length : 'undefined'}`);
+
     //Reset back pws
     if(decMQTTpw !==null){
       serverConfig.mqtt.password = decMQTTpw;
@@ -193,6 +182,7 @@ function loadConfigJson(filename) {
         logger.error('Error writing to server config file:', err);
       }
       logger.debug('Server config File updated successfully.');
+      logger.debug(`[CONFIG_SAVE] Saved job_icons: ${JSON.stringify(serverConfig.job_icons)}`);
       logger.debug('Configuring Logger');
   
       

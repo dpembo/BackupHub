@@ -269,7 +269,6 @@ function noValue(inValue){
                   <li class="tab orange-text col s1"><a href="#websocket">WebSocket</a></li>
                   <li class="tab orange-text col s1"><a href="#mqtt">MQTT</a></li>
                   <li class="tab col s1"><a href="#notifications">Alerts</a></li>
-                  <li class="tab col s1"><a href="#threshold">Thresholds</a></li>
                   <li class="tab col s1"><a href="#icons">Icons</a></li>
                   <li class="tab col s1"><a href="#templates">Templates</a></li>
                   <li class="tab col s1"><a href="#webhooks">Webhooks</a></li>
@@ -525,32 +524,6 @@ function noValue(inValue){
                   <a class="btn waves-effect waves-light" href="#" onclick="testEmail()">Notification Test</a>
                 </div>-->
                 </div>
-              </div>
-
-              <div id="threshold" class="col s12">
-                <br>
-                <div class="row">
-                  <div class="input-field col s2">
-                    <input id="cpuThreshold" type="text" name="cpuThreshold" value="<%=serverConfig.threshold.cpu_percent%>" required>
-                    <label for="cpuThreshold">CPU Threshold (%)</label>
-                  </div>
-                  <div class="input-field col s2" style="padding-top: 15px;">%</div>
-                </div>
-                <div class="row">
-                  <div class="input-field col s2">
-                    <input id="storageThreshold" type="text" name="storageThreshold" value="<%=serverConfig.threshold.filesystem_percent%>" required>
-                    <label for="storageThreshold">Storage Threshold (%)</label>
-                  </div>
-                  <div class="input-field col s2" style="padding-top: 15px;">%</div>
-                </div>
-                <div class="row">
-                  <div class="input-field col s2">
-                    <input id="cooldown" type="text" name="cooldown" value="<%=serverConfig.threshold.cooldown_mins%>" required>
-                    <label for="cooldown">Threshold Job Cooldown (mins)</label>
-                  </div>
-                  <div class="input-field col s2" style="padding-top: 15px;">mins</div>
-                </div>
- 
               </div>
 
               <div id="icons" class="col s12">
@@ -891,8 +864,14 @@ function noValue(inValue){
             $('#saveChanges').on('click', function(e) {
               e.preventDefault();
               var items = getItems();
+              
+              // Validate that at least some icons exist
+              if (!items || items.length === 0) {
+                M.toast({html: 'Please add at least one icon to the list', displayLength: 5000});
+                return;
+              }
+              
               document.getElementById("iconslist").value=items;
-              //alert("saving changes");
               document.forms[0].submit();
             });
           
@@ -909,10 +888,13 @@ function noValue(inValue){
             });
 
             <%
-            if(serverConfig.job_icons){
-              for(var ic=0;ic<serverConfig.job_icons.length;ic++) {%>
-                addItemToList("<%=serverConfig.job_icons[ic]%>");
-            <% }
+            if(serverConfig.job_icons && Array.isArray(serverConfig.job_icons)){
+              for(var ic=0;ic<serverConfig.job_icons.length;ic++) {
+                var icon = serverConfig.job_icons[ic];
+                if(icon && icon.trim() !== '') {%>
+                  addItemToList("<%=icon%>");
+            <%  }
+              }
             } %>
 
             function makeSortable() {

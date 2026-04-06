@@ -32,15 +32,15 @@ function getBackupItems() {
   return {
     serverConfig: {
       name: 'Server Configuration',
-      description: 'MQTT, SMTP, WebSocket, Notifications, Thresholds, Icons settings',
+      description: 'MQTT, SMTP, WebSocket, Notifications, Icons settings',
     },
     agentsConfig: {
       name: 'Agents Configuration',
       description: 'All registered agent configurations',
     },
     schedules: {
-      name: 'Backup Schedules',
-      description: 'All configured backup schedules',
+      name: 'Backup Schedules & Rules',
+      description: 'All configured backup schedules and metric-based rules',
     },
     jobHistory: {
       name: 'Job Execution History',
@@ -57,6 +57,10 @@ function getBackupItems() {
     agentHistory: {
       name: 'Agent Connection History',
       description: 'Historical logs of agent connections',
+    },
+    webhooks: {
+      name: 'Webhooks',
+      description: 'All configured webhooks and their API keys for external job triggers',
     },
     userAccounts: {
       name: 'User Accounts',
@@ -88,6 +92,7 @@ async function createBackup(options = {}) {
       orchestrationJobs = true,
       orchestrationExecutions = true,
       agentHistory = true,
+      webhooks = true,
       userAccounts = true,
     } = options;
 
@@ -122,6 +127,7 @@ async function createBackup(options = {}) {
           orchestrationJobs,
           orchestrationExecutions,
           agentHistory,
+          webhooks,
           userAccounts,
         });
 
@@ -169,6 +175,41 @@ async function addFilesToArchive(archive, options) {
         }
       } catch (err) {
         logger.debug('No agents config found in database');
+      }
+    }
+
+    // Add webhooks
+    if (options.webhooks) {
+      try {
+        const webhooksIndex = await db.getData('WEBHOOKS_INDEX');
+        if (webhooksIndex && Object.keys(webhooksIndex).length > 0) {
+          // Get all webhook data
+          const webhooksData = {};
+          for (const [jobId, webhookIds] of Object.entries(webhooksIndex)) {
+            webhooksData[jobId] = [];
+            for (const webhookId of webhookIds) {
+              const key = `WEBHOOK_DATA_${jobId}_${webhookId}`;
+              try {
+                const webhookData = await db.getData(key);
+                if (webhookData) {
+                  webhooksData[jobId].push(webhookData);
+                }
+              } catch (err) {
+                logger.debug(`Could not retrieve webhook data for ${key}`);
+              }
+            }
+          }
+          const backupData = {
+            index: webhooksIndex,
+            data: webhooksData,
+          };
+          archive.append(JSON.stringify(backupData, null, 2), {
+            name: `${backupDir}/webhooks.json`,
+          });
+          logger.debug('Added webhooks to backup');
+        }
+      } catch (err) {
+        logger.debug('No webhooks found in database');
       }
     }
 
@@ -282,6 +323,7 @@ async function addFilesToArchive(archive, options) {
         orchestrationExecutions: options.orchestrationExecutions,
         agentHistory: options.agentHistory,
         userAccounts: options.userAccounts,
+        webhooks: options.webhooks,
       },
     };
     archive.append(JSON.stringify(metadata, null, 2), {
@@ -433,6 +475,18 @@ async function restoreBackup(zipBuffer) {
         logger.info('User accounts restored');
       } else {
         results.warnings.push('User accounts not found in backup');
+      }
+    }
+
+    // Restore webhooks
+    if (metadata.items?.webhooks) {
+      const webhooksPath = path.join(backupPath, 'webhooks.json');
+      if (fsSync.existsSync(webhooksPath)) {
+        await restoreWebhooks(webhooksPath);
+        results.itemsRestored.push('Webhooks');
+        logger.info('Webhooks restored');
+      } else {
+        results.warnings.push('Webhooks not found in backup');
       }
     }
 
@@ -627,6 +681,37 @@ async function restoreOrchestrationExecutions(orchExecutionsPath) {
   // Save to database
   await db.putData('ORCHESTRATION_EXECUTIONS', orchExecutions);
   logger.info(`Restored orchestration execution history`);
+}
+
+/**
+ * Restore webhooks
+ * @private
+ */
+async function restoreWebhooks(webhooksPath) {
+  const content = await fs.readFile(webhooksPath, 'utf8');
+  const webhooksData = JSON.parse(content);
+
+  // Validate the structure has both index and data
+  if (!webhooksData || typeof webhooksData !== 'object' || !webhooksData.index || !webhooksData.data) {
+    throw new AppError('Invalid webhooks format', 400);
+  }
+
+  // Restore the webhooks index
+  await db.putData('WEBHOOKS_INDEX', webhooksData.index);
+  
+  // Restore individual webhook entries
+  let webhookCount = 0;
+  for (const jobId in webhooksData.data) {
+    const jobWebhooks = webhooksData.data[jobId];
+    for (const webhookId in jobWebhooks) {
+      const webhookData = jobWebhooks[webhookId];
+      const key = `WEBHOOK_DATA_${jobId}_${webhookId}`;
+      await db.putData(key, webhookData);
+      webhookCount++;
+    }
+  }
+  
+  logger.info(`Restored ${webhookCount} webhook configurations`);
 }
 
 module.exports = {

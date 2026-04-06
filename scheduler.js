@@ -882,9 +882,6 @@ async function scheduleJobs() {
   try {
     logger.debug("Scheduling jobs - clearing existing schedules");
     
-    // Clear legacy threshold job map
-    thresholdJobs.empty();
-
     // Clear existing rule polling intervals
     ruleIntervals.forEach((handle, name) => {
       clearInterval(handle);

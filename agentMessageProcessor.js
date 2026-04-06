@@ -97,11 +97,6 @@ async function processMessage(topic, message,protocol) {
         }
         
         agents.updateAgentStatus(obj.name, agentRunningCount > 0 ? "running" : "online", "Ping response returned", null, null, null, message, protocol);
-        if (agentRunningCount < agentConcurrencyLimit) {
-          thresholdJobs.checkExecuteThresholdJob(obj.name, message);
-        } else {
-          logger.info(`Agent [${obj.name}] at concurrency limit [${agentRunningCount}/${agentConcurrencyLimit}], skipping threshold check`);
-        }
   
       }
 

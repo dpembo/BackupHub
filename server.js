@@ -83,9 +83,6 @@ serverConfig = confighandler.initServerConfig({});
 serverConfig = confighandler.loadConfigJson("./data/server-config.json");
 serverConfig = confighandler.processServerConfig(serverConfig);
 
-thresholdJobs = require('./thresholdJobs.js');
-thresholdJobs.init(serverConfig);
-
 hist = require("./history.js");
 notificationData = require("./notificationData.js");
 
@@ -866,6 +863,9 @@ app.post('/initial-setup1.html', validateCsrf, User.isAuthenticated, async (req,
     return res.redirect('/register.html?not+authenticated');
   }
 
+  logger.warn(`[ICONS_RESET] INITIAL SETUP 1 CALLED - This will reset job_icons to defaults`);
+  logger.warn(`[ICONS_RESET] Previous icons: ${JSON.stringify(serverConfig.job_icons)}`);
+
   var { websocket,mqtt} = req.body;
   var mqttEnabled = "false";
 
@@ -884,6 +884,7 @@ app.post('/initial-setup1.html', validateCsrf, User.isAuthenticated, async (req,
     "power_settings_new","router","schedule","flag","grade","image","key","receipt","money"
   ]
 
+  logger.warn(`[ICONS_RESET] New icons set: ${serverConfig.job_icons.length} icons`);
   logger.debug(`websocket ${websocket}, MQTT ${mqtt}`)
   confighandler.saveServerConfig();
   
@@ -928,28 +929,27 @@ app.post('/settings.html', validateCsrf, User.isAuthenticated, async (req, res) 
     return res.redirect('/register.html?not+authenticated');
   }
 
+  logger.debug(`[SETTINGS_POST] Received form submission with ${Object.keys(req.body).length} fields`);
+  logger.debug(`[SETTINGS_POST] Request body keys: ${Object.keys(req.body).join(', ')}`);
+
   var { protocol, serverHostname, serverPort, timezone, notificationType,loglevel,
     websocketEnabled,websocketServer,websocketPort,
     mqttEnabled,mqttServer,mqttPort,mqttUsername,mqttPassword,
     smtpEnabled, smtpServer, smtpPort, smtpSecure, smtpUsername, smtpPassword,smtpEmailFrom,smtpEmailTo,
     webHookUrl,iconslist,
-    cpuThreshold, storageThreshold, cooldown,
     minDisconnectDurationForNotification,
     templateEnabled,templateServer,
     connectionEnabled,loginSuccessEnabled,loginFailEnabled,jobFailEnabled
     
   } = req.body;
 
+  logger.debug(`[SETTINGS_POST] iconslist extracted from req.body: "${iconslist}" (type: ${typeof iconslist})`);
+
   //Template
   if(templateEnabled=="on")templateEnabled="true";
   else templateEnabled="false";
   serverConfig.templates.enabled = templateEnabled;
   serverConfig.templates.repositoryUrl = templateServer;
-
-  //Threshold values
-  serverConfig.threshold.cpu_percent = cpuThreshold;
-  serverConfig.threshold.filesystem_percent = storageThreshold;
-  serverConfig.threshold.cooldown_mins = cooldown;
 
   //websocket Settings
   if(websocketEnabled=="on")websocketEnabled="true";
@@ -1004,10 +1004,43 @@ app.post('/settings.html', validateCsrf, User.isAuthenticated, async (req, res) 
   serverConfig.server.jobFailEnabled = jobFailEnabled === "on" ? "true" : "false";
   
 
-  //icons list
-  const iconsList = iconslist.split(',');
-  logger.debug("New iconsList:" + iconsList);
-  serverConfig.job_icons = iconsList;
+  //icons list - filter out empty strings and validate
+  logger.debug(`[ICONS_SAVE] Raw iconslist value: "${iconslist}" (type: ${typeof iconslist}, length: ${iconslist ? iconslist.length : 'undefined'})`);
+  
+  if (!iconslist || iconslist.trim() === '') {
+    logger.warn(`[ICONS_SAVE] ATTEMPT TO SAVE EMPTY ICONS - iconslist is empty or null`);
+    logger.warn(`[ICONS_SAVE] Request body keys: ${Object.keys(req.body).join(', ')}`);
+  }
+  
+  const iconsList = iconslist
+    .split(',')
+    .map(icon => icon.trim())
+    .filter(icon => icon.length > 0);
+  
+  logger.debug(`[ICONS_SAVE] After processing - found ${iconsList.length} valid icons: ${JSON.stringify(iconsList)}`);
+  
+  // If no valid icons provided, keep the existing ones or use defaults
+  if (iconsList.length === 0) {
+    logger.warn(`[ICONS_SAVE] NO VALID ICONS PROVIDED - keeping existing configuration`);
+    logger.warn(`[ICONS_SAVE] Current serverConfig.job_icons: ${JSON.stringify(serverConfig.job_icons)}`);
+    if (!serverConfig.job_icons || serverConfig.job_icons.length === 0) {
+      logger.warn(`[ICONS_SAVE] No existing icons found, restoring defaults`);
+      // Fallback to default icons if none exist
+      serverConfig.job_icons = [
+        "work","cloud","save","storage","dns","layers","schema","delete","hub","insert_drive_file",
+        "folder","folder_shared","folder_delete","folder_special","folder_zip","drive_folder_upload",
+        "topic","rule_folder","sd_card","archive","library_music","video_library","video_camera_back",
+        "photo_library","audio_file","password","account_box","build","restart_alt","start","stop_circle",
+        "settings","security","safety_check","sports_esports","dangerous","error","favorite","send",
+        "search","feed","shopping_cart","room_service","email","desktop_windows","camera_alt","laptop",
+        "power_settings_new","router","schedule","flag","grade","image","key","receipt","money"
+      ];
+      logger.warn(`[ICONS_SAVE] Defaults restored: ${serverConfig.job_icons.length} icons`);
+    }
+  } else {
+    logger.info(`[ICONS_SAVE] Successfully saved ${iconsList.length} valid icons`);
+    serverConfig.job_icons = iconsList;
+  }
 
   confighandler.saveServerConfig();
 

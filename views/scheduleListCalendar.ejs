@@ -85,6 +85,12 @@ function getTimeSlot(day, hour, minute,date) {
   day = date.getDay();
   for (var i = 0; i < schedules.length; i++) {
     var schedule = schedules[i];
+    
+    // Skip schedules with invalid scheduleTime
+    if (!schedule.scheduleTime) {
+      continue;
+    }
+    
     var [scheduleHour, scheduleMinute] = schedule.scheduleTime.split(':');
     scheduleHour = parseInt(scheduleHour);
     scheduleMinute = parseInt(scheduleMinute);
