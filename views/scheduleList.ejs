@@ -162,11 +162,16 @@ function addDateSuffix(date) {
     
   
   </script>
+  <style>
+    td {
+      vertical-align: top !important;
+    }
+  </style>
 </head>
 <body>
   <%- include('./partials/_header'); %>
   <div id="confirmationModal" class="modal">
-    <div class="modal-content">
+    <div class="modal-content">}
         <h4>Delete Job?</h4>
         <p>Are you sure you want to Delete the Scheduled Job<br><br><b>Job Name: </b><span id='inJobName'></span></p>
     </div>
@@ -228,11 +233,12 @@ function addDateSuffix(date) {
                 <td>
                   <!-- PERIOD / TRIGGER TYPE -->
                   <% var schedTypedisplay = schedules[i].scheduleType;
+                     var nRun = schedules[i].nextRunDate;
                      var effectiveTrigger = schedules[i].triggerType || (
                        (schedTypedisplay === 'daily' || schedTypedisplay === 'weekly' || schedTypedisplay === 'monthly') ? 'clock' : 'legacy_threshold'
                      );
                      if (effectiveTrigger === 'rule') schedTypedisplay = 'monitor_heart';
-                     else if(schedTypedisplay=='storagethreshold' || schedTypedisplay=='cputhreshold') schedTypedisplay='data_thresholding';
+                     else if(nRun=='Webhook Trigger') schedTypedisplay='cloud_queue';
                      else if(schedTypedisplay=='daily') schedTypedisplay='calendar_month';
                      else if(schedTypedisplay=='weekly') schedTypedisplay='date_range';
                      else if(schedTypedisplay=='monthly') schedTypedisplay='today';
