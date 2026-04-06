@@ -44,6 +44,85 @@ function add(item) {
     updateDb();
 }
 
+/** Mark an execution as re-run by searching only classic job history */
+function markAsRerunDirect(executionId) {
+    if (!executionId) {
+        logger.warn(`markAsRerunDirect called with no executionId`);
+        return false;
+    }
+    
+    logger.info(`Directly marking classic job execution with executionId [${executionId}] as re-run`);
+    
+    // Search classic job history
+    for (let i = historyItems.length - 1; i >= 0; i--) {
+        const item = historyItems[i];
+        
+        if (item.executionId === executionId) {
+            item.wasRerunAt = new Date().toISOString();
+            logger.info(`Marked classic job history item at index [${i}] (${item.jobName}) with executionId [${executionId}] as re-run at [${item.wasRerunAt}]`);
+            updateDb();
+            return true;
+        }
+    }
+    
+    logger.warn(`Could not find classic job history item with executionId [${executionId}] to mark as rerun`);
+    return false;
+}
+
+/** Mark an existing execution as having been re-run */
+async function markAsRerun(executionId) {
+    if (!executionId) {
+        logger.warn(`markAsRerun called with no executionId`);
+        return false;
+    }
+    
+    logger.info(`Marking execution with executionId [${executionId}] as having been re-run`);
+    
+    // First, search classic job history
+    for (let i = historyItems.length - 1; i >= 0; i--) {
+        const item = historyItems[i];
+        
+        if (item.executionId === executionId) {
+            item.wasRerunAt = new Date().toISOString();
+            logger.info(`Marked classic job history item at index [${i}] (${item.jobName}) with executionId [${executionId}] as re-run at [${item.wasRerunAt}]`);
+            updateDb();
+            return true;
+        }
+    }
+    
+    // Search orchestration executions
+    try {
+        const db = require('./db.js');
+        const orchestrationExecutions = await db.getData('ORCHESTRATION_EXECUTIONS').catch(() => ({}));
+        
+        logger.debug(`Searching ${Object.keys(orchestrationExecutions).length} orchestration jobs for executionId [${executionId}]`);
+        
+        // Search all orchestration jobs
+        for (const jobId in orchestrationExecutions) {
+            const executions = orchestrationExecutions[jobId];
+            if (!Array.isArray(executions)) continue;
+            
+            // Search backwards through executions
+            for (let i = executions.length - 1; i >= 0; i--) {
+                const exec = executions[i];
+                if (exec.executionId === executionId) {
+                    exec.wasRerunAt = new Date().toISOString();
+                    logger.info(`Marked orchestration execution [${jobId}] with executionId [${executionId}] as re-run at [${exec.wasRerunAt}]`);
+                    await db.putData('ORCHESTRATION_EXECUTIONS', orchestrationExecutions);
+                    return true;
+                }
+            }
+        }
+        
+        logger.warn(`Could not find execution (classic or orchestration) with executionId [${executionId}] to mark as rerun`);
+        return false;
+    } catch (err) {
+        logger.error(`Error searching orchestration executions: ${err.message}`);
+        logger.warn(`Could not find history item with executionId [${executionId}] to mark as rerun`);
+        return false;
+    }
+}
+
 async function updateDb() {
     logger.info("Updating History Records");
     try {
@@ -75,7 +154,7 @@ function searchItemWithName(searchTerm)
     return null;
 }
 
-function createHistoryItem(jobName, runDate, returnCode, runTime, log, isManual, executionId = null) {
+function createHistoryItem(jobName, runDate, returnCode, runTime, log, isManual, executionId = null, rerunFrom = null) {
     logger.debug("Creating history item [" + jobName + "]");
     if(isManual===undefined)isManual=false;
     var item = {};
@@ -87,6 +166,9 @@ function createHistoryItem(jobName, runDate, returnCode, runTime, log, isManual,
     item.manual = isManual;
     if (executionId) {
       item.executionId = executionId;  // NEW: Orchestration execution ID for grouping
+    }
+    if (rerunFrom) {
+      item.rerunFrom = rerunFrom;  // NEW: Track when this job was re-run from a previous failed execution
     }
     logger.debug("History Item:\n" + JSON.stringify(item));
     return item;
@@ -497,6 +579,10 @@ async function getItemsGroupedByOrchestration() {
                 returnCode = (execution.finalStatus === 'success') ? 0 : 1;
                 // Use manual flag from execution
                 manual = execution.manual || false;
+                // Copy wasRerunAt flag from execution if present
+                if (execution.wasRerunAt) {
+                  data.parent.wasRerunAt = execution.wasRerunAt;
+                }
               } else {
                 // Fallback: calculate from children if execution not found
                 returnCode = nodeItems.some(n => n.returnCode !== 0) ? 1 : 0;
@@ -540,4 +626,4 @@ async function clearHistory() {
     }
 }
 
-module.exports = { init, add, getItems, getItemsUsingTZ, getItem, searchItemWithName, createHistoryItem,getChartDataSet,getAverageRuntime, getLastRun,getSuccessPercentage, getOrchestrationSuccessPercentage, getTodaysRun, getItemsGroupedByOrchestration, clearHistory };
+module.exports = { init, add, getItems, getItemsUsingTZ, getItem, searchItemWithName, createHistoryItem, markAsRerun, markAsRerunDirect, getChartDataSet, getAverageRuntime, getLastRun, getSuccessPercentage, getOrchestrationSuccessPercentage, getTodaysRun, getItemsGroupedByOrchestration, clearHistory };

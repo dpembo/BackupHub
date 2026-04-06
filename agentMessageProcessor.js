@@ -97,11 +97,6 @@ async function processMessage(topic, message,protocol) {
         }
         
         agents.updateAgentStatus(obj.name, agentRunningCount > 0 ? "running" : "online", "Ping response returned", null, null, null, message, protocol);
-        if (agentRunningCount < agentConcurrencyLimit) {
-          thresholdJobs.checkExecuteThresholdJob(obj.name, message);
-        } else {
-          logger.info(`Agent [${obj.name}] at concurrency limit [${agentRunningCount}/${agentConcurrencyLimit}], skipping threshold check`);
-        }
   
       }
 
@@ -590,7 +585,7 @@ async function processMessage(topic, message,protocol) {
     
     // Calculate actual runtime in seconds from startDate to now
     var runTime = Math.round((Date.now() - new Date(startDate).getTime()) / 1000);
-    var histObj = hist.createHistoryItem(obj.jobName,startDate,returnCode,runTime,log,obj.manual,executionId);
+    var histObj = hist.createHistoryItem(obj.jobName,startDate,returnCode,runTime,log,obj.manual,executionId,obj.rerunFrom);
     logger.debug("Adding History obj: " + JSON.stringify(histObj));
     hist.add(histObj);
 

@@ -17,7 +17,7 @@ function getCurrentStack(skipFrames = 1) {
 }
 
 
-function sendCommand(agent_id, topic, command, commandParams, jobName, commsType, manual, executionId, triggerContext = null, contextEnvVars = {}){
+function sendCommand(agent_id, topic, command, commandParams, jobName, commsType, manual, executionId, triggerContext = null, contextEnvVars = {}, rerunFrom = null){
 
     if(manual===undefined||manual===null)manual=false;
 
@@ -35,7 +35,8 @@ function sendCommand(agent_id, topic, command, commandParams, jobName, commsType
         jobName: jobName,
         executionId: executionId || null,  // Include execution ID in message
         triggerContext: triggerContext || null,  // Include trigger context for orchestrations/scripts
-        contextEnvVars: contextEnvVars || {}  // Environment variables for script injection
+        contextEnvVars: contextEnvVars || {},  // Environment variables for script injection
+        rerunFrom: rerunFrom || null  // Track if this is a rerun of a failed job
     }
     var token = passman.createJWTToken(message,1);
 

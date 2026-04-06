@@ -421,28 +421,73 @@ tbody tr.orch-expanded td {
     });
   }
 
-  function runOrchestrationFromHistory(jobId) {
+  function runClassicJobFromHistory(jobname, executionId) {
+    // First, mark the original execution as having been re-run
     $.ajax({
-      url: `/rest/orchestration/jobs/${encodeURIComponent(jobId)}/execute`,
+      url: `/rest/jobs/executions/${encodeURIComponent(executionId)}/markAsRerun`,
       type: 'POST',
       headers: {
         'X-CSRF-Token': $('meta[name="csrf-token"]').attr('content') || document.querySelector('input[name="_csrf"]')?.value
       },
       success: function(data) {
-        if (data.success && data.executionId) {
-          M.toast({ html: 'Orchestration started' });
-          // Wait a moment then scroll back to top to see it in running items
-          setTimeout(() => {
-            window.scrollTo(0, 0);
-            fetchRunList('runList');
-          }, 500);
+        if (data.success) {
+          console.log('Marked classic job execution as re-run');
+          // Now run the job
+          window.location.href = `/runSchedule.html?jobname=${encodeURIComponent(jobname)}&rerunFrom=${encodeURIComponent(executionId)}&redir=${encodeURIComponent('/history.html')}`;
         } else {
-          M.toast({ html: 'Failed to start orchestration execution' });
+          M.toast({ html: 'Failed to mark as re-run' });
         }
       },
       error: function(xhr, status, error) {
-        console.error('Failed to execute orchestration:', error);
-        M.toast({ html: 'Failed to execute orchestration' });
+        console.error('Failed to mark as re-run:', error);
+        M.toast({ html: 'Failed to mark as re-run' });
+      }
+    });
+  }
+
+  function runOrchestrationFromHistory(jobId, executionId) {
+    // First, mark the original execution as having been re-run
+    $.ajax({
+      url: `/rest/orchestration/jobs/${encodeURIComponent(jobId)}/executions/${encodeURIComponent(executionId)}/markAsRerun`,
+      type: 'POST',
+      headers: {
+        'X-CSRF-Token': $('meta[name="csrf-token"]').attr('content') || document.querySelector('input[name="_csrf"]')?.value
+      },
+      success: function(data) {
+        if (data.success) {
+          console.log('Marked orchestration execution as re-run');
+          // Now start the actual re-run execution
+          $.ajax({
+            url: `/rest/orchestration/jobs/${encodeURIComponent(jobId)}/execute`,
+            type: 'POST',
+            headers: {
+              'X-CSRF-Token': $('meta[name="csrf-token"]').attr('content') || document.querySelector('input[name="_csrf"]')?.value
+            },
+            data: JSON.stringify({ rerunFrom: executionId }),
+            contentType: 'application/json',
+            success: function(execData) {
+              if (execData.success && execData.executionId) {
+                M.toast({ html: 'Re-run started' });
+                // Reload history to show updated UI
+                setTimeout(() => {
+                  location.reload();
+                }, 1000);
+              } else {
+                M.toast({ html: 'Failed to start execution' });
+              }
+            },
+            error: function(xhr, status, error) {
+              console.error('Failed to execute orchestration:', error);
+              M.toast({ html: 'Failed to execute orchestration' });
+            }
+          });
+        } else {
+          M.toast({ html: 'Failed to mark as re-run' });
+        }
+      },
+      error: function(xhr, status, error) {
+        console.error('Failed to mark as re-run:', error);
+        M.toast({ html: 'Failed to mark as re-run' });
       }
     });
   }

@@ -83,9 +83,6 @@ serverConfig = confighandler.initServerConfig({});
 serverConfig = confighandler.loadConfigJson("./data/server-config.json");
 serverConfig = confighandler.processServerConfig(serverConfig);
 
-thresholdJobs = require('./thresholdJobs.js');
-thresholdJobs.init(serverConfig);
-
 hist = require("./history.js");
 notificationData = require("./notificationData.js");
 
@@ -866,6 +863,9 @@ app.post('/initial-setup1.html', validateCsrf, User.isAuthenticated, async (req,
     return res.redirect('/register.html?not+authenticated');
   }
 
+  logger.warn(`[ICONS_RESET] INITIAL SETUP 1 CALLED - This will reset job_icons to defaults`);
+  logger.warn(`[ICONS_RESET] Previous icons: ${JSON.stringify(serverConfig.job_icons)}`);
+
   var { websocket,mqtt} = req.body;
   var mqttEnabled = "false";
 
@@ -884,6 +884,7 @@ app.post('/initial-setup1.html', validateCsrf, User.isAuthenticated, async (req,
     "power_settings_new","router","schedule","flag","grade","image","key","receipt","money"
   ]
 
+  logger.warn(`[ICONS_RESET] New icons set: ${serverConfig.job_icons.length} icons`);
   logger.debug(`websocket ${websocket}, MQTT ${mqtt}`)
   confighandler.saveServerConfig();
   
@@ -928,28 +929,27 @@ app.post('/settings.html', validateCsrf, User.isAuthenticated, async (req, res) 
     return res.redirect('/register.html?not+authenticated');
   }
 
+  logger.debug(`[SETTINGS_POST] Received form submission with ${Object.keys(req.body).length} fields`);
+  logger.debug(`[SETTINGS_POST] Request body keys: ${Object.keys(req.body).join(', ')}`);
+
   var { protocol, serverHostname, serverPort, timezone, notificationType,loglevel,
     websocketEnabled,websocketServer,websocketPort,
     mqttEnabled,mqttServer,mqttPort,mqttUsername,mqttPassword,
     smtpEnabled, smtpServer, smtpPort, smtpSecure, smtpUsername, smtpPassword,smtpEmailFrom,smtpEmailTo,
     webHookUrl,iconslist,
-    cpuThreshold, storageThreshold, cooldown,
     minDisconnectDurationForNotification,
     templateEnabled,templateServer,
     connectionEnabled,loginSuccessEnabled,loginFailEnabled,jobFailEnabled
     
   } = req.body;
 
+  logger.debug(`[SETTINGS_POST] iconslist extracted from req.body: "${iconslist}" (type: ${typeof iconslist})`);
+
   //Template
   if(templateEnabled=="on")templateEnabled="true";
   else templateEnabled="false";
   serverConfig.templates.enabled = templateEnabled;
   serverConfig.templates.repositoryUrl = templateServer;
-
-  //Threshold values
-  serverConfig.threshold.cpu_percent = cpuThreshold;
-  serverConfig.threshold.filesystem_percent = storageThreshold;
-  serverConfig.threshold.cooldown_mins = cooldown;
 
   //websocket Settings
   if(websocketEnabled=="on")websocketEnabled="true";
@@ -1004,10 +1004,43 @@ app.post('/settings.html', validateCsrf, User.isAuthenticated, async (req, res) 
   serverConfig.server.jobFailEnabled = jobFailEnabled === "on" ? "true" : "false";
   
 
-  //icons list
-  const iconsList = iconslist.split(',');
-  logger.debug("New iconsList:" + iconsList);
-  serverConfig.job_icons = iconsList;
+  //icons list - filter out empty strings and validate
+  logger.debug(`[ICONS_SAVE] Raw iconslist value: "${iconslist}" (type: ${typeof iconslist}, length: ${iconslist ? iconslist.length : 'undefined'})`);
+  
+  if (!iconslist || iconslist.trim() === '') {
+    logger.warn(`[ICONS_SAVE] ATTEMPT TO SAVE EMPTY ICONS - iconslist is empty or null`);
+    logger.warn(`[ICONS_SAVE] Request body keys: ${Object.keys(req.body).join(', ')}`);
+  }
+  
+  const iconsList = iconslist
+    .split(',')
+    .map(icon => icon.trim())
+    .filter(icon => icon.length > 0);
+  
+  logger.debug(`[ICONS_SAVE] After processing - found ${iconsList.length} valid icons: ${JSON.stringify(iconsList)}`);
+  
+  // If no valid icons provided, keep the existing ones or use defaults
+  if (iconsList.length === 0) {
+    logger.warn(`[ICONS_SAVE] NO VALID ICONS PROVIDED - keeping existing configuration`);
+    logger.warn(`[ICONS_SAVE] Current serverConfig.job_icons: ${JSON.stringify(serverConfig.job_icons)}`);
+    if (!serverConfig.job_icons || serverConfig.job_icons.length === 0) {
+      logger.warn(`[ICONS_SAVE] No existing icons found, restoring defaults`);
+      // Fallback to default icons if none exist
+      serverConfig.job_icons = [
+        "work","cloud","save","storage","dns","layers","schema","delete","hub","insert_drive_file",
+        "folder","folder_shared","folder_delete","folder_special","folder_zip","drive_folder_upload",
+        "topic","rule_folder","sd_card","archive","library_music","video_library","video_camera_back",
+        "photo_library","audio_file","password","account_box","build","restart_alt","start","stop_circle",
+        "settings","security","safety_check","sports_esports","dangerous","error","favorite","send",
+        "search","feed","shopping_cart","room_service","email","desktop_windows","camera_alt","laptop",
+        "power_settings_new","router","schedule","flag","grade","image","key","receipt","money"
+      ];
+      logger.warn(`[ICONS_SAVE] Defaults restored: ${serverConfig.job_icons.length} icons`);
+    }
+  } else {
+    logger.info(`[ICONS_SAVE] Successfully saved ${iconsList.length} valid icons`);
+    serverConfig.job_icons = iconsList;
+  }
 
   confighandler.saveServerConfig();
 
@@ -2366,7 +2399,8 @@ app.get('/runSchedule.html',User.isAuthenticated, asyncHandler(async (req, res) 
   var index=req.query.index;
   var jobname=req.query.jobname;
   var redir=req.query.redir;
-  logger.info(`Running Schedule - Index: ${index ?? 'undefined'}, Jobname: ${jobname ?? 'undefined'}`);
+  var rerunFrom=req.query.rerunFrom;  // NEW: Track which failed execution prompted this re-run
+  logger.info(`Running Schedule - Index: ${index ?? 'undefined'}, Jobname: ${jobname ?? 'undefined'}, RerunFrom: ${rerunFrom ?? 'undefined'}`);
   
   if(redir===undefined || redir === null || redir.length<=0)redir="/scheduleInfo.html?index=" + index + "&refresh=3";
   
@@ -2413,7 +2447,8 @@ app.get('/runSchedule.html',User.isAuthenticated, asyncHandler(async (req, res) 
           errors: [],
           finalStatus: null,
           manual: true,
-          isStub: true  // Mark as temporary stub execution
+          isStub: true,  // Mark as temporary stub execution
+          rerunFrom: rerunFrom || null  // Track if this is a rerun
         };
         
         // Cache the stub in-memory (not in permanent history)
@@ -2447,11 +2482,15 @@ app.get('/runSchedule.html',User.isAuthenticated, asyncHandler(async (req, res) 
         // Pass executionId so engine uses the same ID for websocket events
         // Pass onNodeComplete callback to update cache as nodes complete
         // Don't await - redirect immediately so user sees monitor view right away
-        orchestration.executeJob(orchestrationId, true, executionId, onNodeComplete).then(async (executionLog) => {
+        orchestration.executeJob(orchestrationId, true, executionId, onNodeComplete, null, rerunFrom).then(async (executionLog) => {
           updateInProgressExecution(orchestrationId, executionId, executionLog);
           // Execute in background, save results when complete
           try {
             await orchestration.saveExecutionResult(executionLog);
+            // If this was a re-run, mark the original execution as having been re-run
+            if (rerunFrom) {
+              await hist.markAsRerun(rerunFrom);
+            }
           } catch (saveErr) {
             logger.error(`Failed to save execution result for orchestration [${orchestrationId}]: ${saveErr.message}`);
           }
@@ -2515,13 +2554,17 @@ app.get('/runSchedule.html',User.isAuthenticated, asyncHandler(async (req, res) 
     
     // Only attempt to run if no pre-check errors
     if (!errorMessage) {
-      logger.info(`About to call manualJobRun with index=${index}, jobname=${jobname}`);
-      var result = await scheduler.manualJobRun(index,jobname);
+      logger.info(`About to call manualJobRun with index=${index}, jobname=${jobname}, rerunFrom=${rerunFrom ?? 'undefined'}`);
+      var result = await scheduler.manualJobRun(index, jobname, rerunFrom);
       logger.info(`Job execution result: ${JSON.stringify(result)}`)
       if(result && result.status !== "ok") {
         errorMessage = "Job execution failed";
         logger.error(`Classic job execution failed - result: ${JSON.stringify(result)}`);
       } else if (result && result.executionId) {
+        // If this is a re-run, mark the original execution as having been re-run
+        if (rerunFrom) {
+          await hist.markAsRerun(rerunFrom);
+        }
         logger.info(`Adding executionId to URL: ${result.executionId}`);
         // Add executionId to redirect URL for classic jobs
         redir += (redir.includes('?') ? '&' : '?') + 'executionId=' + encodeURIComponent(result.executionId);
@@ -3200,12 +3243,71 @@ app.delete('/rest/orchestration/jobs/:jobId', User.isAuthenticated, asyncHandler
 }));
 
 /**
+ * Mark a classic job execution as having been re-run
+ */
+app.post('/rest/jobs/executions/:executionId/markAsRerun', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const { executionId } = req.params;
+  
+  logger.info(`Marking classic job execution [${executionId}] as re-run`);
+  
+  try {
+    // Get history and mark the execution as re-run
+    const hist = require('./history.js');
+    const success = await hist.markAsRerunDirect(executionId);
+    
+    if (success) {
+      res.json({ success: true });
+    } else {
+      res.status(404).json({ success: false, message: `Execution [${executionId}] not found` });
+    }
+  } catch (err) {
+    logger.error(`Error marking job as re-run: ${err.message}`);
+    res.status(500).json({ success: false, message: err.message });
+  }
+}));
+
+/**
+ * Mark an orchestration execution as having been re-run
+ */
+app.post('/rest/orchestration/jobs/:jobId/executions/:executionId/markAsRerun', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const { jobId, executionId } = req.params;
+  
+  logger.info(`Marking orchestration execution [${jobId}] [${executionId}] as re-run`);
+  
+  try {
+    const executions = await db.getData('ORCHESTRATION_EXECUTIONS').catch(() => ({}));
+    
+    if (!executions[jobId]) {
+      return res.status(404).json({ success: false, message: `Orchestration [${jobId}] not found` });
+    }
+    
+    const execution = executions[jobId].find(e => e.executionId === executionId);
+    if (!execution) {
+      return res.status(404).json({ success: false, message: `Execution [${executionId}] not found` });
+    }
+    
+    // Mark as re-run with current timestamp
+    execution.wasRerunAt = new Date().toISOString();
+    logger.info(`Marked execution [${executionId}] with wasRerunAt [${execution.wasRerunAt}]`);
+    
+    // Save back to database
+    await db.putData('ORCHESTRATION_EXECUTIONS', executions);
+    
+    res.json({ success: true, wasRerunAt: execution.wasRerunAt });
+  } catch (err) {
+    logger.error(`Error marking orchestration as re-run: ${err.message}`);
+    res.status(500).json({ success: false, message: err.message });
+  }
+}));
+
+/**
  * Execute an orchestration job
  */
 app.post('/rest/orchestration/jobs/:jobId/execute', User.isAuthenticated, asyncHandler(async (req, res) => {
   const { jobId } = req.params;
+  const { rerunFrom } = req.body;  // NEW: Track which failed execution prompted this re-run
   
-  logger.info(`Executing orchestration job [${jobId}]`);
+  logger.info(`Executing orchestration job [${jobId}]` + (rerunFrom ? ` [rerunFrom: ${rerunFrom}]` : ""));
   
   // Generate execution ID immediately (same as orchestrationEngine does)
   const crypto = require('crypto');
@@ -3239,7 +3341,8 @@ app.post('/rest/orchestration/jobs/:jobId/execute', User.isAuthenticated, asyncH
     errors: [],
     finalStatus: null,
     manual: true,
-    isStub: true  // Mark as temporary stub execution
+    isStub: true,  // Mark as temporary stub execution
+    rerunFrom: rerunFrom || null  // NEW: Track if this is a rerun
   };
   
   // Cache the stub in-memory (not in permanent history)
@@ -3262,11 +3365,15 @@ app.post('/rest/orchestration/jobs/:jobId/execute', User.isAuthenticated, asyncH
   // Pass executionId so engine uses the same ID for websocket events
   // Pass onNodeComplete callback to update cache as nodes complete
   // Don't await - return immediately so client redirects right away
-  orchestration.executeJob(jobId, true, executionId, onNodeComplete).then(async (executionLog) => {
+  orchestration.executeJob(jobId, true, executionId, onNodeComplete, null, rerunFrom).then(async (executionLog) => {
     updateInProgressExecution(jobId, executionId, executionLog);
     // Execute in background, save results when complete
     try {
       await orchestration.saveExecutionResult(executionLog);
+      // If this was a re-run, mark the original execution as having been re-run
+      if (rerunFrom) {
+        await hist.markAsRerun(rerunFrom);
+      }
     } catch (saveErr) {
       logger.error(`Failed to save execution result for orchestration [${jobId}]: ${saveErr.message}`);
     }
