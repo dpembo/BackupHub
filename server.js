@@ -212,8 +212,6 @@ const port = serverConfig.server.port;
 
 
 //------------------------------------------------------------------
-var scripts=[];
-var scriptsDesc = [];
 
 function maskPasswords(jsonStr) {
   try {
@@ -246,41 +244,122 @@ function maskPasswords(jsonStr) {
   }
 }
 
-function extractFirstLineFromFile(fileName) {
+function extractScriptMetadata(fileName) {
   try {
-    //console.log("Extracting desc from: " + fileName);
-    const scriptContent = fs.readFileSync("./scripts/" + fileName, 'utf8');
-    const lines = scriptContent.split('\n');
-    let capture = false;
+    const fullPath = path.join("./scripts", fileName);
 
-    for (const line of lines) {
-      if (line.trim() === '#start-params') {
-        capture = true;
-      } else if (line.trim() === '#end-params') {
-        capture = false;
-      } else if (capture && line.trim().startsWith('#')) {
-        // Remove the leading '#' and return the first line after the start marker
-        //console.log("Found: " + line);
-        return " - " + line.trim().substring(1).replace(/<[^>]*>/g, '');
+    // --- Validate file exists ---
+    if (!fs.existsSync(fullPath)) {
+      return {
+        success: false,
+        error: `File not found: ${fileName}`
+      };
+    }
+
+    // --- Get file metadata ---
+    const stats = fs.statSync(fullPath);
+    const lastUpdated = stats.mtime;
+
+    // --- Read file content ---
+    const scriptContent = fs.readFileSync(fullPath, "utf8");
+    const lines = scriptContent.split("\n");
+
+    let inBlock = false;
+    let description = null;
+    let parameters = [];
+
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+
+      if (line === "#start-params") {
+        inBlock = true;
+        continue;
+      }
+      if (line === "#end-params") {
+        inBlock = false;
+        break;
+      }
+
+      if (inBlock && line.startsWith("#")) {
+        const content = line.substring(1).trim(); // remove leading '#'
+
+        if (!description) {
+          // First line = description (strip HTML)
+          description = content.replace(/<[^>]*>/g, "");
+        } else {
+          // Remaining lines = parameters (keep HTML)
+          parameters.push(content);
+        }
       }
     }
 
-    // Return an empty string if the start marker is not found
-    return '';
-  } catch (error) {
-    console.error('Error reading file:', error);
-    return '';
+    // --- If no metadata block found ---
+    if (!description) {
+      return {
+        success: true,
+        error: `No metadata block (#start-params ... #end-params) found in ${fileName}`,
+        data: {
+          filename: fileName,
+          lastUpdated,
+          metaDescription: "",
+          metaParameters: ""
+        }
+      };
+    }
+
+    return {
+      success: true,
+      error: null,
+      data: {
+        filename: fileName,
+        lastUpdated,
+        metaDescription: description,
+        metaParameters: parameters.join("\n")
+      }
+    };
+
+  } catch (err) {
+    return {
+      success: false,
+      error: `Failed to parse ${fileName}: ${err.message}`
+    };
   }
 }
 
+// function extractFirstLineFromFile(fileName) {
+//   try {
+//     //console.log("Extracting desc from: " + fileName);
+//     const scriptContent = fs.readFileSync("./scripts/" + fileName, 'utf8');
+//     const lines = scriptContent.split('\n');
+//     let capture = false;
+
+//     for (const line of lines) {
+//       if (line.trim() === '#start-params') {
+//         capture = true;
+//       } else if (line.trim() === '#end-params') {
+//         capture = false;
+//       } else if (capture && line.trim().startsWith('#')) {
+//         // Remove the leading '#' and return the first line after the start marker
+//         //console.log("Found: " + line);
+//         return " - " + line.trim().substring(1).replace(/<[^>]*>/g, '');
+//       }
+//     }
+
+//     // Return an empty string if the start marker is not found
+//     return '';
+//   } catch (error) {
+//     console.error('Error reading file:', error);
+//     return '';
+//   }
+// }
+
 function refreshScripts()
 {
-  scripts=[];
-  scriptsDesc=[];
+  scriptsMeta=[];
   fs.readdirSync("./scripts/").forEach(file => {
-    scripts.push(file);
-    scriptsDesc.push(extractFirstLineFromFile(file));
+    scriptsMeta.push(extractScriptMetadata(file));
   });
+  return scriptsMeta;
 }
 
 //------------------------------------------------------------------
@@ -292,73 +371,73 @@ function getDbKey(logEvent,type)
 }
 
  
-//------------------------------------------------------------------
-/**
- * Executes a shell command
- * @param {} cmd 
- * @returns 
- */
-function execShellCommand(cmd) {
-  logger.info("Executing Command");
-  try {
-    code = execSync(cmd).toString();
-  }
-  catch (error) {
-    code = 1;
-    logger.error("Errored executing command",error);
-  }
-  return code;
-}
+// //------------------------------------------------------------------
+// /**
+//  * Executes a shell command
+//  * @param {} cmd 
+//  * @returns 
+//  */
+// function execShellCommand(cmd) {
+//   logger.info("Executing Command");
+//   try {
+//     code = execSync(cmd).toString();
+//   }
+//   catch (error) {
+//     code = 1;
+//     logger.error("Errored executing command",error);
+//   }
+//   return code;
+// }
 
-//------------------------------------------------------------------
-/**
- * Calculates a time differente beween start time and now
- * @param {} startTime 
- * @returns 
- */
-function getRuntime(startTime) {
-  var now = new Date();
-  var stYYYY = startTime.substr(0, 4);
-  var stMM = startTime.substr(5, 2) - 1;
-  var stDD = startTime.substr(8, 2);
-  var stHour = startTime.substr(11, 2);
-  var stMin = startTime.substr(14, 2);
-  var stSec = startTime.substr(17, 2);
+// //------------------------------------------------------------------
+// /**
+//  * Calculates a time differente beween start time and now
+//  * @param {} startTime 
+//  * @returns 
+//  */
+// function getRuntime(startTime) {
+//   var now = new Date();
+//   var stYYYY = startTime.substr(0, 4);
+//   var stMM = startTime.substr(5, 2) - 1;
+//   var stDD = startTime.substr(8, 2);
+//   var stHour = startTime.substr(11, 2);
+//   var stMin = startTime.substr(14, 2);
+//   var stSec = startTime.substr(17, 2);
 
-  var startDate = new Date(stYYYY, stMM, stDD, stHour, stMin, stSec);
-  secs = Math.round((now.getTime() - startDate.getTime()) / 1000);
-  return secs;
-}
+//   var startDate = new Date(stYYYY, stMM, stDD, stHour, stMin, stSec);
+//   secs = Math.round((now.getTime() - startDate.getTime()) / 1000);
+//   return secs;
+// }
 
-function calcRunPercent(runtime, etaRuntime) {
-  runtime = parseInt(runtime);
-  etaRuntime = parseInt(etaRuntime);
-  var pct = (runtime / parseInt(etaRuntime)) * 100;
-  pct = Math.round(pct);
-  return pct;
-}
+// function calcRunPercent(runtime, etaRuntime) {
+//   runtime = parseInt(runtime);
+//   etaRuntime = parseInt(etaRuntime);
+//   var pct = (runtime / parseInt(etaRuntime)) * 100;
+//   pct = Math.round(pct);
+//   return pct;
+// }
 
-/**
- * Function to sort alphabetically an array of objects by some specific key.
- * 
- * @param {String} property Key of the object to sort.
- */
-function dynamicSort(property) {
-  var sortOrder = 1;
+// /**
+//  * Function to sort alphabetically an array of objects by some specific key.
+//  * 
+//  * @param {String} property Key of the object to sort.
+//  */
+// function dynamicSort(property) {
+//   var sortOrder = 1;
 
-  if (property[0] === "-") {
-    sortOrder = -1;
-    property = property.substr(1);
-  }
+//   if (property[0] === "-") {
+//     sortOrder = -1;
+//     property = property.substr(1);
+//   }
 
-  return function (a, b) {
-    if (sortOrder == -1) {
-      return b[property].localeCompare(a[property]);
-    } else {
-      return a[property].localeCompare(b[property]);
-    }
-  }
-}
+//   return function (a, b) {
+//     if (sortOrder == -1) {
+//       return b[property].localeCompare(a[property]);
+//     } else {
+//       return a[property].localeCompare(b[property]);
+//     }
+//   }
+// }
 
 async function getSchedulerData(index, executionId = null)
 {
@@ -556,9 +635,9 @@ const validateCsrf = (req, res, next) => {
 // ============================================================================
 // Generate a token for sensitive data APIs on first startup
 const crypto = require('crypto');
-const { getJobVersion } = require("./orchestration.js");
+//const { getJobVersion } = require("./orchestration.js");
 let sensitiveDataToken = null;
-
+ 
 function initializeSensitiveDataToken() {
   if (!sensitiveDataToken) {
     sensitiveDataToken = crypto.randomBytes(32).toString('hex');
@@ -2069,6 +2148,74 @@ app.get('/rest/script/:script', User.isAuthenticated, (req, res) => {
   });
 });
 
+app.get('/rest/jobs-for-script/:scriptName', User.isAuthenticated, asyncHandler(async (req, res) => {
+  try {
+    const scriptName = req.params.scriptName;
+    
+    // Get all schedules
+    const allSchedules = scheduler.getSchedules();
+    
+    // Filter schedules that use this script (classic mode)
+    const jobsUsingScript = allSchedules.filter(schedule => {
+      if (schedule.scheduleMode === 'classic' && schedule.command === scriptName) {
+        return true;
+      }
+      return false;
+    });
+
+    // Format scheduled jobs
+    const formattedJobs = jobsUsingScript.map(job => ({
+      jobName: job.jobName,
+      description: job.description || '',
+      type: 'Single Script',
+      nextRunDate: job.nextRunDate || 'n/a',
+      triggerType: job.triggerType || 'clock'
+    }));
+
+    // Now check orchestrations for this script
+    try {
+      const allOrchestrations = await orchestration.getAllJobs();
+      
+      Object.values(allOrchestrations).forEach(orchJob => {
+        // Get the current version of the orchestration
+        const currentVersion = orchJob.versions[orchJob.versions.length - 1];
+        if (currentVersion && currentVersion.nodes) {
+          // Check if any node uses this script
+          const usesScript = currentVersion.nodes.some(node => 
+            node.data && node.data.script === scriptName
+          );
+          
+          if (usesScript) {
+            formattedJobs.push({
+              jobName: orchJob.name,
+              description: orchJob.description || '',
+              type: 'Orchestration',
+              nextRunDate: 'Manual/Scheduled',
+              triggerType: 'orchestration'
+            });
+          }
+        }
+      });
+    } catch (err) {
+      logger.warn('Could not search orchestrations for script usage:', err.message);
+      // Continue without orchestration search if it fails
+    }
+
+    res.json({
+      success: true,
+      script: scriptName,
+      jobs: formattedJobs,
+      count: formattedJobs.length
+    });
+  } catch (err) {
+    logger.error('Error fetching jobs for script:', err.message);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch jobs for script: ' + err.message
+    });
+  }
+}));
+
 app.get('/delete-schedule.html',User.isAuthenticated, (req, res) => {
   logger.warn("Deleting Schedule*******************");
   var jobName=req.query.jobName;
@@ -2086,14 +2233,15 @@ app.get('/delete-schedule.html',User.isAuthenticated, (req, res) => {
 
 app.get('/scriptEditor.html',User.isAuthenticated, (req, res) => {
   //refresh the scripts list
-  refreshScripts();
+  var scriptsMeta = refreshScripts();
+  var scriptToEdit=req.query.index;
 
   var templateData = undefined;
   if(serverConfig.templates.enabled=="true")templateData=templates;
   res.render('scripteditor',{
-    scripts: scripts,
-    scriptsDesc: scriptsDesc,
+    scripts: scriptsMeta,
     templates: templateData,
+    scriptToEdit: scriptToEdit,
     csrf: req.csrfToken(),
   });
 });
@@ -2124,7 +2272,14 @@ app.get('/scheduler.html',User.isAuthenticated, async (req, res) => {
     scheduleItem.jobName = "Copy of " + scheduleItem.jobName;
   };
   //refresh the scripts list
-  refreshScripts();
+  var scriptsMeta = refreshScripts();
+  var scripts = [];
+  var scriptsDesc =[];
+
+  for(var x=0;x<scriptsMeta.length;x++){
+    scripts.push(scriptsMeta[x].data.filename);
+    scriptsDesc.push(scriptsMeta[x].data.metaDescription);
+  }
 
   //Get the schedule
   let orchestrations = {};
@@ -3745,6 +3900,16 @@ app.delete('/rest/data/:key', User.isAuthenticated, validateSensitiveDataToken, 
     logger.error(`Error deleting data [${req.params.key}]: ${err.message}`);
     res.status(400).json({ success: false, message: `Error deleting data: ${err.message}` });
   }
+}));
+
+//New scriptsList screen
+app.get('/scriptList.html', User.isAuthenticated, asyncHandler(async (req, res) => {
+  refreshScripts();
+
+  res.render('scriptList', {
+    scripts: scriptsMeta,
+    csrf: req.csrfToken(),
+  });
 }));
 
 /**
