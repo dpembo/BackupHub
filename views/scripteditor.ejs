@@ -115,9 +115,8 @@ function deSelectAllFiles(){
 
 
 
-function scriptSelected(element, inScript,inDescription)
-{
-
+function scriptSelected(element,inScript,inDescription){
+  //alert("inscript [" + inScript + "]");
   onScript = inScript;
   //Remove css from selection
   deSelectAllFiles();
@@ -139,9 +138,16 @@ function scriptSelected(element, inScript,inDescription)
       //console.log(data);
       //alert(data);
       editor.setValue(data);
-      var desc = extractHTMLParams(data);
+      //var desc = extractHTMLParams(data);
+      var metaData = extractScriptMetadata(data);
+      //document.getElementById('scriptParameters').innerHTML=metaData.data.metaParameters.replace(/\n/g,"<br/>");
       window.scrollTo(0, 0);
-      document.getElementById('scriptInfoDetail').innerHTML=desc;
+      var params=metaData.data.metaParameters;
+      if(params.toLowerCase().indexOf("<br")==0){
+        var pos = params.indexOf('>');
+        params = params.substring(pos+1);
+      }
+      document.getElementById('scriptInfoDetail').innerHTML=params;
       //alert(element.innerHTML);
       element.style.backgroundColor="rgba(0,0,0,0.2)";
       //element.style.color="red";
@@ -152,6 +158,15 @@ function scriptSelected(element, inScript,inDescription)
       document.getElementById('scriptInfoDetail').innerHTML="";
     });
   }
+
+  document.getElementById('orch-name-text').innerText=inScript;
+  if(inDescription==null)inDescription="";
+  var dispDesc = inDescription;
+  //alert(dispDesc);
+  if(dispDesc.indexOf(" - ")==0){
+    dispDesc=dispDesc.substring(3);
+  }
+  document.getElementById('orch-desc-text').innerText=dispDesc;
 }
 
   function newCommand(select)
@@ -181,7 +196,7 @@ function scriptSelected(element, inScript,inDescription)
       document.getElementById('scriptInfoDetail').innerHTML=desc;
     })
     .catch(error => {
-      // Handle errors here or display them to the user
+      // Handle errors here or scriptInfoDetaildisplay them to the user
       console.error('Error:', error);
       document.getElementById('scriptInfoDetail').innerHTML="";
     });
@@ -255,10 +270,81 @@ function scriptSelected(element, inScript,inDescription)
         document.getElementById('helper-text').innerHTML="Script with this name already exists, please provide a new name";
         //document.getElementById('modalerrormsg').innerHTML="Script with this name already exists, please provide a new name";
         document.getElementById('newfile').className="validate invalid";
-      }
-      
-
+      } 
     }
+
+    function extractScriptMetadata(scriptContent) {
+      try {
+        var fileName="";
+        // --- Get file metadata ---
+        const lastUpdated = null
+
+        // --- Read file content ---
+        const lines = scriptContent.split("\n");
+
+        let inBlock = false;
+        let description = null;
+        let parameters = [];
+
+        for (const rawLine of lines) {
+          const line = rawLine.trim();
+
+          if (line === "#start-params") {
+            inBlock = true;
+            continue;
+          }
+          if (line === "#end-params") {
+            inBlock = false;
+            break;
+          }
+
+          if (inBlock && line.startsWith("#")) {
+            const content = line.substring(1).trim(); // remove leading '#'
+
+            if (!description) {
+              // First line = description (strip HTML)
+              description = content.replace(/<[^>]*>/g, "");
+            } else {
+              // Remaining lines = parameters (keep HTML)
+              parameters.push(content);
+            }
+          }
+        }
+
+        // --- If no metadata block found ---
+        if (!description) {
+          return {
+            success: true,
+            error: `No metadata block (#start-params ... #end-params) found in ${fileName}`,
+            data: {
+              filename: fileName,
+              lastUpdated,
+              metaDescription: "",
+              metaParameters: ""
+            }
+          };
+        }
+
+        return {
+          success: true,
+          error: null,
+          data: {
+            filename: fileName,
+            lastUpdated,
+            metaDescription: description,
+            metaParameters: parameters.join("\n")
+          }
+        };
+
+      } catch (err) {
+        console.log(err);
+        return {
+          success: false,
+          error: `Failed to parse ${fileName}: ${err.message}`
+        };
+      }
+    }
+
   </script>
 
       <!-- Load the Monaco Editor styles -->
@@ -274,7 +360,13 @@ function scriptSelected(element, inScript,inDescription)
           require(['vs/editor/editor.main'], function() {
               // Initialize the editor
                   editor = monaco.editor.create(document.getElementById('editor'), {
-                  value: '# Write you shell script here...',
+                  value:  `#!/bin/sh
+#start-params
+#<b>Script Desciption</b>
+#<br /><b>Parameters</b><br />
+#No Parameters
+#end-params
+`,
                   language: 'shell',
                   theme: 'vs-dark'
               });
@@ -284,10 +376,24 @@ function scriptSelected(element, inScript,inDescription)
                   // Access the editor content
                   var scriptContent = editor.getValue();
                   // You can perform further actions with the script content here
-                  var desc = extractHTMLParams(scriptContent);
+                  //var desc = extractHTMLParams(scriptContent);
                   //window.scrollTo(0, 0);
-                  document.getElementById('scriptInfoDetail').innerHTML=desc;
+                  var params=extractScriptMetadata(editor.getValue()).data.metaParameters;
+                  if(params.toLowerCase().indexOf("<br")==0){
+                    var pos = params.indexOf('>');
+                    params = params.substring(pos+1);
+                  }
+                  document.getElementById('scriptInfoDetail').innerHTML=params;
+                  document.getElementById('orch-desc-text').innerText=extractScriptMetadata(editor.getValue()).data.metaDescription;
               });
+
+              <% if(scriptToEdit!=null){%>
+              $(document).ready(function(){
+                //alert("Filename: <%=scripts[scriptToEdit].data.filename%>");
+                //alert("Description: <%=scripts[scriptToEdit].data.metaDescription%>");
+                scriptSelected(document.getElementById('script<%=scriptToEdit%>'),'<%=scripts[scriptToEdit].data.filename%>','<%=scripts[scriptToEdit].data.metaDescription%>');
+              });
+              <%}%>
           });
 
           function extractHTMLParams(data) {
@@ -381,7 +487,8 @@ function scriptSelected(element, inScript,inDescription)
             xhr.onload = function() {
               if (xhr.status === 200) {
                 console.log(xhr.responseText);
-                M.toast({html: "Script Saved", displayLength: 5000});
+                //M.toast({html: "Script Saved", displayLength: 5000});
+                window.location.href="/scriptList.html?message=Script%20Saved%20Successfully";
               } else {
                 M.toast({html: "Unable to save script", displayLength: 5000});
                 console.error(xhr.statusText);
@@ -445,57 +552,337 @@ function scriptSelected(element, inScript,inDescription)
             var desc = extractHTMLParams(data);
             window.scrollTo(0, 0);
             $('#templateModal').modal('close');
-
-
           }
 
+          function insertButtonText(btn) {
+            // Get the span inside the button
+            const span = btn.querySelector("span");
+
+            // Fallback: if no span, use button text
+            const textToInsert = span ? span.innerText : btn.innerText;
+            const pos = editor.getPosition();            
+
+            editor.executeEdits("insert-text", [
+              {
+                range: new monaco.Range(
+                  pos.lineNumber,
+                  pos.column,
+                  pos.lineNumber,
+                  pos.column
+                ),
+                text: textToInsert,
+                forceMoveMarkers: true
+              }
+            ]);
+
+            editor.focus();
+          }
+
+          function cancelChanges(){
+            window.location.href="/scriptList.html";  
+          }
+
+          function listSchedulesForOrchestration() {
+            if (!onScript || onScript === "") {
+              M.toast({html: "Please save the script first before viewing jobs", displayLength: 3000});
+              return;
+            }
+
+            const scriptName = onScript;
+            document.getElementById('jobsListScriptName').innerText = scriptName;
+
+            // Clear previous content
+            const tableBody = document.getElementById('jobsTableBody');
+            tableBody.innerHTML = '<tr><td colspan="4" style="padding: 12px; text-align: center; color: #999;">Loading...</td></tr>';
+            document.getElementById('jobsEmptyMessage').style.display = 'none';
+
+            // Fetch jobs that use this script
+            fetch(`/rest/jobs-for-script/${encodeURIComponent(scriptName)}`)
+              .then(response => {
+                if (!response.ok) {
+                  throw new Error('Failed to fetch jobs');
+                }
+                return response.json();
+              })
+              .then(data => {
+                if (data.jobs && data.jobs.length > 0) {
+                  tableBody.innerHTML = '';
+                  data.jobs.forEach(job => {
+                    const row = document.createElement('tr');
+                    row.style.borderBottom = '1px solid #eee';
+                    
+                    // Determine badge color based on job type
+                    let badgeStyle = 'background: #f5f5f5; color: #666;';
+                    if (job.type === 'Orchestration') {
+                      badgeStyle = 'background: #e3f2fd; color: #1976d2;';
+                    }
+                    
+                    row.innerHTML = `
+                      <td style="padding: 12px;">${job.jobName}</td>
+                      <td style="padding: 12px;">${job.description || '-'}</td>
+                      <td style="padding: 12px;">
+                        <span style="padding: 4px 8px; border-radius: 4px; font-size: 12px; ${badgeStyle}">
+                          ${job.type}
+                        </span>
+                      </td>
+                      <td style="padding: 12px;">${job.nextRunDate || '-'}</td>
+                    `;
+                    tableBody.appendChild(row);
+                  });
+                } else {
+                  tableBody.innerHTML = '';
+                  document.getElementById('jobsEmptyMessage').style.display = 'block';
+                }
+                // Open the modal
+                const modal = document.getElementById('jobsListModal');
+                const instance = M.Modal.getInstance(modal);
+                if (instance) {
+                  instance.open();
+                } else {
+                  M.Modal.init(modal);
+                  M.Modal.getInstance(modal).open();
+                }
+              })
+              .catch(error => {
+                console.error('Error:', error);
+                tableBody.innerHTML = `<tr><td colspan="4" style="padding: 12px; text-align: center; color: #d32f2f;">Error loading jobs: ${error.message}</td></tr>`;
+              });
+          }
       </script>
       
- 
-  
+        <style>
+    body { margin: 0; padding: 0; overflow: hidden; }
+    #orchestration-container { display: flex; height: calc(100vh - 120px); flex-direction: column; overflow: hidden; width: 100%; margin-top: 0; }
+    #orchestration-header { background: #f5f5f5; padding: 15px 20px; border-bottom: 1px solid #ddd; flex-shrink: 0; position: relative;}
+    #header-buttonss {
+      position: absolute;
+      top: 15px;   /* matches header padding */
+      right: 20px; /* matches header padding */
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    
+    #orchestration-counts{
+      font-size: 13px;
+    }
+
+    #orchestration-main { display: flex; flex: 1 1 auto; min-height: 0; min-width: 0; overflow: hidden; }
+    #orchestration-palette { min-height: 0; width: 250px; background: white; border-right: 1px solid #ddd; overflow-y: auto; padding-left: 15px; flex-shrink: 0; min-width: 200px; max-width: 350px; }
+    #orchestration-canvas { min-height: 0; flex: 1 1 auto; background: #fafafa; position: relative; overflow: hidden; min-width: 0; display: flex; flex-direction: column; }
+    .palette-scroll { overflow-y: auto; min-height: 0; }
+    #editor { width: 100%; min-height: 0; min-width: 0; flex: 1 1 auto; }
+    #orchestration-canvas svg { display: block; width: 100%; height: auto; min-height: 100%; background: #fafafa; }
+    #orchestration-properties { width: 300px; background: white; border-left: 1px solid #ddd; overflow-y: auto; padding: 15px; flex-shrink: 0; position: fixed; right: 0; top: 142px; bottom: 55px; transform: translateX(100%); transition: transform 0.3s ease-in-out; z-index: 50; }
+    #orchestration-properties.show { transform: translateX(0); }
+    #zoom-controls { right: 20px; }
+    #zoom-controls.shift-left { right: 320px; }
+    .palette-item { padding: 2px; margin-bottom: 2px; background: #f9f9f9; border: 1px solid #e0e0e0; border-radius: 4px; user-select: none; display: flex; align-items: center; gap: 8px; font-size: 10px; transition: all 0.2s; }
+    .palette-item:hover { background: #f0f0f0; border-color: #ff9800; }
+    .palette-item i { font-size: 16px; }
+    .palette-item[data-node-type="start"],
+    .palette-item[data-node-type="end-success"],
+    .palette-item[data-node-type="end-failure"] {
+      width: 44px;
+      height: 44px;
+      padding: 0;
+      margin-bottom: 8px;
+      border-radius: 50%;
+      justify-content: center;
+      gap: 0;
+      flex-direction: column;
+    }
+    .palette-item[data-node-type="condition"] {
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      margin-bottom: 8px;
+      border-radius: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 0;
+      flex-direction: column;
+      border-color: #e0e0e0;
+      transform: rotate(45deg);
+      line-height: 1.2;
+    }
+    .palette-item[data-node-type="condition"] i {
+      font-size: 12px;
+      margin: 0;
+      line-height: 1;
+      display: block;
+    }
+    .palette-item[data-node-type="condition"] span {
+      font-size: 8px;
+      margin: 0;
+      text-align: center;
+      width: 100%;
+      line-height: 1;
+      display: block;
+    }
+    .palette-item[data-node-type="start"] i,
+    .palette-item[data-node-type="end-success"] i,
+    .palette-item[data-node-type="end-failure"] i {
+      font-size: 14px;
+      margin: 0;
+    }
+    .palette-item[data-node-type="start"] span,
+    .palette-item[data-node-type="end-success"] span,
+    .palette-item[data-node-type="end-failure"] span {
+      font-size: 7px;
+      margin-top: 1px;
+      text-align: center;
+      width: 100%;
+    }
+    .end-nodes-container {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-start;
+    }
+    .end-nodes-container .palette-item {
+      flex: 0 0 44px;
+    }
+    .palette-section { margin-bottom: 20px; }
+    .palette-section h4 { margin: 5px 0 10px 0; font-size: 12px; color: #666; text-transform: uppercase; font-weight: 600; }
+    #orchestration-footer { background: #f5f5f5; padding: 15px 20px; border-top: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+    .properties-section { margin-bottom: 20px; display: block; visibility: visible; }
+    .properties-section label { font-size: 12px; font-weight: 600; color: #666; display: block; margin-bottom: 8px; text-transform: uppercase; }
+    .properties-section input, .properties-section select { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; box-sizing: border-box; appearance: auto; background-color: white; color: #333; cursor: pointer; display: block; visibility: visible; }
+    .properties-section select:focus { outline: none; border-color: #2196f3; box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.1); }
+    .properties-section input:focus { outline: none; border-color: #2196f3; box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.1); }
+    #prop-condition { display: none; }
+    #prop-condition[style*="display: block"] { display: block !important; visibility: visible; }
+    .delete-btn:hover { background: #d32f2f; }
+    .save-btn { background: #4caf50; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }
+    .save-btn:hover { background: #388e3c; }
+    #orch-name-display { cursor: pointer; border-radius: 4px; transition: background 0.2s; display: flex; flex-direction: column; gap: 1px; }
+    #orch-name-display:hover { background: rgba(33, 150, 243, 0.1); }
+    #orch-name-text { font-size: 16px; font-weight: 600; }
+    #orch-desc-text { font-size: 13px; color: #666; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 400px; cursor: help; }
+    #orch-name-edit { display: none; }
+    .name-edit-mode #orch-name-display { display: none; }
+    .name-edit-mode #orch-name-edit { display: flex; gap: 8px; align-items: flex-start; flex-direction: column; }
+    #orch-name-input { padding: 5px 8px; border: 2px solid #2196f3; border-radius: 4px; font-size: 14px; font-weight: 500; width: 300px; }
+    #orch-desc-input { padding: 5px 8px; border: 2px solid #2196f3; border-radius: 4px; font-size: 13px; width: 300px; height: 50px; resize: vertical; }
+    #orch-name-input:focus { outline: none; box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.2); }
+    #orch-desc-input:focus { outline: none; box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.2); }
+    .orch-edit-buttons { display: flex; gap: 6px; }
+    h3 {line-height: 35% !important;}
+
+        .details-close-btn {
+      position: absolute;
+      top: 0px;
+      right: 15px;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      font-size: 24px;
+      color: var(--text-primary);
+      padding: 5px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+    }
+
+    .details-close-btn:hover {
+      color: var(--error-color, #d32f2f);
+      transform: scale(1.2);
+    }
+
+    .sp-replacer{
+      position: relative;
+      left: 80px;
+      top: -50px;
+    }
+    
+    .validation-error-toast {
+      background-color: #f44336 !important;
+      color: white !important;
+      border-radius: 4px;
+      padding: 16px !important;
+      max-width: 600px !important;
+      box-shadow: 0 4px 12px rgba(244, 67, 54, 0.3) !important;
+      display: flex !important;
+      flex-direction: column !important;
+      align-items: flex-start !important;
+      justify-content: flex-start !important;
+      word-break: break-word !important;
+      white-space: normal !important;
+      text-align: left !important;
+    }
+    
+    .validation-error-toast div {
+      color: white !important;
+      display: block !important;
+      margin-bottom: 6px !important;
+      line-height: 1.4 !important;
+      word-break: break-word !important;
+      text-align: left !important;
+      width: 100% !important;
+    }
+    
+    .validation-error-toast strong {
+      color: white !important;
+      display: block !important;
+      margin-bottom: 8px !important;
+      font-weight: 600 !important;
+      text-align: left !important;
+      width: 100% !important;
+    }
+
+  </style>
+
+     
 </head>
 <body>
   <%- include('./partials/_header'); %>
 
 
-  <div id="templateModal" class="modal">
-    <div class="modal-content">
-        <h4>Template Selection</h4>
-          <div class="row">
-            <div class="col s7 noPadding"> 
-              <div class="template-list" style="display: flex; flex-wrap: wrap; gap: 16px;">
-        <% if (templates && templates.getTemplateNames().length > 0) { %>
-            <% templates.getTemplateNames().forEach(function(script) { %>
-              <% var dispscript = script.split(".")[0]%>
-                <div class="card" style="max-width:110px; flex: 1 1 calc(33.333% - 16px); min-width: 250px; display: flex; flex-direction: column;">
-                    <div class="card-content" style="flex-grow: 1;" onclick="previewTemplate('<%=dispscript%>',<%=sanitizeVariableName(dispscript + "_Content")%>_Content)">
-                        <span class="card-title"><%=dispscript%></span>
-                        <div id="<%=dispscript%>-script"><%=script%></div>
-                        <div id="<%=dispscript%>-description"><%- templates.getTemplateByName(script).description%></div>
-                        <div id="<%=dispscript%>-parameters" style="display:none"><%- templates.getTemplateByName(script).parameters %></div>
-                    </div>
-                    <div class="card-action">
-                        <a href="#" onclick="useTemplate('<%=dispscript%>',<%=sanitizeVariableName(dispscript + "_Content")%>_Content)">Use Template</a>
-                    </div>
-                </div>
-            <% }); %>
-        <% } else { %>
-            <div class="card-panel red lighten-4">
-                <p>No scripts available.</p>
-            </div>
-        <% } %>
-    </div>
-
-            </div>
-            
-            <div id="data-preview" class="col s5 noPadding" style="border-left:0px solid #cccccc;"> 
-              <div style="background-color:#000000;color:#ffffff;height:265px;overflow-y: scroll;font-family: courier new;" id="script-content"></div>
-              <div id="script-parameters" style="overflow-y: scroll;height: 140px;"></div>
+  <div id="templateModal" class="modal" style="overflow:hidden">
+    <div class="modal-content" style="display: flex; flex-direction: column; height: 100%; max-height: calc(100vh - 100px); padding: 0;">
+        <div style="padding: 20px; padding-bottom: 10px; flex-shrink: 0; border-bottom: 0px solid #e0e0e0;">
+          <h4 style="margin: 0;">Template Selection</h4>
+        </div>
+        
+        <div style="display: flex; flex: 1; min-height: 0; overflow: hidden;">
+          <!-- Left Panel: Template Cards -->
+          <div class="template-cards-container" style="flex: 0 0 55%; border-right: 0px solid #e0e0e0; overflow-y: auto; padding: 20px;"> 
+            <div class="template-list" style="height:100%; display: flex; flex-wrap: wrap; gap: 16px; align-content: flex-start;">
+              <% if (templates && templates.getTemplateNames().length > 0) { %>
+                  <% templates.getTemplateNames().forEach(function(script) { %>
+                    <% var dispscript = script.split(".")[0]%>
+                      <div class="card" style="flex: 0 1 calc(50% - 8px); display: flex; flex-direction: column;">
+                          <div class="card-content" style="flex-grow: 1;" onclick="previewTemplate('<%=dispscript%>',<%=sanitizeVariableName(dispscript + "_Content")%>_Content)">
+                              <span class="card-title" style="font-size: 14pt"><%=dispscript%></span>
+                              <div style="font-size: 8pt" id="<%=dispscript%>-script"><%=script%></div>
+                              <div style="font-size: 8pt" id="<%=dispscript%>-description"><%- templates.getTemplateByName(script).description%></div>
+                              <!--<div style="font-size: 8pt" id="<%=dispscript%>-parameters" style="display:none"><%- templates.getTemplateByName(script).parameters %></div>-->
+                          </div>
+                          <div class="card-action">
+                              <a href="#" onclick="useTemplate('<%=dispscript%>',<%=sanitizeVariableName(dispscript + "_Content")%>_Content)">Use Template</a>
+                          </div>
+                      </div>
+                  <% }); %>
+              <% } else { %>
+                  <div class="card-panel red lighten-4" style="width: 100%;">
+                      <p>No scripts available.</p>
+                  </div>
+              <% } %>
             </div>
           </div>
-        <br><span id="modalerrormsg" style="color:red">&nbsp;</span>
+          
+          <!-- Right Panel: Script Preview -->
+          <div id="data-preview" style="flex: 0 0 45%; display: flex; flex-direction: column; padding: 20px; overflow: hidden;"> 
+            <div style="background-color:#000000; color:#ffffff; flex: 0 0 50%; overflow-y: auto; font-family: courier new; margin-bottom: 10px; border-radius: 4px; padding: 10px;" id="script-content"></div>
+            <div id="script-parameters" style="flex: 0 0 50%; overflow-y: auto; border: 1px solid #e0e0e0; border-radius: 4px; padding: 10px;"></div>
+          </div>
+        </div>
         
-        
+        <div style="display:none; padding: 10px 20px; flex-shrink: 0; border-top: 0px solid #e0e0e0;">
+          <span id="modalerrormsg" style="color:red">&nbsp;</span>
+        </div>
     </div>
     <div class="modal-footer" style="flex-shrink: 0;position: sticky;bottom: 0;z-index:20">
         <a href="#!" class="modal-close waves-effect waves-green btn-flat">Cancel</a>
@@ -523,8 +910,128 @@ function scriptSelected(element, inScript,inDescription)
     </div>
   </div>
 
+  <div id="jobsListModal" class="modal">
+    <div class="modal-content" style="display: flex; flex-direction: column; height: 100%; max-height: calc(100vh - 100px); padding: 0;">
+        <div style="padding: 20px; padding-bottom: 10px; flex-shrink: 0; border-bottom: 1px solid #e0e0e0;">
+          <h4 style="margin: 0;">Jobs Using Script: <span id="jobsListScriptName" style="font-style: italic;"></span></h4>
+        </div>
+        
+        <div style="flex: 1; min-height: 0; overflow-y: auto; padding: 20px;">
+          <table id="jobsTable" style="width: 100%; border-collapse: collapse;">
+            <thead>
+              <tr style="border-bottom: 2px solid #ddd;">
+                <th style="text-align: left; padding: 12px; font-weight: 600;">Job Name</th>
+                <th style="text-align: left; padding: 12px; font-weight: 600;">Description</th>
+                <th style="text-align: left; padding: 12px; font-weight: 600;">Job Type</th>
+                <th style="text-align: left; padding: 12px; font-weight: 600;">Next Run</th>
+              </tr>
+            </thead>
+            <tbody id="jobsTableBody">
+              <tr><td colspan="4" style="padding: 12px; text-align: center; color: #999;">Loading...</td></tr>
+            </tbody>
+          </table>
+          <div id="jobsEmptyMessage" style="text-align: center; padding: 20px; color: #666; display: none;">
+            No jobs found using this script.
+          </div>
+        </div>
+    </div>
+    <div class="modal-footer">
+        <a href="#!" class="modal-close waves-effect waves-green btn-flat">Close</a>
+    </div>
+  </div>
 
-  <main class="scriptEditorMain">
+  <!-- loader -->
+  <div id="loader" style="display:none">
+  <div style="display:block;position:absolute;z-index:199;top:0px;left:0px;width:100%;height:100%;background-color: rgba(180, 180, 180, 0.5)"></div>
+  <div style="height:0px;width:0px;z-index:200">
+    <div class="preloader-wrapper big active" style="display:block;position:relative;z-index:200;top:200px;left:640px;">
+      <div class="spinner-layer spinner-blue-only">
+        <div class="circle-clipper left">
+          <div class="circle"></div>
+        </div><div class="gap-patch">
+          <div class="circle"></div>
+        </div><div class="circle-clipper right">
+          <div class="circle"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+  <!-- new header -->
+  <div id="orchestration-header">
+      
+      <h3 style="margin: 0; display: flex; align-items: center; gap: 15px;">
+        <div style="display: flex; align-items: center; gap: 5px; cursor: pointer;" id="orch-icon-display">
+          <i id="orch-icon-element" class="material-icons" style="color: --text-primary; font-size: 24px;" onclick="toggleIconEdit()">terminal</i>
+        </div>
+                    
+        <div id="orch-name-display">
+          <span id="orch-name-text">Undefined Name</span>
+          <span id="orch-desc-text" title="description">Undefined Description</span>
+        </div>
+        
+      </h3>
+      <div id="header-buttonss" style="display: flex; gap: 10px;">
+        <button class="save-btn" style="background: #1976d2;" onclick="listSchedulesForOrchestration()" title="View schedules that use this orchestration">
+          <i class="material-icons" style="font-size: 16px; vertical-align: middle;">assignment</i>
+          List Jobs
+        </button>
+        <button class="save-btn" style="background: #1976d2;" onclick="newFromTemplate()" title="Use Template">
+          <i class="material-icons" style="font-size: 16px; vertical-align: middle;">article</i>
+          Template
+        </button>
+        <button class="save-btn" style="background: #1976d2;" onclick="cancelChanges()" title="Cancel Changes and return to list">
+          <i class="material-icons" style="font-size: 16px; vertical-align: middle;">cancel</i>
+          Cancel
+        </button>
+        <button class="save-btn" onclick="save()">
+          <i class="material-icons" style="font-size: 16px; vertical-align: middle;">save</i>
+          Save
+        </button>
+      </div>
+    </div>
+  <!-- ========== -->
+
+  <div id="orchestration-main">
+    <div id="orchestration-palette">
+      <div class="palette-section">
+        <H4>Parameters</H4>
+        <div class="scriptInfo small" id="scriptInfoDetail"></div>
+      </div>
+      <div class="palette-section">
+        <H4>Trigger Context</H4>
+        <div id="scriptParameters">
+          <button class="palette-item" onclick="insertButtonText(this)"><span title='"rule", "webhook", or "sample"'>$BACKUPHUB_TRIGGER_TYPE </span></button>
+          <button class="palette-item" onclick="insertButtonText(this)"><span title='Unique ID for this execution'>$BACKUPHUB_EXECUTION_ID </span></button>
+          <button class="palette-item" onclick="insertButtonText(this)"><span title='"cpu", "mount_usage", "file_count", etc.'>$BACKUPHUB_METRIC_TYPE </span></button>
+          <button class="palette-item" onclick="insertButtonText(this)"><span title='The actual value (e.g., 92.5)'>$BACKUPHUB_METRIC_VALUE </span></button>
+          <button class="palette-item" onclick="insertButtonText(this)"><span title='Unit: "%", "bytes", "seconds", "count"'>$BACKUPHUB_METRIC_UNIT </span></button>
+          <button class="palette-item" onclick="insertButtonText(this)"><span title='Path being monitored (e.g., "/mnt/data")'>$BACKUPHUB_METRIC_PATH </span></button>
+          <button class="palette-item" onclick="insertButtonText(this)"><span title='Agent that detected it'>$BACKUPHUB_METRIC_AGENT </span></button>
+          <button class="palette-item" onclick="insertButtonText(this)"><span title='Condition operator: ">=", "<=", ">", "<", "==", "!="'>$BACKUPHUB_CONDITION_OPERATOR </span></button>
+          <button class="palette-item" onclick="insertButtonText(this)"><span title='Threshold value'>$BACKUPHUB_CONDITION_THRESHOLD </span></button>
+          <button class="palette-item" onclick="insertButtonText(this)"><span title='"true" or "false"'>$BACKUPHUB_CONDITION_MET </span></button>
+          <button class="palette-item" onclick="insertButtonText(this)"><span title='Trigger context as JSON'>$BACKUPHUB_TRIGGER_CONTEXT </span></button>
+          <button class="palette-item" onclick="insertButtonText(this)"><span title='ID of the webhook that triggered'>$BACKUPHUB_WEBHOOK_ID </span></button>
+          <button class="palette-item" onclick="insertButtonText(this)"><span title='Name you gave the webhook'>$BACKUPHUB_WEBHOOK_NAME </span></button>
+        </div>
+      </div>
+      <div class="palette-section" style="display:none">      
+        <div class="filecontainer">
+        <% for (i=0;i<scripts.length;i++) { %>
+        <div class="fileselector" title="<%=scripts[i].data.metaDescription%>" id="script<%=i%>" ondblclick="scriptSelected(this,'<%=scripts[i].data.filename%>','<%=scripts[i].data.metaDescription%>')"><%=scripts[i].data.filename%></div>
+        <% } %>
+        </div>
+      </div>
+    </div>
+    <div id="orchestration-canvas">
+      <div id="editor" style="width:100%; height:100%; min-height:400px;"></div>
+    </div>
+  </div>
+
+  <!--
+  <main class="scriptEditorMain" style="display:none">
     <div id="loader" style="display:none">
     <div style="display:block;position:absolute;z-index:199;top:0px;left:0px;width:100%;height:100%;background-color: rgba(180, 180, 180, 0.5)"></div>
     <div style="height:0px;width:0px;z-index:200">
@@ -547,8 +1054,8 @@ function scriptSelected(element, inScript,inDescription)
          
           <div class="row">
           <div class="col s12">
-            <!--<button onclick="save()" class="waves-effect green btn-flat">Save</button>
-            <button onclick="addOverview()" class="btn-flat green">Overview</button>-->
+            <button onclick="save()" class="waves-effect green btn-flat">Save</button>
+            <button onclick="addOverview()" class="btn-flat green">Overview</button>
             <span style="width:10px">&nbsp;</span>
             <span onclick="createNew()" title="New Script" style="cursor:pointer;font-size:20pt" class="material-icons vertMid tableIconButton ">library_add</span>
             
@@ -562,42 +1069,27 @@ function scriptSelected(element, inScript,inDescription)
           </div>
           </div>
               
-          <div class="row">
-          <div class="col s12">
-            
-            <!--<select name="agentcommand" onchange="newCommand(this)" id="agentcommand">
-              <option value="" disabled selected>Command File</option>
-              <option value="">New</option>-->
-              <div class="filecontainer">
-              <% for (i=0;i<scripts.length;i++) { %>
-              <div class="fileselector" title="<%=scriptsDesc[i]%>" ondblclick="scriptSelected(this,'<%=scripts[i]%>')"><%=scripts[i]%></div>
-              <% } %>
-              </div>
-            <!--</select>-->
-          </div>
-          </div>
+
   
           <div class="row">
             <div class="col s12">
-            <div id="scriptInfoDiv">
-              <div><label style="position: relative;top: -3px; padding-left:5px;">Script Details</label></div>
-              <div class="scriptInfo" id="scriptInfoDetail"></div>
-            </div>
+            
           </div>
           </div>
           </div>
-        <div class="col resizable s8 noPadding" style="height:100%">
-              <div id="editor" style="height:540px"></div>
-        </div>
  
       </div>
     </div>
 
   </main>
+-->
+  </div>
 
   <script>
     M.FormSelect.init(document.querySelectorAll('select'));
     $('.modal').modal();
+
+    
   </script>
 
   <footer>

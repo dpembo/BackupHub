@@ -785,6 +785,11 @@ div#refreshLabel {
   overflow: auto scroll;
 }
 
+.small{
+  font-size: 8pt;
+  height:80px;
+} ;
+
 /* _________________________________________________________________________________ */
 /* Schedule info */
 

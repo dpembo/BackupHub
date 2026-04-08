@@ -73,7 +73,9 @@ class TemplateRepository {
                 };
             }));
         } catch (error) {
-            console.error('Error fetching template repository, disabling templates capability:', error);
+            logger.warn('Error fetching template repository, disabling templates capability');
+            logger.error('Error from Template Query: ',error);
+            //console.error('Error fetching template repository, disabling templates capability:', error);
             serverConfig.templates.enabled="false";
         }
     }

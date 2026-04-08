@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<%
+
+function titleCase(str) {
+  return str.toLowerCase().split(' ').map(word => {
+    return word.charAt(0).toUpperCase() + word.slice(1);
+  }).join(' ');
+}
+
+function displaySecs(secs) {
+  var ret;
+  //Secs
+  if (secs < 300) ret = secs + " secs";
+
+  if (secs >= 300 && secs < 7200) {
+    //Mins
+    var mins = Math.floor(secs / 60);
+    secs = secs % 60;
+
+    ret = mins + " mins ";
+
+  }
+  if (secs >= 7200 && secs < 86400) {
+    //hours
+    var mins = Math.floor(secs / 60);
+    var secs = secs % 60;
+    var hours = Math.floor(mins / 60);
+    mins = mins % 60;
+    ret = hours + "h " + mins + " mins";
+  }
+
+  if (secs >= 86400) {
+    var mins = Math.floor(secs / 60);
+    var secs = secs % 60;
+    var hours = Math.floor(mins / 60);
+    var days = Math.floor(hours / 24);
+    hours = hours - (days * 24);
+    //hours = days %24;
+    mins = mins % 60;
+    ret = days + " days " + hours + "h ";
+
+  }
+
+  return ret;
+}
+
+function getDayName(dayIndex) { 
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  return days[dayIndex];
+}
+
+function addDateSuffix(date) {
+  var suffix = "";
+
+  // Extract the last digit of the date
+  var lastDigit = date % 10;
+
+  // Extract the second-to-last digit of the date (if it exists)
+  var secondToLastDigit = Math.floor(date / 10) % 10;
+
+  // Determine the suffix based on the last two digits
+  if (secondToLastDigit === 1) {
+    // For numbers ending in 11-19, use "th" as the suffix
+    suffix = "th";
+  } else {
+    // For other numbers, determine the suffix based on the last digit
+    switch (lastDigit) {
+      case 1:
+        suffix = "st";
+        break;
+      case 2:
+        suffix = "nd";
+        break;
+      case 3:
+        suffix = "rd";
+        break;
+      default:
+        suffix = "th";
+        break;
+    }
+  }
+
+  // Combine the date and suffix and return the result
+  return date + suffix;
+}
+
+
+%>
+<html lang="en">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0"/>
+  
+  <title>BackupHub | Available Scripts</title>
+
+  <%- include('./partials/_head'); %>
+  <%- include('./partials/_scripts'); %>
+  
+  <script>
+
+  
+  function doDelete()
+  {
+    alert("tbc");
+  }
+
+  function doNotify(status,msg)
+  {
+      $.pnotify({
+      title: 'Agent Status',
+      text: msg,
+      type: status,
+      history: false,
+      styling: 'jqueryui'
+      });
+  }
+
+  function listScriptJobs(scriptName) {
+    document.getElementById('jobsListScriptName').innerText = scriptName;
+
+    // Clear previous content
+    const tableBody = document.getElementById('jobsTableBody');
+    tableBody.innerHTML = '<tr><td colspan="4" style="padding: 12px; text-align: center; color: #999;">Loading...</td></tr>';
+    document.getElementById('jobsEmptyMessage').style.display = 'none';
+
+    // Fetch jobs that use this script
+    fetch(`/rest/jobs-for-script/${encodeURIComponent(scriptName)}`)
+      .then(response => {
+        if (!response.ok) {
+          throw new Error('Failed to fetch jobs');
+        }
+        return response.json();
+      })
+      .then(data => {
+        if (data.jobs && data.jobs.length > 0) {
+          tableBody.innerHTML = '';
+          data.jobs.forEach(job => {
+            const row = document.createElement('tr');
+            row.style.borderBottom = '1px solid #eee';
+            
+            // Determine badge color based on job type
+            let badgeStyle = 'background: #f5f5f5; color: #666;';
+            if (job.type === 'Orchestration') {
+              badgeStyle = 'background: #e3f2fd; color: #1976d2;';
+            }
+            
+            row.innerHTML = `
+              <td style="padding: 12px;">${job.jobName}</td>
+              <td style="padding: 12px;">${job.description || '-'}</td>
+              <td style="padding: 12px;">
+                <span style="padding: 4px 8px; border-radius: 4px; font-size: 12px; ${badgeStyle}">
+                  ${job.type}
+                </span>
+              </td>
+              <td style="padding: 12px;">${job.nextRunDate || '-'}</td>
+            `;
+            tableBody.appendChild(row);
+          });
+        } else {
+          tableBody.innerHTML = '';
+          document.getElementById('jobsEmptyMessage').style.display = 'block';
+        }
+        // Open the modal
+        const modal = document.getElementById('jobsListModal');
+        const instance = M.Modal.getInstance(modal);
+        if (instance) {
+          instance.open();
+        } else {
+          M.Modal.init(modal);
+          M.Modal.getInstance(modal).open();
+        }
+      })
+      .catch(error => {
+        console.error('Error:', error);
+        tableBody.innerHTML = `<tr><td colspan="4" style="padding: 12px; text-align: center; color: #d32f2f;">Error loading jobs: ${error.message}</td></tr>`;
+      });
+  }
+  </script>
+  <style>
+    td {
+      vertical-align: top !important;
+    }
+  </style>
+</head>
+<body>
+  <%- include('./partials/_header'); %>
+  <div id="confirmationModal" class="modal">
+    <div class="modal-content">}
+        <h4>Delete Script?</h4>
+        <p>Are you sure you want to Delete the Script?<br><br><b>Job Name: </b><span id='inScriptName'></span></p>
+    </div>
+    <div class="modal-footer">
+
+        <a href="#!" class="modal-close waves-effect waves-green btn-flat">Cancel</a>
+        <a href="#" onclick="doDelete()" id="confirmButton" class="modal-close waves-effect waves-green btn-flat">OK</a>
+    </div>
+  </div>
+
+  <div id="jobsListModal" class="modal">
+    <div class="modal-content" style="display: flex; flex-direction: column; height: 100%; max-height: calc(100vh - 100px); padding: 0;">
+        <div style="padding: 20px; padding-bottom: 10px; flex-shrink: 0; border-bottom: 1px solid #e0e0e0;">
+          <h4 style="margin: 0;">Jobs Using Script: <span id="jobsListScriptName" style="font-style: italic;"></span></h4>
+        </div>
+        
+        <div style="flex: 1; min-height: 0; overflow-y: auto; padding: 20px;">
+          <table id="jobsTable" style="width: 100%; border-collapse: collapse;">
+            <thead>
+              <tr style="border-bottom: 2px solid #ddd;">
+                <th style="text-align: left; padding: 12px; font-weight: 600;">Job Name</th>
+                <th style="text-align: left; padding: 12px; font-weight: 600;">Description</th>
+                <th style="text-align: left; padding: 12px; font-weight: 600;">Job Type</th>
+                <th style="text-align: left; padding: 12px; font-weight: 600;">Next Run</th>
+              </tr>
+            </thead>
+            <tbody id="jobsTableBody">
+              <tr><td colspan="4" style="padding: 12px; text-align: center; color: #999;">Loading...</td></tr>
+            </tbody>
+          </table>
+          <div id="jobsEmptyMessage" style="text-align: center; padding: 20px; color: #666; display: none;">
+            No jobs found using this script.
+          </div>
+        </div>
+    </div>
+    <div class="modal-footer">
+        <a href="#!" class="modal-close waves-effect waves-green btn-flat">Close</a>
+    </div>
+  </div>
+  <div class="section no-pad-bot" id="index-banner">
+    <div class="container wide-table">
+      <div class="row">
+        <div class="col s6">
+          <h5 class="header orange-text">Scripts</h5>
+        </div>
+        <div class="col s6" style="text-align: right; padding-top: 20px;">
+          <a class="tableIconButton" title="add" href="/scriptEditor.html"><span class="material-icons vertTop">add</span></a>
+        </div>
+      </div>
+      
+      <div class="scheduleTable">
+        <table>
+          <tr>
+            <th><b>Icon</b></th>
+            <th><b>Filename</b></th>
+            <th><b>Description</b></th>
+            <th><b>Last Updated</b></th>
+            <th style="min-width:150px"><b class="sortableHeader">Actions</b></th>
+            
+          </tr> 
+          
+          <tbody>
+            <% for (i=0;i<scripts.length;i++) { %>
+              
+                <tr>
+                <td><i class="material-icons" style="vertical-align: top; font-size: 34px; color: --text-primary; display: block; margin-bottom: 20px;" title="Script">terminal</i></td>
+                <td><span><%=scripts[i].data.filename%></span></td>
+                <td><span><%=scripts[i].data.metaDescription%></span></td>
+                <%
+                var dispDate = scripts[i].data.lastUpdated.toISOString();
+                  try{
+                    dispDate = dispDate.replace('T',' ');
+                    dispDate = dispDate.substring(0,dispDate.lastIndexOf("."));
+                  } catch (err){
+                    //ignore
+                  }
+                %>
+                <td><span><%=dispDate%></span></td>
+                <td>
+                  <a title="info" href="#" onclick="listScriptJobs('<%=scripts[i].data.filename%>'); return false;"><i class="material-icons tableIconButton vertMid">info</i></a>
+                  <a title="edit" href="/scriptEditor.html?index=<%= i %>"><i class="material-icons tableIconButton vertMid">edit</i></a>
+                </td>
+
+              </tr>
+            <% } %>
+          </tbody>
+        </table>
+      </div>
+  </div>
+  </div>
+  <script>
+    //Toast Script
+    const urlParams = new URLSearchParams(window.location.search);
+    const message = urlParams.get('message');
+    
+    if (message) {
+      // Show a Materialize toast notification with the provided message
+      M.toast({html: message, displayLength: 5000});
+    }
+  </script>
+  <script>
+    //Modal Script
+    $(document).ready(function(){
+        // Initialize the modals
+        $('.modal').modal();
+    });
+
+    function openModal(inJobName, inId)
+    {
+      document.getElementById('inJobName').innerHTML=inJobName;  
+      $('#confirmationModal').modal('open');
+        
+    }    
+
+        // Attach a click event to the "OK" button in the confirmation dialog
+        //$('#confirmButton').click(function(){
+            // You can add your logic here for the "OK" action
+            // For example, redirect to another page or perform some action
+            //alert('OK button clicked.');
+        //    doDelete();
+        //});
+    //});
+  </script>
+<%- include('./partials/_footer'); %>
+  
+
+
+  </body>
+</html>
+
