@@ -3470,7 +3470,7 @@ app.post('/rest/orchestration/jobs/:jobId/executions/:executionId/markAsRerun', 
  */
 app.post('/rest/orchestration/jobs/:jobId/execute', User.isAuthenticated, asyncHandler(async (req, res) => {
   const { jobId } = req.params;
-  const { rerunFrom } = req.body;  // NEW: Track which failed execution prompted this re-run
+  const { rerunFrom } = req.body || {};  
   
   logger.info(`Executing orchestration job [${jobId}]` + (rerunFrom ? ` [rerunFrom: ${rerunFrom}]` : ""));
   
