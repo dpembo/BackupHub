@@ -45,7 +45,7 @@ async function getData(key) {
  * @returns {Promise} Resolves when data is stored
  */
 async function putData(key, value) {
-  logger.info(`DB Storing in [${key}] value [${value}]`);
+  logger.debug(`DB Storing in [${key}] value [${value}]`);
   try {
     const result = await db.put(key, value);
     return result;

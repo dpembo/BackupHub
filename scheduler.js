@@ -950,7 +950,9 @@ async function scheduleJobs() {
             logger.error(`[RULE] Unhandled error in initial rule poll for [${jobName}]: ${err.message}`)
           );
         }, 15000);
-
+      
+      } else if (effectiveTriggerType === 'webhook') {
+            logger.info(`Job [${jobName}] is a webhook trigger - no schedule setup required`);
       } else {
         // legacy_threshold — these used the old thresholdJobs system, now deprecated
         logger.warn(`[DEPRECATED] Job [${jobName}] uses deprecated trigger type [${scheduleType}]. Please recreate it as a Rule-based job in the Jobs screen.`);
