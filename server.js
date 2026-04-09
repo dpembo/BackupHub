@@ -448,7 +448,17 @@ async function getSchedulerData(index, executionId = null)
   var schedule = scheduler.getSchedules(index);
 
   var data={};
-  data.scripts = scripts;
+
+  // var scriptsMeta = refreshScripts();
+  // var scripts = [];
+  // var scriptsDesc =[];
+
+  // for(var x=0;x<scriptsMeta.length;x++){
+  //   scripts.push(scriptsMeta[x].data.filename);
+  //   scriptsDesc.push(scriptsMeta[x].data.metaDescription);
+  // }
+
+  // data.scripts = scripts;
   data.agent=agents.getAgent(schedule.agent);
   
   // Check if agent exists, provide helpful error info
@@ -2380,7 +2390,7 @@ app.get('/scheduleInfo.html',User.isAuthenticated, async(req, res) => {
   }
 
   res.render('scheduleInfo',{
-    scripts: scripts,
+    //scripts: scripts,
     agent: agents.getAgent(schedule.agent),
     schedule: schedule,
     index:index,
@@ -2913,7 +2923,7 @@ app.get('/agentEdit.html',User.isAuthenticated, (request, response) => {
     subject: 'Agent Edit',
     name: 'Control/AgentEdit',
     agent: agentObj,
-    scripts: scripts,
+    //scripts: scripts,
     csrf: request.csrfToken(),
   });
 });
@@ -2925,7 +2935,7 @@ app.get('/agentregister.html',User.isAuthenticated, (request, response) => {
     subject: 'EJS template engine',
     name: 'Control/AgentRegister',
     agent: agentObj,
-    scripts: scripts,
+    //scripts: scripts,
     csrf: request.csrfToken(),
   });
 });
