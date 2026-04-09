@@ -132,6 +132,12 @@ function addDateSuffix(date) {
         return response.json();
       })
       .then(data => {
+        // Update the icon title with the count
+        if (iconElement) {
+          const count = data.count || 0;
+          iconElement.parentElement.title = `Used ${count} time${count !== 1 ? 's' : ''}`;
+        }
+
         if (data.jobs && data.jobs.length > 0) {
           tableBody.innerHTML = '';
           data.jobs.forEach(job => {
