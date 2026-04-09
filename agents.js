@@ -205,7 +205,7 @@ function getAgent(inAgentName)
 {
     logger.debug("Getting Agent: [" + inAgentName + "]");
     var agent = agentStatusDict[inAgentName];
-    logger.debug(agent);
+    //logger.debug(agent);
     return agent;
 }
 

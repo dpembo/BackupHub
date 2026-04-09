@@ -35,11 +35,11 @@ class TemplateRepository {
         
         // First line is the description
         const description = headerContent.shift();
-        logger.debug(`Description: ${description}`);
+        //logger.debug(`Description: ${description}`);
         
         // The rest are parameters
         const parameters = headerContent;
-        parameters.forEach(param => logger.debug(`Parameter: ${param}`));
+        //parameters.forEach(param => logger.debug(`Parameter: ${param}`));
         
         return { description, parameters };
     }

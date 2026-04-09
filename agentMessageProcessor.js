@@ -520,7 +520,7 @@ async function processMessage(topic, message,protocol) {
   
   async function addHistoryRecord(obj,startDate)
   {
-    logger.error("adding history record");
+    logger.info("Adding history record");
     logger.debug(obj);
     var key1 = getDbKey(obj,"stats");
     var key2 = getDbKey(obj,"log");
