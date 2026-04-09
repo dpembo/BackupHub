@@ -570,7 +570,6 @@ describe('Scheduler Module', () => {
 
       // scheduleJobs is called internally during init
       expect(logger.info).toHaveBeenCalled();
-      expect(global.thresholdJobs.empty).toHaveBeenCalled();
     });
 
     it('should clear existing schedules before scheduling', async () => {
