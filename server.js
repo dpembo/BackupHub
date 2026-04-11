@@ -353,12 +353,21 @@ function extractScriptMetadata(fileName) {
 //   }
 // }
 
-function refreshScripts()
-{
-  scriptsMeta=[];
-  fs.readdirSync("./scripts/").forEach(file => {
+function refreshScripts() {
+  const scriptsDir = path.join(__dirname, "scripts");
+
+  // If the directory doesn't exist, create it and return empty metadata
+  if (!fs.existsSync(scriptsDir)) {
+    fs.mkdirSync(scriptsDir, { recursive: true });
+    return [];
+  }
+
+  const scriptsMeta = [];
+
+  fs.readdirSync(scriptsDir).forEach(file => {
     scriptsMeta.push(extractScriptMetadata(file));
   });
+
   return scriptsMeta;
 }
 
