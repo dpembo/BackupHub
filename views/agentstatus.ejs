@@ -1,5 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
+<%
+function hasValidAgents(obj) {
+  if (!obj || typeof obj !== "object") return false;
+
+  return Object.values(obj).some(agent =>
+    agent &&
+    typeof agent === "object" &&
+    agent.name && agent.status
+  );
+}%>
 <head>
   <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0"/>
@@ -402,10 +412,7 @@
   </div>
   <div class="section no-pad-bot" id="index-banner">
     <div class="container">
-      <% if(agents.length>0){%>
-        <div style="text-align: center; padding: 40px;">
-          <p style="color: #999;">No agents connected yet. Click the + button to deploy a new agent.</p>
-        </div>
+      <% if(hasValidAgents(agents)){%>
       <h5 class="header orange-text">Agent Status<span style="float:right"><a href="#" onclick="javascript:addAgent()"><span title="Deploy New Agent" class="material-icons vertMid tableIconButton" style="font-size:24pt;">add_circle</span></a></span></h5>
       
       <div class="agentTable">
@@ -529,6 +536,7 @@
         </table>
     </div>
     <% } else { %>
+      <%=JSON.stringify(agents)%>;
       <h5 class="header orange-text">Agent Status<span style="float:right"><a href="#" onclick="javascript:addAgent()"><span title="Deploy New Agent" class="material-icons vertMid tableIconButton" style="font-size:24pt;">add_circle</span></a></span></h5>
       <div style="text-align: center; padding: 60px 20px; color: #999;">
           <i class="material-icons" style="font-size: 64px; color: #ddd; display: block; margin-bottom: 20px;" title="Agent">hub</i>
