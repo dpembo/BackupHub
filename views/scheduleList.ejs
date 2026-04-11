@@ -224,7 +224,7 @@ function addDateSuffix(date) {
             <% for (let i = 0; i < schedules.length; i++) { %>
               <tr <% if(schedules[i].returnCode!=0){%>class="errorHighlight"<%}%>>
 
-                <td><span class="material-icons vertMid" style="color:<%=schedules[i].color%>;font-size:24pt;"><%=schedules[i].icon%></span>
+                <td style="min-width:68px"><span class="material-icons vertMid" style="color:<%=schedules[i].color%>;font-size:24pt;"><%=schedules[i].icon%></span>
                 <% if(schedules[i].scheduleMode==='orchestration'){ %> <span class="material-icons vertMid" style="color:black;font-size:14pt;position: relative; left: -16px;top: 16px;">schema</span> <% } %>
               </td>
                 
