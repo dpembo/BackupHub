@@ -109,7 +109,7 @@ function noValue(inValue){
       <label for="timezone">Timezone</label>
       <% var timeZones = Intl.supportedValuesOf('timeZone');
       envTZ = process.env.TZ;
-      if(envTZ===undefined||envTZ===null)envTZ="UTC";
+      if(envTZ===undefined||envTZ===null)envTZ= Intl.DateTimeFormat().resolvedOptions().timeZone;
       %>
       
       <select id="timezone" name="timezone" style="display:block;">

@@ -64,6 +64,22 @@ function displaySecs(secs) {
         <% var firstGroupId = "" %>
         <% var groupCount = 0; %>
           <!-- HISTORY ITEMS -->
+        <% if(historyList.length==0){%>
+        <tr>  
+          <td colspan="8">
+            <div style="text-align: center; padding: 60px 20px; color: #999;">
+              <i class="material-icons" style="font-size: 64px; color: #ddd; display: block; margin-bottom: 20px;" title="History">format_list_bulleted</i>
+              <p>No job history yet</p>
+              <a href="/scheduleList.html" class="btn waves-effect waves-light orange">
+                <i class="material-icons left">add</i>Schedule a Job
+              </a>
+            </div>
+          </td>
+        </tr>
+        <% } %>
+        
+        
+        
         <% for(var i = 0; i<historyList.length;i++) {%>
 
 <!-- Group logic -->

@@ -195,7 +195,15 @@ function addDateSuffix(date) {
           <a class="tableIconButton" title="month" href="scheduleListCalendar.html?viewType=monthly"><span class="material-icons vertTop">calendar_month</span></a>
         </div>
       </div>
-      
+      <% if(schedules.length==0){ %>
+        <div style="text-align: center; padding: 60px 20px; color: #999;">
+            <i class="material-icons" style="font-size: 64px; color: #ddd; display: block; margin-bottom: 20px;" title="Schedule">assignment</i>
+            <p>No Jobs Yet</p>
+            <a href="/scheduler.html" class="btn waves-effect waves-light orange">
+              <i class="material-icons left">add</i>Create Job
+            </a>
+          </div>
+      <% } else { %>
       <div class="scheduleTable">
         <table>
           <tr>
@@ -290,7 +298,8 @@ function addDateSuffix(date) {
             <% } %>
           </tbody>
         </table>
-      </div>
+      </div><!-- end of table-->
+      <%}%>
   </div>
   </div>
   <script>

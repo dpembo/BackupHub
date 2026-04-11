@@ -936,14 +936,14 @@ app.post('/initial-setup-server.html', validateCsrf, User.isAuthenticated, async
     return res.redirect('/register.html?not+authenticated');
   }
 
-  var { wsServer,webserverPort, wsPort} = req.body;
+  var { wsServer,webserverPort, wsPort,timezone} = req.body;
   //var mqttEnabled = serverConfig.mqtt.enabled;
   serverConfig.websocket_server.server = wsServer;
   serverConfig.server.hostname = wsServer;
   serverConfig.server.port = webserverPort;
   serverConfig.websocket_server.port = wsPort;
-
-  serverConfig.server.timezone = process.env.TZ || "UTC";
+  
+  serverConfig.server.timezone = timezone;
 
   confighandler.saveServerConfig();
   

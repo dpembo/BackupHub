@@ -402,7 +402,10 @@
   </div>
   <div class="section no-pad-bot" id="index-banner">
     <div class="container">
-
+      <% if(agents.length>0){%>
+        <div style="text-align: center; padding: 40px;">
+          <p style="color: #999;">No agents connected yet. Click the + button to deploy a new agent.</p>
+        </div>
       <h5 class="header orange-text">Agent Status<span style="float:right"><a href="#" onclick="javascript:addAgent()"><span title="Deploy New Agent" class="material-icons vertMid tableIconButton" style="font-size:24pt;">add_circle</span></a></span></h5>
       
       <div class="agentTable">
@@ -525,6 +528,16 @@
       <% } %>
         </table>
     </div>
+    <% } else { %>
+      <h5 class="header orange-text">Agent Status<span style="float:right"><a href="#" onclick="javascript:addAgent()"><span title="Deploy New Agent" class="material-icons vertMid tableIconButton" style="font-size:24pt;">add_circle</span></a></span></h5>
+      <div style="text-align: center; padding: 60px 20px; color: #999;">
+          <i class="material-icons" style="font-size: 64px; color: #ddd; display: block; margin-bottom: 20px;" title="Agent">hub</i>
+          <p>No Agents Connected Yet</p>
+          <a href="#" onclick="javascript:addAgent()" class="btn waves-effect waves-light orange">
+            <i class="material-icons left">add</i>Deploy Agent
+          </a>
+        </div>
+     <% } %>
   </div>
   </div>
   

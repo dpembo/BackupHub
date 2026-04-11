@@ -162,7 +162,7 @@
           <h5 class="header orange-text">Orchestrations</h5>
         </div>
         <div class="col s6" style="text-align: right; padding-top: 20px;">
-          <a class="tableIconButton" title="add" href="/orchestrationBuilder.html"><span class="material-icons vertTop">add</span></a>
+          <a class="tableIconButton" title="add" href="/orchestrationBuilder.html"><span style="font-size:24pt" class="material-icons vertTop">add_circle</span></a>
         </div>
       </div>
       
@@ -170,11 +170,7 @@
         <div id="orchestrationContainer">
           <div style="text-align: center; padding: 40px;">
             <div class="preloader-wrapper small active">
-              <div class="spinner-layer spinner-orange-only">
-                <div class="circle-clipper left"><div class="circle"></div></div>
-                <div class="gap-patch"><div class="circle"></div></div>
-                <div class="circle-clipper right"><div class="circle"></div></div>
-              </div>
+              <span id="refreshindicator" class="refreshindicator refreshloader"></span>
             </div>
             <p>Loading orchestrations...</p>
           </div>

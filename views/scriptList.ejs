@@ -238,10 +238,12 @@ function addDateSuffix(date) {
           <h5 class="header orange-text">Scripts</h5>
         </div>
         <div class="col s6" style="text-align: right; padding-top: 20px;">
-          <a class="tableIconButton" title="add" href="/scriptEditor.html"><span class="material-icons vertTop">add</span></a>
+          <a class="tableIconButton" title="add" href="/scriptEditor.html"><span style="font-size:24pt" class="material-icons vertTop">add_circle</span></a>
         </div>
       </div>
       
+      <% if (scripts.length > 0) { %>
+
       <div class="scheduleTable">
         <table>
           <tr>
@@ -280,6 +282,16 @@ function addDateSuffix(date) {
           </tbody>
         </table>
       </div>
+      <% } else { %>
+        <div style="text-align: center; padding: 60px 20px; color: #999;">
+            <i class="material-icons" style="font-size: 64px; color: #ddd; display: block; margin-bottom: 20px;" title="Script">terminal</i>
+            <p>No Scripts Exist Yet</p>
+            <a href="/scriptEditor.html" class="btn waves-effect waves-light orange">
+              <i class="material-icons left">add</i>Create Script
+            </a>
+          </div>
+      <% } %>
+      
   </div>
   </div>
   <script>
