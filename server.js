@@ -3923,7 +3923,7 @@ app.delete('/rest/data/:key', User.isAuthenticated, validateSensitiveDataToken, 
 
 //New scriptsList screen
 app.get('/scriptList.html', User.isAuthenticated, asyncHandler(async (req, res) => {
-  refreshScripts();
+  var scriptsMeta = refreshScripts();
 
   res.render('scriptList', {
     scripts: scriptsMeta,
