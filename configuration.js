@@ -104,7 +104,7 @@ function loadConfigJson(filename) {
 
     //Setup default debug
     inConfigObj.server.debug="true";
-    inConfigObj.server.loglevel=4
+    inConfigObj.server.loglevel=2
 
     //Setup default express settings
     inConfigObj.server.port=8082
