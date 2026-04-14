@@ -4,7 +4,9 @@
 jest.mock('../../communications/wsBrowserTransport.js', () => ({
   getIO: jest.fn().mockReturnValue({
     emit: jest.fn(),
+    to: jest.fn().mockReturnThis(),
   }),
+  emitScriptTestEvent: jest.fn(),
 }));
 
 const wsBrowserTransport = require('../../communications/wsBrowserTransport.js');
