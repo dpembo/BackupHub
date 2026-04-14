@@ -258,6 +258,15 @@ async function processMessage(topic, message,protocol) {
       return;
     }
 
+    if (obj.status === 'error') {
+      const errorMessage = obj.data || obj.message || 'Agent reported a script test error before completion.';
+      const returnCode = (typeof obj.returnCode === 'number' && obj.returnCode !== 0) ? obj.returnCode : 1;
+
+      logger.error(`[SCRIPT-TEST] Execution [${obj.executionId}] failed on agent [${obj.name}]: ${errorMessage}`);
+      scriptTestManager.appendLog(obj.executionId, `[ERROR] ${errorMessage}`);
+      scriptTestManager.completeTest(obj.executionId, returnCode);
+      return;
+    }
     logger.debug(`[SCRIPT-TEST] Ignoring unsupported test status [${obj.status}] for execution [${obj.executionId}]`);
   }
   
