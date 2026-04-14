@@ -40,7 +40,6 @@ let FILE_SYSTEMS = "/,/home,/var,/tmp,/boot,/usr";
 let FILE_SYSTEMS_THRESHOLD = 80;
 let CPU_THRESHOLD = 75;
 let DEBUG_MODE = false;
-let returnCode;
 
 const AGENT_STATUS = Object.freeze({
   OFFLINE: "offline",
@@ -90,10 +89,9 @@ FILE_SYSTEMS_THRESHOLD = fileSystemThresholdIndex !== -1 ? parseInt(process.argv
 const cpuThresholdIndex = process.argv.indexOf('--cpuThreshold');
 CPU_THRESHOLD = cpuThresholdIndex !== -1 ? parseInt(process.argv[cpuThresholdIndex + 1]) : CPU_THRESHOLD;
 
-let childProcess;
 let useMQTT = false;
 let commsType = "websocket";
-let activeJobs = new Map();  // Track active backup jobs
+let activeJobs = new Map();  // Track active jobs by executionId or jobName
 let activeIntervals = [];  // Track intervals for cleanup
 
 // Debug token management (10 minute expiry, resets on each use)
@@ -300,7 +298,7 @@ function deleteFile(filePathToDelete) {
   }
 }
 
-function publishStatusUpdate(status, description, data, jobName, callback, isManual, executionId = null, retryCount = 0) {
+function publishStatusUpdate(status, description, data, jobName, callback, isManual, executionId = null, retryCount = 0, executionContext = null) {
   const message = {
     name: AGENT_ID,
     topic: TOPIC_STATUS,
@@ -314,6 +312,15 @@ function publishStatusUpdate(status, description, data, jobName, callback, isMan
     executionId: executionId,  // Include execution ID for tracking
     lastStatusReport: new Date().toISOString(),
   };
+
+  if (executionContext && typeof executionContext === 'object') {
+    message.executionMode = executionContext.executionMode || null;
+    message.scriptName = executionContext.scriptName || null;
+    message.scriptIdentity = executionContext.scriptIdentity || null;
+    message.sourceType = executionContext.sourceType || null;
+    message.scriptLabel = executionContext.scriptLabel || null;
+  }
+
   pubCount++;
   const maxRetries = 6;
   
@@ -331,7 +338,7 @@ function publishStatusUpdate(status, description, data, jobName, callback, isMan
       if (retryCount < maxRetries) {
         const retryDelay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s, 8s, 16s, 32s
         debug(DEBUG_LEVEL.TRACE, `Retrying MQTT publish in ${retryDelay}ms (attempt ${retryCount + 1}/${maxRetries})`);
-        setTimeout(() => publishStatusUpdate(status, description, data, jobName, callback, isManual, executionId, retryCount + 1), retryDelay);
+        setTimeout(() => publishStatusUpdate(status, description, data, jobName, callback, isManual, executionId, retryCount + 1, executionContext), retryDelay);
       } else {
         debug(DEBUG_LEVEL.WARN, `MQTT publish failed after ${maxRetries} retries`);
       }
@@ -346,7 +353,7 @@ function publishStatusUpdate(status, description, data, jobName, callback, isMan
         // Connection state mismatch, trigger reconnection and retry
         wsClient.isConnected = false;
         debug(DEBUG_LEVEL.WARN, `WebSocket connection state mismatch, reconnecting...`);
-        publishStatusUpdate(status, description, data, jobName, callback, isManual, executionId, retryCount);
+        publishStatusUpdate(status, description, data, jobName, callback, isManual, executionId, retryCount, executionContext);
       }
     } else {
       wsClient.connect().then(() => {
@@ -358,7 +365,7 @@ function publishStatusUpdate(status, description, data, jobName, callback, isMan
         if (retryCount < maxRetries) {
           const retryDelay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s, 8s, 16s, 32s
           debug(DEBUG_LEVEL.TRACE, `Retrying WebSocket publish in ${retryDelay}ms (attempt ${retryCount + 1}/${maxRetries})`);
-          setTimeout(() => publishStatusUpdate(status, description, data, jobName, callback, isManual, executionId, retryCount + 1), retryDelay);
+          setTimeout(() => publishStatusUpdate(status, description, data, jobName, callback, isManual, executionId, retryCount + 1, executionContext), retryDelay);
         } else {
           debug(DEBUG_LEVEL.WARN, `WebSocket publish failed after ${maxRetries} retries`);
         }
@@ -372,23 +379,96 @@ function getCurrentDateTimeFormatted() {
   return `${now.getFullYear().toString().padStart(4, '0')}-${(now.getMonth() + 1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')}_${now.getHours().toString().padStart(2, '0')}${now.getMinutes().toString().padStart(2, '0')}${now.getSeconds().toString().padStart(2, '0')}`;
 }
 
-function executeBackupCommand(command, commandParams, jobName, callback, manual, executionId = null, triggerContext = null, contextEnvVars = {}) {
+function getActiveJobKey(executionId, jobName) {
+  return executionId || jobName;
+}
+
+function getReturnCodeFromExit(code, signal) {
+  if (signal === 'SIGKILL') {
+    return 999;
+  }
+  if (signal === 'SIGTERM') {
+    return 998;
+  }
+  if (code === null || code === undefined) {
+    return 99999;
+  }
+  return code;
+}
+
+function removeIntervalReference(intervalId) {
+  activeIntervals = activeIntervals.filter(id => id !== intervalId);
+}
+
+function signalTrackedJob(jobRecord, signal) {
+  if (!jobRecord || !jobRecord.pid) {
+    return false;
+  }
+
+  try {
+    process.kill(-jobRecord.pid, signal);
+    return true;
+  } catch (groupErr) {
+    debug(DEBUG_LEVEL.TRACE, `Process group signal failed for PID [${jobRecord.pid}]: ${groupErr.message}`);
+  }
+
+  try {
+    process.kill(jobRecord.pid, signal);
+    return true;
+  } catch (processErr) {
+    debug(DEBUG_LEVEL.WARN, `Failed to signal PID [${jobRecord.pid}] with [${signal}]: ${processErr.message}`);
+    return false;
+  }
+}
+
+function terminateExecution(executionId) {
+  const jobRecord = activeJobs.get(executionId);
+  if (!jobRecord) {
+    debug(DEBUG_LEVEL.WARN, `No active execution found for termination [${executionId}]`);
+    return false;
+  }
+
+  jobRecord.terminationRequested = true;
+  return signalTrackedJob(jobRecord, 'SIGTERM');
+}
+
+function executeBackupCommand(command, commandParams, jobName, callback, manual, executionId = null, triggerContext = null, contextEnvVars = {}, executionContext = null) {
   jobCount++;
   
   // Validate and sanitize commandParams to prevent shell injection
   const sanitizedParams = String(commandParams || '').replace(/[;&|`$()\\\"'<>]/g, '\\$&');
+  const activeJobKey = getActiveJobKey(executionId, jobName);
   
   // Track this job - key by executionId so concurrent same-job runs don't overwrite each other
-  activeJobs.set(executionId || jobName, { startTime: Date.now(), status: 'running', executionId: executionId });
+  activeJobs.set(activeJobKey, {
+    startTime: Date.now(),
+    status: 'running',
+    executionId: executionId,
+    jobName: jobName,
+    pid: null,
+    childProcess: null,
+    logStreamInterval: null,
+    tempScriptPath: null,
+    logfile: null,
+    executionContext: executionContext || null,
+    terminationRequested: false,
+    returnCode: null,
+  });
   
   status = AGENT_STATUS.RUNNING;
-  publishStatusUpdate('running', `Backup in progress for job [${jobName}]`, null, jobName, undefined, manual, executionId);
+  publishStatusUpdate('running', `Backup in progress for job [${jobName}]`, null, jobName, undefined, manual, executionId, 0, executionContext);
 
   const file = `${workingDir}/${generateRandomFileName()}.sh`;
   const logfile = `${workingDir}/${sanitizeUnixFilename(jobName)}_${getCurrentDateTimeFormatted()}.log`;
   createEmptyFile(logfile);
   writeFileAndWait(file, command);
   addExecutePermission(file);
+
+  const jobRecord = activeJobs.get(activeJobKey);
+  if (jobRecord) {
+    jobRecord.tempScriptPath = file;
+    jobRecord.logfile = logfile;
+  }
 
   const runCommand = `. ${file} ${sanitizedParams} >> ${logfile}`;
   const start = new Date().getTime();
@@ -401,23 +481,33 @@ function executeBackupCommand(command, commandParams, jobName, callback, manual,
     debug(DEBUG_LEVEL.INFO, `[TRIGGER CONTEXT] Injecting ${Object.keys(contextEnvVars).length} environment variables into script`);
   }
 
-  childProcess = spawn('bash', ['-c', runCommand], { 
+  const childProcess = spawn('bash', ['-c', runCommand], { 
     detached: true, 
     stdio: 'ignore',
     env: spawnEnv  // Pass merged environment with context variables
   });
   childProcess.unref();
+
+  if (jobRecord) {
+    jobRecord.childProcess = childProcess;
+    jobRecord.pid = childProcess.pid;
+  }
   
   // Add error handler for spawn failures
   childProcess.on('error', (err) => {
     debug(DEBUG_LEVEL.ERROR, `Failed to spawn backup process for [${jobName}]: ${err.message}`);
-    activeJobs.delete(executionId || jobName);
-    publishStatusUpdate('error', `Backup failed to start: ${err.message}`, null, jobName, undefined, manual, executionId);
+    if (jobRecord && jobRecord.logStreamInterval) {
+      clearInterval(jobRecord.logStreamInterval);
+      removeIntervalReference(jobRecord.logStreamInterval);
+    }
+    activeJobs.delete(activeJobKey);
+    publishStatusUpdate('error', `Backup failed to start: ${err.message}`, null, jobName, undefined, manual, executionId, 0, executionContext);
   });
 
   let lastOffset = 0;
   let logStreamInterval;
   let childProcessExited = false;
+  let localReturnCode = null;
 
   logStreamInterval = setInterval(() => {
     if (!fs.existsSync(logfile)) {
@@ -437,21 +527,21 @@ function executeBackupCommand(command, commandParams, jobName, callback, manual,
           readStream.on('data', (chunk) => {
             const logData = chunk.toString('utf8');
             lastOffset += chunk.length;
-            publishLogData(logData, jobName, undefined, undefined, undefined, manual, executionId);
+            publishLogData(logData, jobName, undefined, undefined, undefined, manual, executionId, executionContext);
           });
           readStream.on('error', (err) => debug(DEBUG_LEVEL.TRACE, `Read stream error: ${err.message}`));
         }
 
         if (childProcessExited && lastOffset >= currentSize) {
           clearInterval(logStreamInterval);
-          activeIntervals = activeIntervals.filter(id => id !== logStreamInterval);
+          removeIntervalReference(logStreamInterval);
           const stop = new Date().getTime();
-          debug(DEBUG_LEVEL.INFO, `Backup completed: ${jobName} [exit code: ${returnCode}]`);
-          returnCode !== 0 ? failJobCount++ : successJobCount++;
-          activeJobs.delete(executionId || jobName);
+          debug(DEBUG_LEVEL.INFO, `Backup completed: ${jobName} [exit code: ${localReturnCode}]`);
+          localReturnCode !== 0 ? failJobCount++ : successJobCount++;
+          activeJobs.delete(activeJobKey);
           status = AGENT_STATUS.IDLE;
           deleteFile(file);
-          callback(jobName, (stop - start) / 1000, manual, executionId);
+          callback(jobName, (stop - start) / 1000, manual, executionId, executionContext, localReturnCode);
         }
       } catch (err) {
         debug(DEBUG_LEVEL.TRACE, `Logfile read error: ${err.message}`);
@@ -460,14 +550,21 @@ function executeBackupCommand(command, commandParams, jobName, callback, manual,
   }, 1000);
   
   activeIntervals.push(logStreamInterval);
+  if (jobRecord) {
+    jobRecord.logStreamInterval = logStreamInterval;
+  }
 
   childProcess.on('exit', (code, signal) => {
     childProcessExited = true;
-    returnCode = signal === "SIGKILL" ? 999 : signal === "SIGTERM" ? 998 : code === null ? 99999 : code;
+    localReturnCode = getReturnCodeFromExit(code, signal);
+    const currentJobRecord = activeJobs.get(activeJobKey);
+    if (currentJobRecord) {
+      currentJobRecord.returnCode = localReturnCode;
+    }
   });
 }
 
-function publishLogData(logData, jobName, eta, returnCode, callback, manual, executionId = null) {
+function publishLogData(logData, jobName, eta, returnCode, callback, manual, executionId = null, executionContext = null) {
   const message = {
     name: AGENT_ID,
     server: SERVER,
@@ -480,6 +577,15 @@ function publishLogData(logData, jobName, eta, returnCode, callback, manual, exe
     executionId: executionId,  // Include execution ID for tracking
     lastStatusReport: new Date().toISOString(),
   };
+
+  if (executionContext && typeof executionContext === 'object') {
+    message.executionMode = executionContext.executionMode || null;
+    message.scriptName = executionContext.scriptName || null;
+    message.scriptIdentity = executionContext.scriptIdentity || null;
+    message.sourceType = executionContext.sourceType || null;
+    message.scriptLabel = executionContext.scriptLabel || null;
+  }
+
   pubCount++;
   if (useMQTT) {
     mqttClient.connect().then(() => {
@@ -500,9 +606,9 @@ function publishLogData(logData, jobName, eta, returnCode, callback, manual, exe
   }
 }
 
-function backupComplete(jobName, eta, manual, executionId = null) {
+function backupComplete(jobName, eta, manual, executionId = null, executionContext = null, completionReturnCode = null) {
   status = AGENT_STATUS.IDLE;
-  publishLogData("", jobName, eta, returnCode, undefined, manual, executionId);
+  publishLogData("", jobName, eta, completionReturnCode, undefined, manual, executionId, executionContext);
   debug(DEBUG_LEVEL.INFO, `Backup completed in ${eta} seconds`);
 }
 
@@ -546,11 +652,35 @@ async function handleCommand(message) {
   debug(DEBUG_LEVEL.TRACE, "Received Command from BackupHub Server");
   subCount++;
   validateJWTToken(message).then(async decodedPayload => {
-    const { name: agentId, command, manual = false, commandParams = "", jobName, executionId = null, triggerContext = null, contextEnvVars = {} } = decodedPayload;
+    const {
+      name: agentId,
+      command,
+      manual = false,
+      commandParams = "",
+      jobName,
+      executionId = null,
+      triggerContext = null,
+      contextEnvVars = {},
+      executionMode = null,
+      scriptName = null,
+      scriptIdentity = null,
+      sourceType = null,
+      scriptLabel = null,
+    } = decodedPayload;
     debug(DEBUG_LEVEL.TRACE, `Job: [${jobName}] for agent: [${agentId}] with executionId: [${executionId}]`);
     debug(DEBUG_LEVEL.TRACE, `Command: ${command}, Manual: ${manual}, Params: ${commandParams}`);
 
     if (agentId !== AGENT_ID) return;
+
+    const executionContext = executionMode
+      ? {
+          executionMode,
+          scriptName,
+          scriptIdentity,
+          sourceType,
+          scriptLabel,
+        }
+      : null;
 
     if (command === 'ping') {
       const statusJsonStr = await livenessProbe();
@@ -574,12 +704,24 @@ async function handleCommand(message) {
       return;
     }
 
+    if (command === 'terminateExecution') {
+      const targetExecutionId = commandParams || executionId;
+      if (!targetExecutionId) {
+        debug(DEBUG_LEVEL.WARN, 'terminateExecution received without a target execution ID');
+        return;
+      }
+
+      const terminated = terminateExecution(targetExecutionId);
+      debug(DEBUG_LEVEL.INFO, `Termination request for execution [${targetExecutionId}] result: ${terminated}`);
+      return;
+    }
+
     // Log trigger context details if present
     if (triggerContext || Object.keys(contextEnvVars).length > 0) {
       debug(DEBUG_LEVEL.INFO, `[TRIGGER CONTEXT] Job triggered with context. Type: [${triggerContext?.type || 'none'}], Env vars: [${Object.keys(contextEnvVars).length}]`);
     }
 
-    executeBackupCommand(command, commandParams, jobName, backupComplete, manual, executionId, triggerContext, contextEnvVars);
+    executeBackupCommand(command, commandParams, jobName, backupComplete, manual, executionId, triggerContext, contextEnvVars, executionContext);
     pushVerificationNotification = true;
   }).catch(error => {
     debug(DEBUG_LEVEL.ERROR, `Token validation failed: ${error.message}`);
@@ -713,6 +855,7 @@ function cleanupBackgroundTasks() {
   
   activeJobs.forEach((job, jobName) => {
     debug(DEBUG_LEVEL.WARN, `Cleaning up active job on shutdown: ${jobName}`);
+    signalTrackedJob(job, 'SIGTERM');
   });
   activeJobs.clear();
 }
@@ -1287,13 +1430,13 @@ checkExecutePermissionCapability(workingDir);
 
 process.on('beforeExit', (code) => {
   publishStatusUpdate('offline', 'Script exited', null, () => {
-    if (childProcess) childProcess.kill('SIGTERM');
+    cleanupBackgroundTasks();
     process.exit(code);
   });
 });
 
 process.on('SIGINT', () => {
-  if (childProcess) childProcess.kill('SIGTERM');
+  cleanupBackgroundTasks();
   useMQTT ? mqttClient.disconnect().then(() => process.exit(0)) : process.exit(0);
 });
 

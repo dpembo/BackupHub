@@ -17,7 +17,7 @@ function getCurrentStack(skipFrames = 1) {
 }
 
 
-function sendCommand(agent_id, topic, command, commandParams, jobName, commsType, manual, executionId, triggerContext = null, contextEnvVars = {}, rerunFrom = null){
+function sendCommand(agent_id, topic, command, commandParams, jobName, commsType, manual, executionId, triggerContext = null, contextEnvVars = {}, rerunFrom = null, executionMetadata = null){
 
     if(manual===undefined||manual===null)manual=false;
 
@@ -38,6 +38,15 @@ function sendCommand(agent_id, topic, command, commandParams, jobName, commsType
         contextEnvVars: contextEnvVars || {},  // Environment variables for script injection
         rerunFrom: rerunFrom || null  // Track if this is a rerun of a failed job
     }
+
+    if (executionMetadata && typeof executionMetadata === 'object') {
+        message.executionMode = executionMetadata.executionMode || null;
+        message.scriptName = executionMetadata.scriptName || null;
+        message.scriptIdentity = executionMetadata.scriptIdentity || null;
+        message.sourceType = executionMetadata.sourceType || null;
+        message.scriptLabel = executionMetadata.scriptLabel || null;
+    }
+
     var token = passman.createJWTToken(message,1);
 
     if(commsType=="mqtt" && serverConfig.mqtt.enabled=="true" && isTransportProtocolConnected("mqtt",false))mqttTransport.publishMessage(command_topic,token);

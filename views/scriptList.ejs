@@ -181,6 +181,22 @@ function addDateSuffix(date) {
         tableBody.innerHTML = `<tr><td colspan="4" style="padding: 12px; text-align: center; color: #d32f2f;">Error loading jobs: ${error.message}</td></tr>`;
       });
   }
+
+  function openScriptTestFromList(scriptName, scriptDescription, scriptParameters) {
+    if (!window.BackupHubScriptTest) {
+      M.toast({html: 'Script test UI is not ready yet', displayLength: 3000});
+      return;
+    }
+
+    window.BackupHubScriptTest.open({
+      scriptName: scriptName,
+      scriptDescription: scriptDescription || '',
+      scriptParameters: scriptParameters || '',
+      sourceType: 'saved',
+      scriptContent: '',
+      commandParams: '',
+    });
+  }
   </script>
   <style>
     td {
@@ -231,6 +247,7 @@ function addDateSuffix(date) {
         <a href="#!" class="modal-close waves-effect waves-green btn-flat">Close</a>
     </div>
   </div>
+  <%- include('./partials/_scriptTestModal', { agents: agents }) %>
   <div class="section no-pad-bot" id="index-banner">
     <div class="container wide-table">
       <div class="row">
@@ -259,7 +276,7 @@ function addDateSuffix(date) {
             <% for (i=0;i<scripts.length;i++) { %>
               
                 <tr>
-                <td><i class="material-icons" style="vertical-align: top; font-size: 34px; color: --text-primary; display: block; margin-bottom: 20px;" title="Script">terminal</i></td>
+                <td><i class="material-icons" style="font-size: 34px; color: --text-primary; display: block; margin-bottom: 20px;" title="Script">terminal</i></td>
                 <td><span><%=scripts[i].data.filename%></span></td>
                 <td><span><%=scripts[i].data.metaDescription%></span></td>
                 <%
@@ -275,6 +292,7 @@ function addDateSuffix(date) {
                 <td>
                   <!--<a title="info" href="#" onclick="listScriptJobs('<%=scripts[i].data.filename%>'); return false;"><i class="material-icons tableIconButton vertMid">info</i></a>-->
                   <a title="edit" href="/scriptEditor.html?index=<%= i %>"><i class="material-icons tableIconButton vertMid">edit</i></a>
+                  <a title="test" href="#" data-script-name="<%=scripts[i].data.filename%>" data-script-description="<%=scripts[i].data.metaDescription || ''%>" data-script-parameters="<%=scripts[i].data.metaParameters || ''%>" onclick="openScriptTestFromList(this.dataset.scriptName, this.dataset.scriptDescription, this.dataset.scriptParameters); return false;"><i class="material-icons tableIconButton vertMid">fact_check</i></a>
                 </td>
 
               </tr>

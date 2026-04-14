@@ -1,0 +1,55 @@
+<div id="scriptTestModal" class="modal" data-agents-base64="<%= scriptTestAgentsBase64 %>" style="width: min(1250px, 96vw); max-height: 90vh;">
+  <div class="modal-content" style="display: flex; flex-direction: column; gap: 16px; min-height: 70vh;">
+    <div style="display: flex; flex: 1 1 auto; gap: 20px; min-height: 0; flex-wrap: wrap;">
+      <div style="flex: 0 1 38%; min-width: 280px; display: flex; flex-direction: column; gap: 16px;">
+        <div>
+          <h4 style="font-size: 18pt; margin: 0 0 12px 0;"><span id="scriptTestFileLabel">-</span></h4>
+          <div style="display: grid; grid-template-columns: auto 1fr; gap: 8px 12px; color: #546e7a; align-items: start;">
+            <strong>Description:</strong>
+            <span id="scriptTestDescriptionLabel">-</span>
+            <strong>Source:</strong>
+            <span id="scriptTestSourceLabel">-</span>
+            <strong>Exec ID:</strong>
+            <span id="scriptTestExecutionId">-</span>
+            <strong>Status:</strong>
+            <span style="display: inline-flex; align-items: center; gap: 6px;">
+              <i id="scriptTestStatusIcon" class="material-icons" style="display: none; font-size: 16px;">pending</i>
+              <span id="scriptTestStatusText" style="font-weight: 700; color: #455a64;">Ready</span>
+            </span>
+          </div>
+        </div>
+
+
+        <div class="input-field" style="margin: 0;">
+          <select id="scriptTestAgentSelect"></select>
+          <label>Agent</label>
+        </div>
+
+        <div class="input-field" style="margin: 0;">
+          <label class="active" style="position: static; transform: none; color: #546e7a; font-size: 0.9rem; margin-bottom: 8px; display: inline-block;">Documented Parameters</label>
+          <div id="scriptTestParamsHelp" style="min-height: 84px; max-height: 90px; overflow: auto; border: 1px solid #cfd8dc; border-radius: 6px; padding: 10px 12px; background: #fafcfd; color: #37474f; font-size: 12px; line-height: 1.45; margin-bottom: 12px; white-space: normal; word-break: break-word;">No documented parameters</div>
+        </div>
+
+        <div class="input-field" style="margin: 0;">
+          <input id="scriptTestParamsInput" type="text" placeholder="Optional command parameters">
+          <label class="active" for="scriptTestParamsInput">Parameters</label>
+        </div>
+      </div>
+
+      <div style="flex: 1 1 58%; min-width: 340px; display: flex; flex-direction: column; min-height: 0;">
+        <label for="scriptTestLogArea" style="font-weight: 600; margin-bottom: 8px;">Live Output </label>
+        <textarea id="scriptTestLogArea" readonly wrap="off" spellcheck="false" style="flex: 1 1 auto; min-height: 420px; resize: vertical; overflow: auto; white-space: pre; font-family: 'Courier New', monospace; background: #111827; color: #f8fafc; padding: 12px; border-radius: 6px; border: none;"></textarea>
+        <div id="scriptTestRetentionNotice" style="color: #607d8b; font-size: 0.9rem; min-height: 1.25rem; text-align: left;"></div>
+      </div>
+    </div>
+  </div>
+  <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; gap: 12px;">
+    <div style="display: flex; gap: 8px;">
+      <button id="scriptTestRunButton" class="waves-effect waves-light btn" type="button">Run Test</button>
+      <button id="scriptTestTerminateButton" class="waves-effect waves-light btn red" type="button" disabled>Terminate</button>
+    </div>
+    <button id="scriptTestCloseButton" class="waves-effect btn-flat" type="button">Close</button>
+  </div>
+</div>
+
+<script src="/js/scriptTestModal.js"></script>

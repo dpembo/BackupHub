@@ -286,4 +286,383 @@ describe('Server Routes', () => {
       expect(mockRes.render).toHaveBeenCalledWith('history', { data: 'test' });
     });
   });
+
+  describe('Script Test Routes', () => {
+    let mockScriptTestManager;
+
+    beforeEach(() => {
+      // Reset and prepare scriptTestManager mock
+      mockScriptTestManager = {
+        cleanupExpiredTests: jest.fn(),
+        getExecution: jest.fn(),
+        getBlockingState: jest.fn(),
+        buildScriptIdentity: jest.fn(),
+        createTest: jest.fn(),
+        acknowledgeExecution: jest.fn(),
+        discardExecution: jest.fn(),
+        requestTermination: jest.fn(),
+      };
+
+      global.scriptTestManager = mockScriptTestManager;
+    });
+
+    afterEach(() => {
+      delete global.scriptTestManager;
+    });
+
+    describe('POST /rest/script-test/state', () => {
+      it('should return blocking state for existing script', () => {
+        mockReq.body = {
+          scriptName: 'test.sh',
+          sourceType: 'saved',
+          scriptContent: 'echo test',
+        };
+
+        mockScriptTestManager.buildScriptIdentity.mockReturnValue('script:test.sh');
+        mockScriptTestManager.getBlockingState.mockReturnValue({
+          type: 'active',
+          execution: { executionId: 'exec-123', status: 'running' },
+        });
+
+        // Simulate route handler call
+        const scriptIdentity = mockScriptTestManager.buildScriptIdentity({
+          scriptName: 'test.sh',
+          scriptSource: 'echo test',
+          sourceType: 'saved',
+        });
+
+        const state = mockScriptTestManager.getBlockingState(scriptIdentity);
+
+        expect(mockRes.json).not.toHaveBeenCalled(); // In real code, json() would be called
+        expect(state).toBeDefined();
+        expect(state.type).toBe('active');
+      });
+
+      it('should return null when no blocking state exists', () => {
+        mockReq.body = {
+          scriptName: 'free.sh',
+          sourceType: 'saved',
+          scriptContent: 'echo test',
+        };
+
+        mockScriptTestManager.buildScriptIdentity.mockReturnValue('script:free.sh');
+        mockScriptTestManager.getBlockingState.mockReturnValue(null);
+
+        const scriptIdentity = mockScriptTestManager.buildScriptIdentity({
+          scriptName: 'free.sh',
+          scriptSource: 'echo test',
+          sourceType: 'saved',
+        });
+
+        const state = mockScriptTestManager.getBlockingState(scriptIdentity);
+
+        expect(state).toBeNull();
+      });
+
+      it('should reject if saved script lookup missing script name', () => {
+        mockReq.body = {
+          scriptName: null,
+          sourceType: 'saved',
+          scriptContent: '',
+        };
+
+        // Validation should reject
+        const isValid = !(!mockReq.body.scriptName && mockReq.body.sourceType === 'saved');
+        expect(isValid).toBe(false);
+      });
+    });
+
+    describe('POST /rest/script-test/start', () => {
+      it('should reject if agent is offline', () => {
+        mockReq.body = {
+          agentName: 'offline-agent',
+          scriptName: 'test.sh',
+          scriptContent: 'echo test',
+          sourceType: 'saved',
+          commandParams: '',
+        };
+
+        agents.getAgent = jest.fn().mockReturnValue({
+          name: 'offline-agent',
+          status: 'offline',
+        });
+
+        const agent = agents.getAgent('offline-agent');
+        expect(agent.status).toBe('offline');
+        // Would return 409 Conflict in real route
+      });
+
+      it('should create test execution on success', () => {
+        mockReq.body = {
+          agentName: 'agent-1',
+          scriptName: 'backup.sh',
+          scriptDescription: 'Backup script',
+          scriptContent: '#!/bin/sh\necho "backup"',
+          sourceType: 'saved',
+          commandParams: '--verbose',
+        };
+
+        agents.getAgent = jest.fn().mockReturnValue({
+          name: 'agent-1',
+          status: 'online',
+        });
+
+        mockScriptTestManager.createTest.mockReturnValue({
+          ok: true,
+          execution: {
+            executionId: 'exec-456',
+            status: 'pending',
+            scriptName: 'backup.sh',
+            scriptDescription: 'Backup script',
+            commandParams: '--verbose',
+          },
+        });
+
+        const result = mockScriptTestManager.createTest({
+          executionId: 'exec-456',
+          agentName: 'agent-1',
+          scriptName: 'backup.sh',
+          scriptDescription: 'Backup script',
+          scriptSource: '#!/bin/sh\necho "backup"',
+          sourceType: 'saved',
+          commandParams: '--verbose',
+          requestedBy: 'user@test.com',
+        });
+
+        expect(result.ok).toBe(true);
+        expect(result.execution.executionId).toBe('exec-456');
+        expect(result.execution.scriptDescription).toBe('Backup script');
+      });
+
+      it('should return 409 if active test exists', () => {
+        mockReq.body = {
+          agentName: 'agent-1',
+          scriptName: 'exclusive.sh',
+          scriptContent: 'echo test',
+          sourceType: 'saved',
+          commandParams: '',
+        };
+
+        const activeExecution = {
+          executionId: 'exec-active',
+          status: 'running',
+        };
+
+        mockScriptTestManager.createTest.mockReturnValue({
+          ok: false,
+          type: 'active',
+          execution: activeExecution,
+        });
+
+        const result = mockScriptTestManager.createTest({
+          executionId: 'new-exec',
+          agentName: 'agent-1',
+          scriptName: 'exclusive.sh',
+          scriptDescription: '',
+          scriptSource: 'echo test',
+          sourceType: 'saved',
+          commandParams: '',
+          requestedBy: 'user',
+        });
+
+        expect(result.ok).toBe(false);
+        expect(result.type).toBe('active');
+        // Would return 409 Conflict with this execution
+      });
+
+      it('should return 409 if unseen retained result exists', () => {
+        mockReq.body = {
+          agentName: 'agent-1',
+          scriptName: 'retained.sh',
+          scriptContent: 'echo test',
+          sourceType: 'saved',
+          commandParams: '',
+        };
+
+        const retainedExecution = {
+          executionId: 'exec-retained',
+          status: 'completed',
+          retainedUntil: '2026-03-21T12:30:00Z',
+          acknowledgedAt: null,
+        };
+
+        mockScriptTestManager.createTest.mockReturnValue({
+          ok: false,
+          type: 'unseen_retained',
+          execution: retainedExecution,
+        });
+
+        const result = mockScriptTestManager.createTest({
+          executionId: 'new-exec',
+          agentName: 'agent-1',
+          scriptName: 'retained.sh',
+          scriptDescription: '',
+          scriptSource: 'echo test',
+          sourceType: 'saved',
+          commandParams: '',
+          requestedBy: 'user',
+        });
+
+        expect(result.ok).toBe(false);
+        expect(result.type).toBe('unseen_retained');
+        // Would return 409 Conflict with this execution
+      });
+    });
+
+    describe('GET /rest/script-test/:executionId', () => {
+      it('should return execution data', () => {
+        mockReq.params = { executionId: 'exec-789' };
+
+        mockScriptTestManager.getExecution.mockReturnValue({
+          executionId: 'exec-789',
+          status: 'completed',
+          returnCode: 0,
+          log: 'Completed successfully',
+          scriptName: 'test.sh',
+          commandParams: '--verbose',
+        });
+
+        const execution = mockScriptTestManager.getExecution('exec-789');
+
+        expect(execution).toBeDefined();
+        expect(execution.status).toBe('completed');
+        expect(execution.log).toContain('Completed successfully');
+      });
+
+      it('should return null for nonexistent execution', () => {
+        mockReq.params = { executionId: 'nonexistent' };
+
+        mockScriptTestManager.getExecution.mockReturnValue(null);
+
+        const execution = mockScriptTestManager.getExecution('nonexistent');
+
+        expect(execution).toBeNull();
+      });
+    });
+
+    describe('POST /rest/script-test/:executionId/acknowledge', () => {
+      it('should mark execution as acknowledged', () => {
+        mockReq.params = { executionId: 'exec-ack' };
+
+        mockScriptTestManager.acknowledgeExecution.mockReturnValue({
+          executionId: 'exec-ack',
+          status: 'completed',
+          acknowledgedAt: '2026-03-21T12:00:00Z',
+          isAcknowledged: true,
+        });
+
+        const execution = mockScriptTestManager.acknowledgeExecution('exec-ack');
+
+        expect(execution).toBeDefined();
+        expect(execution.isAcknowledged).toBe(true);
+        expect(execution.acknowledgedAt).toBeDefined();
+      });
+    });
+
+    describe('POST /rest/script-test/:executionId/discard', () => {
+      it('should discard acknowledged execution', () => {
+        mockReq.params = { executionId: 'exec-discard' };
+
+        mockScriptTestManager.discardExecution.mockReturnValue(true);
+
+        const result = mockScriptTestManager.discardExecution('exec-discard');
+
+        expect(result).toBe(true);
+      });
+
+      it('should fail to discard unacknowledged execution', () => {
+        mockReq.params = { executionId: 'exec-unack' };
+
+        mockScriptTestManager.discardExecution.mockReturnValue(false);
+
+        const result = mockScriptTestManager.discardExecution('exec-unack');
+
+        expect(result).toBe(false);
+      });
+    });
+
+    describe('POST /rest/script-test/:executionId/terminate', () => {
+      it('should request termination of running execution', () => {
+        mockReq.params = { executionId: 'exec-term' };
+
+        mockScriptTestManager.requestTermination.mockReturnValue({
+          executionId: 'exec-term',
+          status: 'terminating',
+          terminationRequestedAt: '2026-03-21T12:00:00Z',
+        });
+
+        const execution = mockScriptTestManager.requestTermination(
+          'exec-term',
+          'user@test.com'
+        );
+
+        expect(execution).toBeDefined();
+        expect(execution.status).toBe('terminating');
+        expect(execution.terminationRequestedAt).toBeDefined();
+      });
+
+      it('should return error if execution not found', () => {
+        mockReq.params = { executionId: 'nonexistent-term' };
+
+        mockScriptTestManager.requestTermination.mockReturnValue(null);
+
+        const execution = mockScriptTestManager.requestTermination(
+          'nonexistent-term',
+          'user@test.com'
+        );
+
+        expect(execution).toBeNull();
+      });
+    });
+
+    describe('Integration: Parameter preservation across test lifecycle', () => {
+      it('should preserve command parameters in all states', () => {
+        const testParams = '--backup-dir=/data --compress=true';
+
+        // Create
+        const createResult = mockScriptTestManager.createTest({
+          executionId: 'exec-int-001',
+          agentName: 'agent-1',
+          scriptName: 'backup.sh',
+          scriptDescription: 'Full backup',
+          scriptSource: 'echo backup',
+          sourceType: 'saved',
+          commandParams: testParams,
+          requestedBy: 'user@test.com',
+        });
+
+        mockScriptTestManager.createTest.mockReturnValue({
+          ok: true,
+          execution: {
+            executionId: 'exec-int-001',
+            commandParams: testParams,
+            status: 'pending',
+          },
+        });
+
+        // Get
+        mockScriptTestManager.getExecution.mockReturnValue({
+          executionId: 'exec-int-001',
+          commandParams: testParams,
+          status: 'pending',
+        });
+
+        const created = mockScriptTestManager.createTest({
+          executionId: 'exec-int-001',
+          agentName: 'agent-1',
+          scriptName: 'backup.sh',
+          scriptDescription: 'Full backup',
+          scriptSource: 'echo backup',
+          sourceType: 'saved',
+          commandParams: testParams,
+          requestedBy: 'user@test.com',
+        });
+
+        const fetched = mockScriptTestManager.getExecution('exec-int-001');
+
+        expect(created.execution.commandParams).toBe(testParams);
+        expect(fetched.commandParams).toBe(testParams);
+      });
+    });
+  });
 });

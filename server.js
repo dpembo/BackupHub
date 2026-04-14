@@ -93,6 +93,7 @@ nodeschedule = require('node-schedule');
 scheduler = require ("./scheduler.js");
 orchestration = require("./orchestration.js");
 orchestrationEngine = require("./orchestrationEngine.js");
+scriptTestManager = require('./scriptTestManager.js');
 //const moment = require('moment-timezone');
 
 agentComms = require ("./communications/agentCommunication.js");
@@ -369,6 +370,85 @@ function refreshScripts() {
   });
 
   return scriptsMeta;
+}
+
+function parseScriptDescriptionFromContent(scriptContent) {
+  try {
+    const lines = String(scriptContent || '').split('\n');
+    let inBlock = false;
+    let description = null;
+
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+
+      if (line === '#start-params') {
+        inBlock = true;
+        continue;
+      }
+      if (line === '#end-params') {
+        break;
+      }
+
+      if (inBlock && line.startsWith('#')) {
+        description = line.substring(1).trim().replace(/<[^>]*>/g, '');
+        break;
+      }
+    }
+
+    return description || '';
+  } catch (error) {
+    return '';
+  }
+}
+
+const SCRIPT_FILENAME_REGEX = /^[a-zA-Z0-9-_]+\.sh$/;
+
+function getValidatedScriptPath(scriptFilename) {
+  if (!scriptFilename || !SCRIPT_FILENAME_REGEX.test(scriptFilename)) {
+    throw new AppError('Invalid script filename', 400);
+  }
+
+  const baseDir = path.join(__dirname, 'scripts');
+  const scriptPath = path.join(baseDir, scriptFilename);
+  if (!scriptPath.startsWith(baseDir)) {
+    throw new AppError('Invalid script filename', 400);
+  }
+
+  return scriptPath;
+}
+
+async function readSavedScript(scriptFilename) {
+  const scriptPath = getValidatedScriptPath(scriptFilename);
+  try {
+    return await asyncUtils.readFileAsync(scriptPath, 'utf8');
+  } catch (error) {
+    logger.error(`Unable to read script [${scriptFilename}]: ${error.message}`);
+    throw new AppError(`Unable to read script [${scriptFilename}]`, 404);
+  }
+}
+
+function getScriptTestRequestedBy(req) {
+  if (req.user && req.user.username) {
+    return req.user.username;
+  }
+
+  if (req.user && req.user.email) {
+    return req.user.email;
+  }
+
+  return 'unknown';
+}
+
+function buildScriptTestAgentsJson() {
+  return JSON.stringify(Object.values(agents.getDict() || {}).map((agent) => ({
+    name: agent.name,
+    status: agent.status,
+    commsType: agent.commsType,
+  })));
+}
+
+function buildScriptTestAgentsBase64() {
+  return Buffer.from(buildScriptTestAgentsJson(), 'utf8').toString('base64');
 }
 
 //------------------------------------------------------------------
@@ -2167,6 +2247,192 @@ app.get('/rest/script/:script', User.isAuthenticated, (req, res) => {
   });
 });
 
+app.get('/rest/script-test/:executionId', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const execution = scriptTestManager.getExecution(req.params.executionId);
+  if (!execution) {
+    res.status(404).json({ success: false, error: 'Test execution not found or expired' });
+    return;
+  }
+
+  res.json({ success: true, execution });
+}));
+
+app.post('/rest/script-test/state', User.isAuthenticated, asyncHandler(async (req, res) => {
+  scriptTestManager.cleanupExpiredTests();
+
+  const scriptName = req.body.scriptName || null;
+  const sourceType = req.body.sourceType === 'saved' ? 'saved' : 'editor';
+  const scriptSource = typeof req.body.scriptContent === 'string' ? req.body.scriptContent : '';
+
+  if (sourceType === 'saved' && !scriptName) {
+    res.status(400).json({ success: false, error: 'Saved script lookup requires a script name' });
+    return;
+  }
+
+  if (sourceType !== 'saved' && !scriptName && (!scriptSource || scriptSource.trim().length === 0)) {
+    res.status(400).json({ success: false, error: 'Editor lookup requires script content or a script name' });
+    return;
+  }
+
+  const scriptIdentity = scriptTestManager.buildScriptIdentity({
+    scriptName,
+    scriptSource,
+    sourceType,
+  });
+  const blockingState = scriptTestManager.getBlockingState(scriptIdentity);
+
+  res.json({
+    success: true,
+    scriptIdentity,
+    state: blockingState,
+  });
+}));
+
+app.post('/rest/script-test/start', User.isAuthenticated, asyncHandler(async (req, res) => {
+  scriptTestManager.cleanupExpiredTests();
+
+  const agentName = req.body.agentName;
+  const scriptName = req.body.scriptName || null;
+  let scriptDescription = typeof req.body.scriptDescription === 'string' ? req.body.scriptDescription : '';
+  const sourceType = req.body.sourceType === 'saved' ? 'saved' : 'editor';
+  const commandParams = String(req.body.commandParams || '');
+  let scriptSource = typeof req.body.scriptContent === 'string' ? req.body.scriptContent : '';
+
+  if (!agentName) {
+    res.status(400).json({ success: false, error: 'Agent is required' });
+    return;
+  }
+
+  const agent = agents.getAgent(agentName);
+  if (!agent) {
+    res.status(404).json({ success: false, error: `Agent [${agentName}] not found` });
+    return;
+  }
+
+  if (agent.status === 'offline') {
+    res.status(409).json({ success: false, error: `Agent [${agentName}] is offline` });
+    return;
+  }
+
+  if (sourceType === 'saved') {
+    if (!scriptName) {
+      res.status(400).json({ success: false, error: 'Saved script tests require a script name' });
+      return;
+    }
+
+    scriptSource = await readSavedScript(scriptName);
+    scriptDescription = scriptDescription || parseScriptDescriptionFromContent(scriptSource);
+  } else if (!scriptSource || scriptSource.trim().length === 0) {
+    res.status(400).json({ success: false, error: 'Editor tests require script content' });
+    return;
+  } else {
+    scriptDescription = scriptDescription || parseScriptDescriptionFromContent(scriptSource);
+  }
+
+  const executionId = crypto.randomBytes(8).toString('hex');
+  const createResult = scriptTestManager.createTest({
+    executionId,
+    agentName,
+    scriptName,
+    scriptDescription,
+    scriptSource,
+    sourceType,
+    commandParams,
+    requestedBy: getScriptTestRequestedBy(req),
+  });
+
+  if (!createResult.ok) {
+    res.status(409).json({
+      success: false,
+      code: createResult.type === 'active' ? 'ACTIVE_TEST_EXISTS' : 'UNSEEN_RETAINED_RESULT',
+      execution: createResult.execution,
+      scriptIdentity: createResult.scriptIdentity,
+    });
+    return;
+  }
+
+  const execution = createResult.execution;
+  agentComms.sendCommand(
+    agentName,
+    'execute/scriptTest',
+    scriptSource,
+    commandParams,
+    execution.jobName,
+    undefined,
+    true,
+    execution.executionId,
+    null,
+    {},
+    null,
+    {
+      executionMode: 'test',
+      scriptName: execution.scriptName,
+      scriptIdentity: execution.scriptIdentity,
+      sourceType: execution.sourceType,
+      scriptLabel: execution.scriptLabel,
+    }
+  );
+
+  res.json({ success: true, execution });
+}));
+
+app.post('/rest/script-test/:executionId/acknowledge', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const execution = scriptTestManager.acknowledgeExecution(req.params.executionId);
+  if (!execution) {
+    res.status(404).json({ success: false, error: 'Test execution not found or expired' });
+    return;
+  }
+
+  res.json({ success: true, execution });
+}));
+
+app.post('/rest/script-test/:executionId/discard', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const discarded = scriptTestManager.discardExecution(req.params.executionId);
+  if (!discarded) {
+    res.status(409).json({ success: false, error: 'Unable to discard active or missing test execution' });
+    return;
+  }
+
+  res.json({ success: true });
+}));
+
+app.post('/rest/script-test/:executionId/terminate', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const execution = scriptTestManager.getExecution(req.params.executionId);
+  if (!execution) {
+    res.status(404).json({ success: false, error: 'Test execution not found or expired' });
+    return;
+  }
+
+  if (!execution.isActive) {
+    res.status(409).json({ success: false, error: 'Test execution is no longer active' });
+    return;
+  }
+
+  scriptTestManager.requestTermination(req.params.executionId, getScriptTestRequestedBy(req));
+  agentComms.sendCommand(
+    execution.agentName,
+    'execute/terminateScriptTest',
+    'terminateExecution',
+    req.params.executionId,
+    execution.jobName,
+    undefined,
+    true,
+    req.params.executionId,
+    null,
+    {},
+    null,
+    {
+      executionMode: 'test',
+      scriptName: execution.scriptName,
+      scriptIdentity: execution.scriptIdentity,
+      sourceType: execution.sourceType,
+      scriptLabel: execution.scriptLabel,
+    }
+  );
+
+  res.json({ success: true, execution: scriptTestManager.getExecution(req.params.executionId) });
+}));
+
 app.get('/rest/jobs-for-script/:scriptName', User.isAuthenticated, asyncHandler(async (req, res) => {
   try {
     const scriptName = req.params.scriptName;
@@ -2259,6 +2525,8 @@ app.get('/scriptEditor.html',User.isAuthenticated, (req, res) => {
   if(serverConfig.templates.enabled=="true")templateData=templates;
   res.render('scripteditor',{
     scripts: scriptsMeta,
+    agents: agents.getDict(),
+    scriptTestAgentsBase64: buildScriptTestAgentsBase64(),
     templates: templateData,
     scriptToEdit: scriptToEdit,
     csrf: req.csrfToken(),
@@ -3926,6 +4194,8 @@ app.get('/scriptList.html', User.isAuthenticated, asyncHandler(async (req, res) 
   var scriptsMeta = refreshScripts();
 
   res.render('scriptList', {
+    agents: agents.getDict(),
+    scriptTestAgentsBase64: buildScriptTestAgentsBase64(),
     scripts: scriptsMeta,
     csrf: req.csrfToken(),
   });
