@@ -45,6 +45,42 @@
     return params || 'No documented parameters';
   }
 
+  // Sanitize HTML to prevent XSS attacks
+  // Only allows safe tags: <br>, <p>, <strong>, <em>, <code>, <ul>, <ol>, <li>
+  function sanitizeHTML(html) {
+    if (!html || typeof html !== 'string') {
+      return '';
+    }
+
+    const allowedTags = new Set(['BR', 'P', 'STRONG', 'EM', 'CODE', 'UL', 'OL', 'LI']);
+    const container = document.createElement('div');
+    container.innerHTML = html;
+
+    // Find all elements and process them
+    const allElements = container.querySelectorAll('*');
+    
+    // Process in reverse order to safely handle removals
+    for (let i = allElements.length - 1; i >= 0; i--) {
+      const element = allElements[i];
+      const tagName = element.tagName;
+      
+      if (!allowedTags.has(tagName)) {
+        // Remove non-whitelisted element but keep its content
+        const parent = element.parentNode;
+        while (element.firstChild) {
+          parent.insertBefore(element.firstChild, element);
+        }
+        parent.removeChild(element);
+      } else {
+        // For whitelisted elements, remove all attributes (prevents event handlers)
+        const attributesToRemove = Array.from(element.attributes).map(attr => attr.name);
+        attributesToRemove.forEach(name => element.removeAttribute(name));
+      }
+    }
+
+    return container.innerHTML;
+  }
+
   const controller = {
     config: { agents: [] },
     modalInstance: null,
@@ -165,7 +201,9 @@
       document.getElementById('scriptTestDescriptionLabel').textContent = descriptionLabel;
       document.getElementById('scriptTestFileLabel').textContent = fileLabel;
       document.getElementById('scriptTestSourceLabel').textContent = sourceLabel;
-      document.getElementById('scriptTestParamsHelp').innerHTML = normalizeParameterDocumentation(parametersHelp);
+      // Sanitize HTML to prevent XSS injection from script metadata
+      const sanitizedParams = sanitizeHTML(normalizeParameterDocumentation(parametersHelp));
+      document.getElementById('scriptTestParamsHelp').innerHTML = sanitizedParams;
     },
 
     buildStartPayload: function() {
@@ -363,13 +401,28 @@
         return;
       }
 
+      // Join the room for this execution to receive scoped events
+      const room = `scriptTest:${executionId}`;
+      window.socket.emit('join-room', { room });
+
       const onLog = (data) => {
         if (!this.currentExecution || this.currentExecution.executionId !== executionId) {
           return;
         }
         const textarea = document.getElementById('scriptTestLogArea');
         const pinToBottom = wasScrolledNearBottom(textarea);
-        textarea.value = data.log || '';
+        
+        // Append chunk instead of replacing full log to reduce memory/network overhead
+        if (data.chunk) {
+          textarea.value += data.chunk;
+        }
+        
+        // Show warning if log was truncated on server
+        if (data.isTruncated && !textarea.dataset.truncationWarningShown) {
+          textarea.value += '\n\n[Log truncated - oldest entries removed to free memory]\n\n';
+          textarea.dataset.truncationWarningShown = 'true';
+        }
+        
         if (pinToBottom) {
           textarea.scrollTop = textarea.scrollHeight;
         }
@@ -407,6 +460,12 @@
       if (!window.socket) {
         this.boundListeners = [];
         return;
+      }
+
+      // Leave the room for the current execution
+      if (this.currentExecution && this.currentExecution.executionId) {
+        const room = `scriptTest:${this.currentExecution.executionId}`;
+        window.socket.emit('leave-room', { room });
       }
 
       this.boundListeners.forEach((listener) => {

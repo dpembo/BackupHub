@@ -4,6 +4,16 @@ const { spawn } = require('child_process');
 describe('Agent Concurrency Support', () => {
   let activeJobs;
 
+  beforeAll(() => {
+    // Use fake timers for all tests in this suite to avoid real setInterval
+    jest.useFakeTimers();
+  });
+
+  afterAll(() => {
+    // Restore real timers after all tests
+    jest.useRealTimers();
+  });
+
   beforeEach(() => {
     // Simulate the activeJobs Map with executionId as key
     activeJobs = new Map();
@@ -19,7 +29,8 @@ describe('Agent Concurrency Support', () => {
   afterEach(() => {
     // Clear all intervals from active jobs to prevent Jest from hanging
     activeJobs.forEach((job) => {
-      if (job.logInterval) {
+      if (job.logInterval && typeof job.logInterval === 'number') {
+        // Only try to clearInterval on actual interval IDs (numbers), not symbols
         clearInterval(job.logInterval);
       }
     });

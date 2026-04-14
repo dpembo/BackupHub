@@ -401,7 +401,10 @@ function parseScriptDescriptionFromContent(scriptContent) {
   }
 }
 
-const SCRIPT_FILENAME_REGEX = /^[a-zA-Z0-9-_]+\.sh$/;
+// Regex allows characters that /saveScript preserves: alphanumeric, underscore, dot, hyphen
+// Also requires .sh suffix to ensure it's a shell script
+// Path traversal is protected by startsWith(baseDir) check
+const SCRIPT_FILENAME_REGEX = /^[a-zA-Z0-9_.-]+\.sh$/;
 
 function getValidatedScriptPath(scriptFilename) {
   if (!scriptFilename || !SCRIPT_FILENAME_REGEX.test(scriptFilename)) {
@@ -799,14 +802,27 @@ app.get('/logout.html', (req, res) => {
 
 
 app.post('/saveScript', express.json(), asyncHandler(async (req, res) => {
-  const scriptName = req.body.scriptName.replace(/[^a-zA-Z0-9_.]/g, '');
+  // Sanitize filename: keep only alphanumeric, underscore, dot, hyphen
+  let scriptName = req.body.scriptName.replace(/[^a-zA-Z0-9_.-]/g, '');
+  
+  // Enforce .sh suffix if not present
+  if (!scriptName.endsWith('.sh')) {
+    scriptName = scriptName + '.sh';
+  }
+
+  // Path traversal protection
+  const baseDir = path.join(__dirname, 'scripts');
+  const filePath = path.join(baseDir, scriptName);
+  if (!filePath.startsWith(baseDir)) {
+    throw new AppError('Invalid script filename', 400);
+  }
+
   const scriptContent = req.body.script;
-  const filePath = `./scripts/${scriptName}`;
 
   try {
     await asyncUtils.writeFileAsync(filePath, scriptContent);
     logger.info(`File ${scriptName} saved successfully`);
-    res.json({ status: 'success', message: 'File saved successfully.' });
+    res.json({ status: 'success', message: 'File saved successfully.', scriptName });
   } catch (error) {
     logger.error(`Error saving script ${scriptName}:`, error.message);
     throw new AppError(`Failed to save script: ${error.message}`, 500);
@@ -2179,8 +2195,8 @@ app.get('/rest/script/:script', User.isAuthenticated, (req, res) => {
     return res.status(400).send('Invalid script filename');
   }
 
-  // Validate filename format (e.g., only alphanumeric, hyphen, underscore, and .sh)
-  if (!scriptFilename.match(/^[a-zA-Z0-9-_]+\.sh$/)) {
+  // Validate filename format to match /saveScript behavior: alphanumeric, underscore, dot, hyphen, and .sh suffix
+  if (!scriptFilename.match(/^[a-zA-Z0-9_.-]+\.sh$/)) {
     return res.status(400).send('Invalid script filename');
   }
 

@@ -1,6 +1,10 @@
 const crypto = require('crypto');
 
 const RETENTION_MS = 30 * 60 * 1000;
+// Enforce max log size to prevent unbounded memory growth
+const MAX_LOG_SIZE_KB = 5000; // 5 MB per execution
+const MAX_LOG_LINES = 10000; // Keep last 10000 lines max
+const MAX_LOG_BYTES = MAX_LOG_SIZE_KB * 1024;
 
 const testsByExecutionId = new Map();
 const activeByScriptIdentity = new Map();
@@ -52,13 +56,23 @@ function getSocketIo() {
   }
 }
 
+function getWsBrowserTransport() {
+  try {
+    return require('./communications/wsBrowserTransport.js');
+  } catch (error) {
+    logger.debug(`[scriptTestManager] wsBrowserTransport unavailable: ${error.message}`);
+    return null;
+  }
+}
+
 function emitEvent(eventType, executionId, payload) {
-  const io = getSocketIo();
-  if (!io) {
+  // Use room-scoped emission for script test events to prevent cross-user data leakage
+  const transport = getWsBrowserTransport();
+  if (!transport) {
     return;
   }
 
-  io.emit(`${eventType}:${executionId}`, payload);
+  transport.emitScriptTestEvent(eventType, executionId, payload);
 }
 
 function removeExecutionFromIndexes(record) {
@@ -249,15 +263,48 @@ function appendLog(executionId, logData) {
   record.log += logData || '';
   record.updatedAt = getNowIso();
 
+  // Trim log if it exceeds size limits to prevent unbounded memory growth
+  trimLogIfNeeded(record);
+
   const serialized = cloneExecution(record);
   emitEvent('scriptTestLog', executionId, {
     executionId,
-    log: serialized.log,
+    // Only emit the new chunk to reduce network overhead
+    // Client can accumulate or fetch full log via API if needed
     chunk: logData || '',
     status: serialized.status,
+    isTruncated: !!record.isTruncated,
   });
 
   return serialized;
+}
+
+function trimLogIfNeeded(record) {
+  if (!record) {
+    return;
+  }
+
+  let isTruncated = false;
+
+  // Check size limit
+  if (record.log.length > MAX_LOG_BYTES) {
+    // Keep only the last MAX_LOG_BYTES of data
+    const excess = record.log.length - MAX_LOG_BYTES;
+    record.log = record.log.slice(excess);
+    isTruncated = true;
+  }
+
+  // Check line limit
+  const lines = record.log.split('\n');
+  if (lines.length > MAX_LOG_LINES) {
+    // Keep only the last MAX_LOG_LINES
+    const excess = lines.length - MAX_LOG_LINES;
+    const droppedLines = lines.slice(0, excess).length;
+    record.log = lines.slice(excess).join('\n');
+    isTruncated = true;
+  }
+
+  record.isTruncated = isTruncated;
 }
 
 function requestTermination(executionId, requestedBy) {
