@@ -23,6 +23,7 @@
   
   <script>
     const socket = io();
+    window.socket = socket;
 
     // Handle incoming notifications from the server
     socket.on('register', (message) => {

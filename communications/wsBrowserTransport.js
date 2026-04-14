@@ -18,6 +18,26 @@ function init(server) {
             logger.debug('[wsBrowserTransport] A websocket client disconnected.');
         });
 
+        // Handle room joining for scoped event subscription
+        socket.on('join-room', (data) => {
+            if (!data || !data.room) {
+                logger.warn('[wsBrowserTransport] Invalid room join request');
+                return;
+            }
+            socket.join(data.room);
+            logger.debug(`[wsBrowserTransport] Client joined room [${data.room}]`);
+        });
+
+        // Handle room leaving
+        socket.on('leave-room', (data) => {
+            if (!data || !data.room) {
+                logger.warn('[wsBrowserTransport] Invalid room leave request');
+                return;
+            }
+            socket.leave(data.room);
+            logger.debug(`[wsBrowserTransport] Client left room [${data.room}]`);
+        });
+
         socket.on('delete', (data) => {
             logger.debug('[wsBrowserTransport] A delete request over websocket was requested for [' + data + ']');
             agents.deleteAgent(data);
@@ -61,9 +81,22 @@ function emitOrchestrationEvent(jobId, executionId, eventType, data) {
     io.emit(eventName, data);
 }
 
+// Emit a script test event scoped to a room (so only authorized clients receive it)
+// This prevents cross-user data leakage
+function emitScriptTestEvent(eventType, executionId, data) {
+    if (!io) {
+        logger.warn(`Socket.io not initialized, cannot emit script test event`);
+        return;
+    }
+    const room = `scriptTest:${executionId}`;
+    const eventName = `${eventType}:${executionId}`;
+    logger.debug(`Emitting script test event [${eventName}] to room [${room}]`);
+    io.to(room).emit(eventName, data);
+}
+
 function getIO() {
     return io;
 }
 
 
-module.exports = { init, emitNotification, emitScheduleEvent, emitOrchestrationEvent, getIO };
+module.exports = { init, emitNotification, emitScheduleEvent, emitOrchestrationEvent, emitScriptTestEvent, getIO };

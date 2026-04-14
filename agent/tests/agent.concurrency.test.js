@@ -4,6 +4,16 @@ const { spawn } = require('child_process');
 describe('Agent Concurrency Support', () => {
   let activeJobs;
 
+  beforeAll(() => {
+    // Use fake timers for all tests in this suite to avoid real setInterval
+    jest.useFakeTimers();
+  });
+
+  afterAll(() => {
+    // Restore real timers after all tests
+    jest.useRealTimers();
+  });
+
   beforeEach(() => {
     // Simulate the activeJobs Map with executionId as key
     activeJobs = new Map();
@@ -14,6 +24,17 @@ describe('Agent Concurrency Support', () => {
       warn: jest.fn(),
       error: jest.fn(),
     };
+  });
+
+  afterEach(() => {
+    // Clear all intervals from active jobs to prevent Jest from hanging
+    activeJobs.forEach((job) => {
+      if (job.logInterval && typeof job.logInterval === 'number') {
+        // Only try to clearInterval on actual interval IDs (numbers), not symbols
+        clearInterval(job.logInterval);
+      }
+    });
+    activeJobs.clear();
   });
 
   describe('activeJobs tracking by executionId', () => {
@@ -433,6 +454,225 @@ describe('Agent Concurrency Support', () => {
 
       expect(activeJobs.has(exec1)).toBe(false);
       expect(activeJobs.has(exec2)).toBe(true);
+    });
+  });
+
+  describe('Script test execution with per-execution tracking', () => {
+    it('should execute script test with executionMode metadata', () => {
+      const executionId = 'scripttest-001';
+      const executionContext = {
+        executionMode: 'test',
+        scriptName: 'backup.sh',
+        scriptIdentity: 'script:backup.sh',
+        sourceType: 'saved',
+        scriptLabel: 'backup.sh',
+      };
+
+      activeJobs.set(executionId, {
+        executionId: executionId,
+        jobName: `scripttest:${executionId}`,
+        status: 'running',
+        execution: executionContext,
+        pid: 12345,
+        logFile: `/tmp/scripttest_${executionId}.log`,
+        logInterval: setInterval(() => {}, 1000),
+      });
+
+      const job = activeJobs.get(executionId);
+      expect(job.execution.executionMode).toBe('test');
+      expect(job.execution.scriptName).toBe('backup.sh');
+      expect(job.pid).toBeDefined();
+    });
+
+    it('should track per-execution process and log file independently', () => {
+      const exec1 = 'testexec-1';
+      const exec2 = 'testexec-2';
+
+      // Two concurrent script tests, same script
+      activeJobs.set(exec1, {
+        executionId: exec1,
+        jobName: 'scripttest:' + exec1,
+        status: 'running',
+        execution: {
+          executionMode: 'test',
+          scriptName: 'deploy.sh',
+          scriptIdentity: 'script:deploy.sh',
+        },
+        pid: 2001,
+        logFile: `/tmp/scripttest_${exec1}.log`,
+      });
+      activeJobs.set(exec2, {
+        executionId: exec2,
+        jobName: 'scripttest:' + exec2,
+        status: 'running',
+        execution: {
+          executionMode: 'test',
+          scriptName: 'deploy.sh',
+          scriptIdentity: 'script:deploy.sh',
+        },
+        pid: 2002,
+        logFile: `/tmp/scripttest_${exec2}.log`,
+      });
+
+      // Verify isolation
+      const job1 = activeJobs.get(exec1);
+      const job2 = activeJobs.get(exec2);
+
+      expect(job1.pid).toBe(2001);
+      expect(job2.pid).toBe(2002);
+      expect(job1.logFile).not.toBe(job2.logFile);
+    });
+
+    it('should support targeted termination by executionId', () => {
+      const exec1 = 'term-test-1';
+      const exec2 = 'term-test-2';
+
+      // Two running script tests
+      activeJobs.set(exec1, {
+        executionId: exec1,
+        status: 'running',
+        pid: 3001,
+        logInterval: Symbol('interval1'),
+      });
+      activeJobs.set(exec2, {
+        executionId: exec2,
+        status: 'running',
+        pid: 3002,
+        logInterval: Symbol('interval2'),
+      });
+
+      // Terminate only exec1
+      const targetExec = activeJobs.get(exec1);
+      expect(targetExec.pid).toBe(3001);
+
+      // Simulate termination (kill process, clear interval, remove from activeJobs)
+      activeJobs.delete(exec1);
+
+      // Verify exec2 remains
+      expect(activeJobs.has(exec1)).toBe(false);
+      expect(activeJobs.has(exec2)).toBe(true);
+      expect(activeJobs.get(exec2).pid).toBe(3002);
+    });
+
+    it('should include execution metadata in status updates', () => {
+      const executionId = 'statusupdate-001';
+      const statusUpdate = {
+        jobName: 'scripttest:' + executionId,
+        executionId: executionId,
+        status: 'running',
+        executionContext: {
+          executionMode: 'test',
+          scriptName: 'test.sh',
+          scriptIdentity: 'script:test.sh',
+          sourceType: 'saved',
+        },
+      };
+
+      expect(statusUpdate.executionContext.executionMode).toBe('test');
+      expect(statusUpdate.executionId).toBe(executionId);
+    });
+
+    it('should include execution metadata in log submissions', () => {
+      const executionId = 'logsubmit-001';
+      const logData = {
+        jobName: 'scripttest:' + executionId,
+        executionId: executionId,
+        data: 'Script output line 1\nScript output line 2\n',
+        executionContext: {
+          executionMode: 'test',
+          scriptName: 'monitor.sh',
+          sourceType: 'saved',
+        },
+      };
+
+      expect(logData.executionContext.executionMode).toBe('test');
+      expect(logData.data).toContain('Script output line 1');
+    });
+
+    it('should include execution metadata in completion/eta submission', () => {
+      const executionId = 'completion-001';
+      const completionData = {
+        jobName: 'scripttest:' + executionId,
+        executionId: executionId,
+        returnCode: 0,
+        eta: 23.5,
+        log: 'Script completed successfully',
+        executionContext: {
+          executionMode: 'test',
+          scriptName: 'verify.sh',
+          sourceType: 'editor',
+        },
+      };
+
+      expect(completionData.executionContext.executionMode).toBe('test');
+      expect(completionData.returnCode).toBe(0);
+      expect(completionData.log).toContain('completed');
+    });
+
+    it('should support concurrent script tests with distinct execution contexts', () => {
+      const testExec1 = 'distinct-1';
+      const testExec2 = 'distinct-2';
+
+      activeJobs.set(testExec1, {
+        executionId: testExec1,
+        jobName: 'scripttest:' + testExec1,
+        execution: {
+          executionMode: 'test',
+          scriptName: 'task-a.sh',
+          scriptIdentity: 'script:task-a.sh',
+          sourceType: 'saved',
+          commandParams: '--verbose',
+        },
+        pid: 4001,
+      });
+      activeJobs.set(testExec2, {
+        executionId: testExec2,
+        jobName: 'scripttest:' + testExec2,
+        execution: {
+          executionMode: 'test',
+          scriptName: 'task-b.sh',
+          scriptIdentity: 'editor:hash123',
+          sourceType: 'editor',
+          commandParams: '--debug',
+        },
+        pid: 4002,
+      });
+
+      const job1 = activeJobs.get(testExec1);
+      const job2 = activeJobs.get(testExec2);
+
+      // Both should have independent contexts
+      expect(job1.execution.scriptName).toBe('task-a.sh');
+      expect(job2.execution.scriptName).toBe('task-b.sh');
+      expect(job1.execution.sourceType).toBe('saved');
+      expect(job2.execution.sourceType).toBe('editor');
+      expect(job1.execution.commandParams).toBe('--verbose');
+      expect(job2.execution.commandParams).toBe('--debug');
+    });
+
+    it('should cleanup per-execution resources on completion', () => {
+      const executionId = 'cleanup-test-001';
+
+      const jobWithResources = {
+        executionId: executionId,
+        pid: 5001,
+        logFile: `/tmp/scripttest_${executionId}.log`,
+        logInterval: setInterval(() => {}, 1000),
+      };
+
+      activeJobs.set(executionId, jobWithResources);
+
+      // Simulate cleanup
+      const job = activeJobs.get(executionId);
+      expect(job).toBeDefined();
+      expect(job.pid).toBeDefined();
+      expect(job.logFile).toBeDefined();
+      expect(job.logInterval).toBeDefined();
+
+      // Remove from tracking
+      activeJobs.delete(executionId);
+
+      expect(activeJobs.has(executionId)).toBe(false);
     });
   });
 });

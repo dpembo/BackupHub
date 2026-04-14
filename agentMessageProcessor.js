@@ -2,6 +2,7 @@ const status_topic = 'backup/agent/status';
 const command_topic = 'backup/agent/command';
 const EventEmitter = require('events');
 const metricResultEmitter = new EventEmitter();
+const scriptTestManager = require('./scriptTestManager.js');
 
 /**
  * Wait for a metric_result reply from an agent.
@@ -30,6 +31,10 @@ async function processMessage(topic, message,protocol) {
     debugMessage(topic, obj, message, agentKnown);
   
     if(agentKnown){
+      if (obj.executionMode === 'test') {
+        await handleScriptTestMessage(obj);
+        return;
+      }
       
       //Status Notification from Agent
       if (topic == "backup/agent/status" && obj.status == "notification") {
@@ -232,6 +237,37 @@ async function processMessage(topic, message,protocol) {
       }
   
     }
+  }
+
+  async function handleScriptTestMessage(obj) {
+    if (obj.status === 'running') {
+      logger.info(`[SCRIPT-TEST] Execution [${obj.executionId}] is running on agent [${obj.name}]`);
+      scriptTestManager.markRunning(obj.executionId);
+      return;
+    }
+
+    if (obj.status === 'log_submission') {
+      logger.info(`[SCRIPT-TEST] Received log update for execution [${obj.executionId}]`);
+      scriptTestManager.appendLog(obj.executionId, obj.data || '');
+      return;
+    }
+
+    if (obj.status === 'eta_submission') {
+      logger.info(`[SCRIPT-TEST] Execution [${obj.executionId}] completed with return code [${obj.returnCode}]`);
+      scriptTestManager.completeTest(obj.executionId, obj.returnCode);
+      return;
+    }
+
+    if (obj.status === 'error') {
+      const errorMessage = obj.data || obj.message || 'Agent reported a script test error before completion.';
+      const returnCode = (typeof obj.returnCode === 'number' && obj.returnCode !== 0) ? obj.returnCode : 1;
+
+      logger.error(`[SCRIPT-TEST] Execution [${obj.executionId}] failed on agent [${obj.name}]: ${errorMessage}`);
+      scriptTestManager.appendLog(obj.executionId, `[ERROR] ${errorMessage}`);
+      scriptTestManager.completeTest(obj.executionId, returnCode);
+      return;
+    }
+    logger.debug(`[SCRIPT-TEST] Ignoring unsupported test status [${obj.status}] for execution [${obj.executionId}]`);
   }
   
   function debugMessage(topic, obj, message, agentKnown) {

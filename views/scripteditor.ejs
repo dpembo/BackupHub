@@ -582,6 +582,24 @@ function scriptSelected(element,inScript,inDescription){
             window.location.href="/scriptList.html";  
           }
 
+          function openScriptTestFromEditor() {
+            if (!window.BackupHubScriptTest) {
+              M.toast({html: 'Script test UI is not ready yet', displayLength: 3000});
+              return;
+            }
+
+            const scriptMetadata = extractScriptMetadata(editor.getValue()).data || {};
+
+            window.BackupHubScriptTest.open({
+              scriptName: onScript || null,
+              scriptDescription: scriptMetadata.metaDescription || '',
+              scriptParameters: scriptMetadata.metaParameters || '',
+              sourceType: 'editor',
+              scriptContent: editor.getValue(),
+              commandParams: '',
+            });
+          }
+
           function listSchedulesForOrchestration() {
             if (!onScript || onScript === "") {
               M.toast({html: "Please save the script first before viewing jobs", displayLength: 3000});
@@ -985,6 +1003,10 @@ function scriptSelected(element,inScript,inDescription){
           <i class="material-icons" style="font-size: 16px; vertical-align: middle;">cancel</i>
           Cancel
         </button>
+        <button class="save-btn" style="background: #1976d2;" onclick="openScriptTestFromEditor()" title="Run a transient script test">
+          <i class="material-icons" style="font-size: 16px; vertical-align: middle;">fact_check</i>
+          Test
+        </button>
         <button class="save-btn" onclick="save()">
           <i class="material-icons" style="font-size: 16px; vertical-align: middle;">save</i>
           Save
@@ -1091,6 +1113,8 @@ function scriptSelected(element,inScript,inDescription){
 
     
   </script>
+
+  <%- include('./partials/_scriptTestModal', { agents: agents }) %>
 
   <footer>
   <%- include('./partials/_footer'); %>
