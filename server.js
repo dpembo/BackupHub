@@ -2808,7 +2808,7 @@ app.post('/scheduler.html', validateCsrf, User.isAuthenticated, asyncHandler(asy
   res.redirect(redir);
 }));
 
-app.get('/scheduleList.html',User.isAuthenticated, (req, res) => {
+app.get('/scheduleList.html',User.isAuthenticated, asyncHandler(async (req, res) => {
   //console.time('getSchedules');
   const schedules = scheduler.getSchedules();
   //console.timeEnd('getSchedules');
@@ -2824,11 +2824,37 @@ app.get('/scheduleList.html',User.isAuthenticated, (req, res) => {
       }
   }
 
+  // Pre-fetch orchestration executions once so orchestration schedule rows can
+  // use latest execution state for row highlighting.
+  let orchestrationExecutions = {};
+  try {
+    orchestrationExecutions = await db.getData('ORCHESTRATION_EXECUTIONS');
+  } catch (err) {
+    orchestrationExecutions = {};
+  }
+
   // Enhance schedules with precomputed lastRun
-  const processedSchedules = schedules.map(schedule => ({
-      ...schedule,
-      returnCode: lastRuns[schedule.jobName] ? lastRuns[schedule.jobName].returnCode : '0',
-      successPercentage: hist.getSuccessPercentage(schedule.jobName)
+  const processedSchedules = await Promise.all(schedules.map(async (schedule) => {
+      let successPercentage;
+      let returnCode = lastRuns[schedule.jobName] ? lastRuns[schedule.jobName].returnCode : '0';
+
+      if (schedule.scheduleMode === 'orchestration' && schedule.orchestrationId) {
+        successPercentage = await hist.getOrchestrationSuccessPercentage(schedule.orchestrationId);
+
+        const executions = orchestrationExecutions[schedule.orchestrationId] || [];
+        if (executions.length > 0) {
+          const latestExecution = executions[executions.length - 1];
+          returnCode = latestExecution.finalStatus === 'success' ? '0' : '1';
+        }
+      } else {
+        successPercentage = hist.getSuccessPercentage(schedule.jobName);
+      }
+
+      return {
+        ...schedule,
+        returnCode: returnCode,
+        successPercentage: successPercentage
+      };
   }));
 
   console.time('render');
@@ -2838,7 +2864,7 @@ app.get('/scheduleList.html',User.isAuthenticated, (req, res) => {
     csrf: req.csrfToken(), 
   });
   console.timeEnd('render');
-});
+}));
 
 app.get('/scheduleListCalendar.html',User.isAuthenticated, (req, res) => {
   const schedules = scheduler.getSchedules();
