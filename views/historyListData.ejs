@@ -280,7 +280,7 @@ function displaySecs(secs) {
                     <span style="font-size: 0.9em; color: var(--text-muted);">↳ </span><%=childNode.jobName%>
                   </td>
                   <td>
-                    <% var runType="label_important"; var runDesc="Node Execution";%>
+                    <% var runType="crop_16_9"; var runDesc="execution";%>
                     <span title="<%=runDesc%>" class="material-icons"><%=runType%></span>
                   </td>
                   <% 
@@ -309,7 +309,20 @@ function displaySecs(secs) {
                     <% } %>
                   </td>
                   <td>
-                    <!-- No individual log viewer for orchestration subnodes - view logs via parent orchestration group -->
+                    <% var childLogClass = "tableIconButton"; %>
+                    <% if(parseInt(childNode.returnCode)!=0){ childLogClass = "tableIconButtonError"; } %>
+                    <% var childIcon = childNode.icon || "crop_16_9"; %>
+                    <% var childColor = childNode.color || "#000000"; %>
+                    <% var childNodeMatch = childNode.jobName ? childNode.jobName.match(/^Orchestration \[[^\]]+\] Execution \[[^\]]+\] Node \[([^\]]+)\]$/) : null; %>
+                    <% var childNodeId = childNodeMatch ? childNodeMatch[1] : ""; %>
+                    <% var parentJobIdEnc = encodeURIComponent(historyList[i].jobId || ""); %>
+                    <% var parentExecIdEnc = encodeURIComponent(historyList[i].executionId || ""); %>
+                    <% var childNodeIdEnc = encodeURIComponent(childNodeId || ""); %>
+                    <% var childIconJs = String(childIcon).replace(/\\/g, "\\\\").replace(/'/g, "\\'"); %>
+                    <% var childColorJs = String(childColor).replace(/\\/g, "\\\\").replace(/'/g, "\\'"); %>
+                    <% var childNameJs = String(childNode.jobName || "").replace(/\\/g, "\\\\").replace(/'/g, "\\'"); %>
+                    <pre style="display:none" id="orch-logdetail-<%=i%>-<%=childIdx%>"><%=childNode.log || ''%></pre>
+                    <a href="#modal-orch-<%=i%>-<%=childIdx%>" id="modal-orch-link-<%=i%>-<%=childIdx%>" onclick="openOrchestrationNodeLog('<%=parentJobIdEnc%>','<%=childNodeIdEnc%>','<%=parentExecIdEnc%>','<%=childIconJs%>','<%=childColorJs%>','<%=childNameJs%>','orch-logdetail-<%=i%>-<%=childIdx%>'); return false;" title="View Execution Log"><span class="material-icons <%=childLogClass%> vertTop">description</span></a>
                   </td>
                 </tr>
               <% }); %>
