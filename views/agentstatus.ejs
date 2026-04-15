@@ -107,6 +107,82 @@ function hasValidAgents(obj) {
     $('#confirmationModal').modal('open');
   }
 
+  var agentSort = null;
+  var agentOrder = null;
+
+  function compareAgentValues(a, b, order) {
+    if (a < b) return order === 'asc' ? -1 : 1;
+    if (a > b) return order === 'asc' ? 1 : -1;
+    return 0;
+  }
+
+  function parseAgentDate(value) {
+    if (!value) return Number.NaN;
+    var ts = Date.parse(value);
+    if (!Number.isNaN(ts)) return ts;
+    return Number.NaN;
+  }
+
+  function sortAgentTable(sortKey) {
+    var tbody = document.getElementById('agentTableBody');
+    if (!tbody) return;
+
+    var order;
+    if (agentSort === sortKey) {
+      order = agentOrder === 'asc' ? 'desc' : 'asc';
+    } else {
+      order = sortKey === 'lastupdated' ? 'desc' : 'asc';
+    }
+
+    if (agentSort) {
+      var prevIcon = document.getElementById(agentSort + '-SortIcon');
+      if (prevIcon) {
+        prevIcon.textContent = '';
+        prevIcon.title = '';
+      }
+    }
+
+    agentSort = sortKey;
+    agentOrder = order;
+
+    var icon = document.getElementById(sortKey + '-SortIcon');
+    if (icon) {
+      icon.textContent = order === 'asc' ? 'arrow_drop_up' : 'arrow_drop_down';
+      icon.title = order === 'asc' ? 'Ascending' : 'Descending';
+    }
+
+    var rows = Array.from(tbody.querySelectorAll('tr'));
+    rows.sort(function(rowA, rowB) {
+      if (sortKey === 'name' || sortKey === 'server' || sortKey === 'connection') {
+        var aText = (rowA.dataset[sortKey] || '').toLowerCase();
+        var bText = (rowB.dataset[sortKey] || '').toLowerCase();
+        return compareAgentValues(aText, bText, order);
+      }
+
+      if (sortKey === 'lastupdated') {
+        var aTs = parseAgentDate(rowA.dataset.lastupdated || '');
+        var bTs = parseAgentDate(rowB.dataset.lastupdated || '');
+        var aInvalid = Number.isNaN(aTs);
+        var bInvalid = Number.isNaN(bTs);
+
+        if (aInvalid && bInvalid) {
+          var aRaw = (rowA.dataset.lastupdated || '').toLowerCase();
+          var bRaw = (rowB.dataset.lastupdated || '').toLowerCase();
+          return compareAgentValues(aRaw, bRaw, order);
+        }
+        if (aInvalid) return 1;
+        if (bInvalid) return -1;
+        return compareAgentValues(aTs, bTs, order);
+      }
+
+      return 0;
+    });
+
+    rows.forEach(function(row) {
+      tbody.appendChild(row);
+    });
+  }
+
   var global_command;
   var global_agentId;
 
@@ -319,6 +395,42 @@ function hasValidAgents(obj) {
       document.getElementById('cancelButtonProgress').disabled = false; // Re-enable cancel button
     }
   </script>
+  <style>
+    .agentTable th {
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+
+    .agentTable th .agentHeaderCell {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+    }
+
+    .agentTable th .agentHeaderText {
+      display: inline-block;
+      vertical-align: middle;
+      line-height: 1.4;
+    }
+
+    .agentTable th .agentSortIcon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 1.1em;
+      min-width: 1.1em;
+      height: 1em;
+      font-size: 20px;
+      line-height: 1;
+      vertical-align: middle;
+      position: relative;
+      top: 1px;
+    }
+
+    .agentTable th .agentSortIconPlaceholder {
+      visibility: hidden;
+    }
+  </style>
 </head>
 <body>
   <%- include('./partials/_header'); %>
@@ -418,14 +530,51 @@ function hasValidAgents(obj) {
       <div class="agentTable">
         <table>
           <tr>
-            <th><b class="sortableHeader">Status</b></th>
-            <th><b class="sortableHeader">Name</b></th>
-            <th><b class="sortableHeader">Description</b></th>
-            <th><b class="sortableHeader">Server</b></th>
-            <th><b class="sortableHeader">Connection</b></th>
-            <th><b class="sortableHeader">Last Updated</b></th>
-            <th><b class="sortableHeader">Actions</b></th>
+            <th>
+              <span class="agentHeaderCell">
+                <span class="sortableHeader agentHeaderText">Status</span>
+                <span class="material-icons vertMid agentSortIcon agentSortIconPlaceholder">arrow_drop_down</span>
+              </span>
+            </th>
+            <th>
+              <span class="agentHeaderCell">
+                <a class="sortableHeader agentHeaderText" onclick="sortAgentTable('name'); return false;" href="#">Name</a>
+                <span id="name-SortIcon" class="material-icons vertMid agentSortIcon"></span>
+              </span>
+            </th>
+            <th>
+              <span class="agentHeaderCell">
+                <span class="sortableHeader agentHeaderText">Description</span>
+                <span class="material-icons vertMid agentSortIcon agentSortIconPlaceholder">arrow_drop_down</span>
+              </span>
+            </th>
+            <th>
+              <span class="agentHeaderCell">
+                <a class="sortableHeader agentHeaderText" onclick="sortAgentTable('server'); return false;" href="#">Server</a>
+                <span id="server-SortIcon" class="material-icons vertMid agentSortIcon"></span>
+              </span>
+            </th>
+            <th>
+              <span class="agentHeaderCell">
+                <a class="sortableHeader agentHeaderText" onclick="sortAgentTable('connection'); return false;" href="#">Connection</a>
+                <span id="connection-SortIcon" class="material-icons vertMid agentSortIcon"></span>
+              </span>
+            </th>
+            <th>
+              <span class="agentHeaderCell">
+                <a class="sortableHeader agentHeaderText" onclick="sortAgentTable('lastupdated'); return false;" href="#">Last Updated</a>
+                <span id="lastupdated-SortIcon" class="material-icons vertMid agentSortIcon"></span>
+              </span>
+            </th>
+            <th>
+              <span class="agentHeaderCell">
+                <span class="sortableHeader agentHeaderText">Actions</span>
+                <span class="material-icons vertMid agentSortIcon agentSortIconPlaceholder">arrow_drop_down</span>
+              </span>
+            </th>
           </tr>            
+
+          <tbody id="agentTableBody">
 
       <% for (const [key, value] of Object.entries(agents)) { %>
 
@@ -463,7 +612,7 @@ function hasValidAgents(obj) {
           } 
         %>
 
-        <tr>
+        <tr data-name="<%= value.name || '' %>" data-server="<%= value.server || '' %>" data-connection="<%= value.commsType || '' %>" data-lastupdated="<%= value.lastStatusReport || '' %>">
           <td id="<%=value.name%>_ball">
             <% switch (value.status){
               case "online":%>
@@ -533,6 +682,7 @@ function hasValidAgents(obj) {
         </tr>
         
       <% } %>
+          </tbody>
         </table>
     </div>
     <% } else { %>

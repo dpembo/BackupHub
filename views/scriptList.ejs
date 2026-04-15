@@ -98,6 +98,9 @@ function addDateSuffix(date) {
   
   <script>
 
+  var scriptSort = null;
+  var scriptOrder = null;
+
   
   function doDelete()
   {
@@ -197,10 +200,89 @@ function addDateSuffix(date) {
       commandParams: '',
     });
   }
+
+  function sortScriptTable(sortKey, inOrder) {
+    const tbody = document.getElementById('scriptsTableBody');
+    if (!tbody) return;
+
+    if (!inOrder) {
+      if (scriptSort === sortKey) {
+        inOrder = scriptOrder === 'asc' ? 'desc' : 'asc';
+      } else {
+        inOrder = sortKey === 'lastupdated' ? 'desc' : 'asc';
+      }
+    }
+
+    if (scriptSort) {
+      const prevIcon = document.getElementById(scriptSort + '-SortIcon');
+      if (prevIcon) {
+        prevIcon.innerText = '';
+        prevIcon.title = '';
+      }
+    }
+
+    scriptSort = sortKey;
+    scriptOrder = inOrder;
+
+    const icon = document.getElementById(sortKey + '-SortIcon');
+    if (icon) {
+      icon.innerText = inOrder === 'asc' ? 'arrow_drop_up' : 'arrow_drop_down';
+      icon.title = inOrder === 'asc' ? 'Ascending' : 'Descending';
+    }
+
+    const rows = Array.from(tbody.querySelectorAll('tr'));
+    rows.sort((a, b) => {
+      const aVal = (a.dataset[sortKey] || '').toLowerCase();
+      const bVal = (b.dataset[sortKey] || '').toLowerCase();
+
+      if (sortKey === 'lastupdated') {
+        const aTime = Date.parse(a.dataset.lastupdated || '') || 0;
+        const bTime = Date.parse(b.dataset.lastupdated || '') || 0;
+        return inOrder === 'asc' ? aTime - bTime : bTime - aTime;
+      }
+
+      if (aVal < bVal) return inOrder === 'asc' ? -1 : 1;
+      if (aVal > bVal) return inOrder === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    rows.forEach(row => tbody.appendChild(row));
+  }
   </script>
   <style>
     td {
       vertical-align: top !important;
+    }
+
+    .scheduleTable th {
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+
+    .scheduleTable th .headerLabel,
+    .scheduleTable th .sortableHeader {
+      display: inline-block;
+      vertical-align: middle;
+      line-height: 1.4;
+    }
+
+    .scheduleTable th .material-icons {
+      vertical-align: middle;
+      line-height: 1;
+    }
+
+    .scheduleTable th .scriptSortIcon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 1.1em;
+      min-width: 1.1em;
+      height: 1em;
+      font-size: 20px;
+      line-height: 1;
+      vertical-align: middle;
+      position: relative;
+      top: 1px;
     }
   </style>
 </head>
@@ -264,18 +346,24 @@ function addDateSuffix(date) {
       <div class="scheduleTable">
         <table>
           <tr>
-            <th><b>Icon</b></th>
-            <th><b>Filename</b></th>
-            <th><b>Description</b></th>
-            <th><b>Last Updated</b></th>
-            <th style="min-width:150px"><b class="sortableHeader">Actions</b></th>
+            <th><span class="headerLabel">Icon</span></th>
+            <th>
+              <a class="sortableHeader" onclick="sortScriptTable('filename'); return false;" href="#">Filename</a>
+              <span id="filename-SortIcon" class="material-icons vertMid scriptSortIcon"></span>
+            </th>
+            <th><span class="headerLabel">Description</span></th>
+            <th>
+              <a class="sortableHeader" onclick="sortScriptTable('lastupdated'); return false;" href="#">Last Updated</a>
+              <span id="lastupdated-SortIcon" class="material-icons vertMid scriptSortIcon"></span>
+            </th>
+            <th style="min-width:150px"><span class="headerLabel">Actions</span></th>
             
           </tr> 
           
-          <tbody>
+          <tbody id="scriptsTableBody">
             <% for (i=0;i<scripts.length;i++) { %>
               
-                <tr>
+                <tr data-filename="<%=scripts[i].data.filename || ''%>" data-lastupdated="<%=scripts[i].data.lastUpdated ? scripts[i].data.lastUpdated.toISOString() : ''%>">
                 <td><i class="material-icons" style="font-size: 34px; color: var(--text-primary); display: block; margin-bottom: 20px;" title="Script">terminal</i></td>
                 <td><span><%=scripts[i].data.filename%></span></td>
                 <td><span><%=scripts[i].data.metaDescription%></span></td>
