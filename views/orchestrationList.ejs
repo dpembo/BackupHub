@@ -8,9 +8,47 @@
 
   <%- include('./partials/_head'); %>
   <%- include('./partials/_scripts'); %>
+  <style>
+    .scheduleTable th {
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+
+    .scheduleTable th .orchHeaderCell {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+    }
+
+    .scheduleTable th .orchHeaderText {
+      display: inline-block;
+      vertical-align: middle;
+      line-height: 1.4;
+    }
+
+    .scheduleTable th .orchSortIcon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 1.1em;
+      min-width: 1.1em;
+      height: 1em;
+      font-size: 20px;
+      line-height: 1;
+      vertical-align: middle;
+      position: relative;
+      top: 1px;
+    }
+
+    .scheduleTable th .orchSortIconPlaceholder {
+      visibility: hidden;
+    }
+  </style>
   
   <script>
     let orchestrations = {};
+    let orchestrationSort = null;
+    let orchestrationOrder = null;
     
     // Helper function to escape HTML special characters
     function escapeHtml(text) {
@@ -62,16 +100,65 @@
       let tableHtml = `
         <table>
           <tr>
-            <th style="min-width:65px"><b class="sortableHeader">Type</b></th>
-            <th><b class="sortableHeader">Name</b></th>
-            <th><b class="sortableHeader">Description</b></th>
-            <th><b class="sortableHeader">Last Updated</b></th>
-            <th><b class="sortableHeader">Actions</b></th>
+            <th style="min-width:65px">
+              <span class="orchHeaderCell">
+                <span class="sortableHeader orchHeaderText">Type</span>
+                <span class="material-icons vertMid orchSortIcon orchSortIconPlaceholder">arrow_drop_down</span>
+              </span>
+            </th>
+            <th>
+              <span class="orchHeaderCell">
+                <a class="sortableHeader orchHeaderText" onclick="sortOrchestrationTable('name'); return false;" href="#">Name</a>
+                <span id="name-SortIcon" class="material-icons vertMid orchSortIcon"></span>
+              </span>
+            </th>
+            <th>
+              <span class="orchHeaderCell">
+                <span class="sortableHeader orchHeaderText">Description</span>
+                <span class="material-icons vertMid orchSortIcon orchSortIconPlaceholder">arrow_drop_down</span>
+              </span>
+            </th>
+            <th>
+              <span class="orchHeaderCell">
+                <a class="sortableHeader orchHeaderText" onclick="sortOrchestrationTable('lastUpdated'); return false;" href="#">Last Updated</a>
+                <span id="lastUpdated-SortIcon" class="material-icons vertMid orchSortIcon"></span>
+              </span>
+            </th>
+            <th>
+              <span class="orchHeaderCell">
+                <span class="sortableHeader orchHeaderText">Actions</span>
+                <span class="material-icons vertMid orchSortIcon orchSortIconPlaceholder">arrow_drop_down</span>
+              </span>
+            </th>
           </tr>
           <tbody>
       `;
-      
-      Object.entries(orchestrations).forEach(([orchId, orch]) => {
+
+      const entries = Object.entries(orchestrations);
+      if (orchestrationSort) {
+        entries.sort((a, b) => {
+          const orchA = a[1] || {};
+          const orchB = b[1] || {};
+
+          if (orchestrationSort === 'name') {
+            const nameA = String(orchA.name || '').toLowerCase();
+            const nameB = String(orchB.name || '').toLowerCase();
+            if (nameA < nameB) return orchestrationOrder === 'asc' ? -1 : 1;
+            if (nameA > nameB) return orchestrationOrder === 'asc' ? 1 : -1;
+            return 0;
+          }
+
+          if (orchestrationSort === 'lastUpdated') {
+            const tsA = Date.parse(orchA.updatedAt || '') || 0;
+            const tsB = Date.parse(orchB.updatedAt || '') || 0;
+            return orchestrationOrder === 'asc' ? tsA - tsB : tsB - tsA;
+          }
+
+          return 0;
+        });
+      }
+
+      entries.forEach(([orchId, orch]) => {
         const updatedDate = orch.updatedAt ? new Date(orch.updatedAt).toLocaleString() : 'N/A';
         const description = escapeHtml(orch.description || 'No description');
         const orchName = escapeHtml(orch.name);
@@ -102,6 +189,38 @@
       `;
       
       container.html(tableHtml);
+      updateOrchestrationSortIcons();
+    }
+
+    function sortOrchestrationTable(sortKey) {
+      if (orchestrationSort === sortKey) {
+        orchestrationOrder = orchestrationOrder === 'asc' ? 'desc' : 'asc';
+      } else {
+        orchestrationSort = sortKey;
+        orchestrationOrder = sortKey === 'lastUpdated' ? 'desc' : 'asc';
+      }
+      renderOrchestrations();
+    }
+
+    function updateOrchestrationSortIcons() {
+      const nameIcon = document.getElementById('name-SortIcon');
+      const lastUpdatedIcon = document.getElementById('lastUpdated-SortIcon');
+      if (nameIcon) {
+        nameIcon.textContent = '';
+        nameIcon.title = '';
+      }
+      if (lastUpdatedIcon) {
+        lastUpdatedIcon.textContent = '';
+        lastUpdatedIcon.title = '';
+      }
+
+      if (!orchestrationSort) return;
+
+      const activeIcon = document.getElementById(orchestrationSort + '-SortIcon');
+      if (activeIcon) {
+        activeIcon.textContent = orchestrationOrder === 'asc' ? 'arrow_drop_up' : 'arrow_drop_down';
+        activeIcon.title = orchestrationOrder === 'asc' ? 'Ascending' : 'Descending';
+      }
     }
     
     function deleteOrchestration(jobId, orchName) {
