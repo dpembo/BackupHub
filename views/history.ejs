@@ -173,17 +173,61 @@ tbody tr.orch-expanded td {
         });
   }
 
-  function openModal(icon,colour,name,logId) {
-    //Populate the modal data
-    var logData = document.getElementById(logId).innerHTML;
-    document.getElementById('modal-log-data').innerHTML=logData;
-    document.getElementById('modal-icon').innerHTML=icon;
-    document.getElementById('modal-icon').style.color=colour;
+  function showLogModal(icon, colour, name, logData) {
+    document.getElementById('modal-log-data').textContent = logData || '';
+    document.getElementById('modal-icon').textContent = icon;
+    document.getElementById('modal-icon').style.color = colour;
     if(name.indexOf("||INTERNAL||")==0)name=name.substr(name.lastIndexOf("||")+2);
-    document.getElementById('modal-jobname').innerHTML=name;
-    //Open the modal
+    document.getElementById('modal-jobname').textContent = name;
     var instance = M.Modal.getInstance(document.getElementById('logViewerModal'));
     instance.open();
+  }
+
+  function openModal(icon,colour,name,logId) {
+    var source = document.getElementById(logId);
+    var logData = source ? source.textContent : '';
+    showLogModal(icon, colour, name, logData);
+  }
+
+  async function openOrchestrationNodeLog(jobIdEnc, nodeIdEnc, executionIdEnc, icon, colour, name, fallbackLogId) {
+    const jobId = decodeURIComponent(jobIdEnc || '');
+    const nodeId = decodeURIComponent(nodeIdEnc || '');
+    const executionId = decodeURIComponent(executionIdEnc || '');
+    let logData = '';
+
+    if (jobId && nodeId) {
+      try {
+        const params = new URLSearchParams({ jobId, nodeId });
+        if (executionId) {
+          params.set('executionId', executionId);
+        }
+        const response = await fetch(`/orchestration/node/output?${params.toString()}`);
+        if (response.ok) {
+          const payload = await response.json();
+          const stdout = payload && payload.log ? payload.log : '';
+          const stderr = payload && payload.stderr ? payload.stderr : '';
+          logData = stdout;
+          if (stderr) {
+            logData += (logData ? '\n\n' : '') + '[stderr]\n' + stderr;
+          }
+        }
+      } catch (err) {
+        console.warn('Unable to fetch orchestration node output:', err);
+      }
+    }
+
+    if (!logData && fallbackLogId) {
+      const fallbackNode = document.getElementById(fallbackLogId);
+      if (fallbackNode) {
+        logData = fallbackNode.textContent || '';
+      }
+    }
+
+    if (!logData) {
+      logData = 'No log output available for this node execution.';
+    }
+
+    showLogModal(icon, colour, name, logData);
   }
 
   function doNotify(status,msg)
