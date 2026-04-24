@@ -10,9 +10,9 @@ else
     exit 1
 fi
 
-SERVICE_NAME="BackupHubAgent-$AGENT_NAME"
+SERVICE_NAME="OrcheliumAgent-$AGENT_NAME"
 
-dialog --yesno "Welcome to the BackupApp Agent Uninstaller - do you want to uninstall?" 10 30
+dialog --yesno "Welcome to the Orchelium Agent Uninstaller - do you want to uninstall?" 10 30
 # Check the exit status of dialog
 # 0 means Yes, 1 means No, 255 means Esc/Cancel
 response=$?
@@ -91,9 +91,9 @@ EOF
         echo "  * Killing any running process"
         pkill -f "node agent.js --agent"
         if [ $? -eq 0 ]; then
-            echo "  * Backup Agent Terminated."
+            echo "  * Orchelium Agent Terminated."
         else
-            echo "  * No running Backup Agent detected"
+            echo "  * No running Orchelium Agent detected"
         fi
         ;;
     "none")

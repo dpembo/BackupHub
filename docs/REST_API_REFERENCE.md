@@ -1,6 +1,6 @@
-# BackupHub REST API Reference
+# Orchelium REST API Reference
 
-This document describes the main REST API endpoints exposed by the BackupHub server (see `server.js`). Endpoints are grouped by functional area. All endpoints require authentication unless otherwise noted.
+This document describes the main REST API endpoints exposed by the Orchelium server (see `server.js`). Endpoints are grouped by functional area. All endpoints require authentication unless otherwise noted.
 
 ---
 
@@ -85,7 +85,7 @@ This document describes the main REST API endpoints exposed by the BackupHub ser
 
 ## Authorization & Authentication
 
-All REST API endpoints require authentication unless otherwise noted. The BackupHub server uses session-based authentication and CSRF protection for form-based routes. Key points:
+All REST API endpoints require authentication unless otherwise noted. Orchelium uses session-based authentication and CSRF protection for form-based routes. Key points:
 
 - **Session Authentication:**
   - Users log in via `/login.html` using a username and password.
@@ -140,7 +140,7 @@ All REST API endpoints require authentication unless otherwise noted. The Backup
 | Property | Value | Example |
 |---|---|---|
 | **Input** | JSON body with boolean flags for each item | `{ "serverConfig": true, "userAccounts": true, "jobHistory": false, ... }` |
-| **Output** | Binary zip file attachment | `backuphub-backup-20260328.zip` |
+| **Output** | Binary zip file attachment | `orchelium-backup-20260328.zip` |
 
 **Request body options:**
 ```json
@@ -157,7 +157,7 @@ All REST API endpoints require authentication unless otherwise noted. The Backup
 ```
 
 #### Restore Backup
-`POST /api/backup/restore` | Restore BackupHub settings and data from a backup zip file.
+`POST /api/backup/restore` | Restore Orchelium settings and data from a backup zip file.
 
 | Property | Value | Example |
 |---|---|---|
@@ -171,17 +171,17 @@ All REST API endpoints require authentication unless otherwise noted. The Backup
   "itemsRestored": [
     "Server Configuration",
     "Agents Configuration",
-    "Backup Schedules",
+    "Job Schedules",
     "User Accounts"
   ],
   "warnings": [],
   "recommendations": [
-    "Restart the BackupHub server to ensure all changes take effect."
+    "Restart the Orchelium to ensure all changes take effect."
   ]
 }
 ```
 
-**Important:** After restoring a backup, restart the BackupHub server for all changes to take effect.
+**Important:** After restoring a backup, restart Orchelium for all changes to take effect.
 
 ---
 
@@ -189,7 +189,7 @@ All REST API endpoints require authentication unless otherwise noted. The Backup
 
 ### Public Endpoint (No Authentication Required)
 
-Webhooks allow external systems to trigger BackupHub jobs and pass custom data that becomes available to scripts and orchestrations.
+Webhooks allow external systems to trigger jobs and pass custom data that becomes available to scripts and orchestrations.
 
 #### Webhook Trigger Job
 `POST /api/webhook/trigger/:jobName?key=<webhook-key>` | Trigger a job via webhook with custom JSON payload.
@@ -253,7 +253,7 @@ curl -X POST "http://your-server:8082/api/webhook/trigger/backup-job" \
 - **Check Status**: Use the `statusUrl` to poll job execution status if needed
 - **Payload Available**: The webhook JSON payload is available to scripts and orchestrations as environment variables or through trigger context
 - **Trigger Context**: Webhook triggers create a trigger context that's passed to jobs, similar to rule-triggered jobs
-- **For scripts**: Payload data is available via `$BACKUPHUB_TRIGGER_CONTEXT` environment variable (as JSON)
+- **For scripts**: Payload data is available via `$ORCHELIUM_TRIGGER_CONTEXT` environment variable (as JSON)
 - **For orchestrations**: Payload data accessible via template substitution `#{context.payload.*}`
 
 #### Check Webhook Execution Status
@@ -553,7 +553,7 @@ curl -X GET "http://your-server:8082/orchestration/execution/details?jobId=backu
 
 ## Related Documentation
 
-- [Installation](./installation.md): Setting up BackupHub
+- [Installation](./installation.md): Setting up Orchelium
 - [Backup Schedules](./backup-schedules.md): Creating and managing schedules
 - [Orchestrations](./orchestrations.md): Building complex backup workflows
 - [Settings Configuration](./settings-config.md): Server configuration options
@@ -1023,7 +1023,7 @@ The following endpoints allow you to read and delete schedule data. All endpoint
 
 ## Related Documentation
 
-- [Installation](./installation.md): Setting up BackupHub
+- [Installation](./installation.md): Setting up Orchelium
 - [Backup Schedules](./backup-schedules.md): Creating and managing schedules
 - [Orchestrations](./orchestrations.md): Building complex backup workflows
 - [Settings Configuration](./settings-config.md): Server configuration options

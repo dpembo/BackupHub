@@ -28,7 +28,7 @@ function noValue(inValue){
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0" />
-    <title>BackupHub | Settings</title>
+    <title>Orchelium | Settings</title>
 
     <%- include('./partials/_head'); %>
       <script>
@@ -172,7 +172,7 @@ function noValue(inValue){
           
           // Download the file
           const blob = await response.blob();
-          const filename = `backuphub-backup-${new Date().toISOString().split('T')[0].replace(/-/g, '')}.zip`;
+          const filename = `orchelium-backup-${new Date().toISOString().split('T')[0].replace(/-/g, '')}.zip`;
           const url = window.URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = url;
@@ -765,7 +765,7 @@ function noValue(inValue){
           </div>
           <p><strong>Usage:</strong></p>
           <p style="font-size: 12px;">Send POST request to the webhook trigger URL with header or query parameter:</p>
-          <pre style="background-color: #f5f5f5; padding: 10px; border-radius: 4px; font-size: 11px; overflow-x: auto;">curl -X POST https://your-backuphub/webhooks/trigger \
+          <pre style="background-color: #f5f5f5; padding: 10px; border-radius: 4px; font-size: 11px; overflow-x: auto;">curl -X POST https://your-orchelium/webhooks/trigger \
   -H "X-Webhook-Key: &lt;YOUR_API_KEY&gt;" \
   -H "Content-Type: application/json" \
   -d '{"data": "value"}'</pre>

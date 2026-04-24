@@ -1,5 +1,5 @@
 #!/bin/bash
-INSTALL_DIR="/opt/BackupHubAgent"
+INSTALL_DIR="/opt/OrcheliumAgent"
 
 # Check if running with sudo privileges
 if [ "$EUID" -ne 0 ]; then
@@ -28,9 +28,9 @@ echo "  * Checking for existence of cron entry"
 CRONTAB_ENTRY_START="@reboot node $INSTALL_DIR/agent/agent.js"
 
 if [ "$MQTT_ENABLED" = "true" ]; then
-    CRONTAB_ENTRY="$CRONTAB_ENTRY_START --agent \"$AGENT_NAME\" --mqttServer \"$MQTT_SERVER\" --mqttPort \"$MQTT_PORT\" --workingDir \"$WORKING_DIR\" >> /var/log/BackupHubAgent.log 2>&1"
+    CRONTAB_ENTRY="$CRONTAB_ENTRY_START --agent \"$AGENT_NAME\" --mqttServer \"$MQTT_SERVER\" --mqttPort \"$MQTT_PORT\" --workingDir \"$WORKING_DIR\" >> /var/log/OrcheliumAgent.log 2>&1"
 else
-    CRONTAB_ENTRY="$CRONTAB_ENTRY_START --agent \"$AGENT_NAME\" --wsServer \"$WS_SERVER\" --wsPort \"$WS_PORT\" --workingDir \"$WORKING_DIR\" >> /var/log/BackupHubAgent.log 2>&1"
+    CRONTAB_ENTRY="$CRONTAB_ENTRY_START --agent \"$AGENT_NAME\" --wsServer \"$WS_SERVER\" --wsPort \"$WS_PORT\" --workingDir \"$WORKING_DIR\" >> /var/log/OrcheliumAgent.log 2>&1"
 fi 
 
 if crontab -l | grep -q "^$CRONTAB_ENTRY_START"; then
@@ -51,5 +51,5 @@ echo " ----------------------- "
 echo " Starting        "
 echo " ----------------------- "
 cd $INSTALL_DIR/agent
-node agent.js --agent "$AGENT_NAME" --mqttServer "$MQTT_SERVER" --mqttPort "$MQTT_PORT" --workingDir "$WORKING_DIR" >> /var/log/backupApp2.log 2>&1 &
+node agent.js --agent "$AGENT_NAME" --mqttServer "$MQTT_SERVER" --mqttPort "$MQTT_PORT" --workingDir "$WORKING_DIR" >> /var/log/OrcheliumAgent.log 2>&1 &
 

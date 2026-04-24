@@ -1,8 +1,8 @@
-# BackupHub Testing Guide
+# Orchelium Testing Guide
 
 ## Overview
 
-This document describes how to run the test suite for BackupHub. The test infrastructure uses Jest as the testing framework with comprehensive mocking for all module dependencies.
+This document describes how to run the test suite for Orchelium. The test infrastructure uses Jest as the testing framework with comprehensive mocking for all module dependencies.
 
 ## Prerequisites
 

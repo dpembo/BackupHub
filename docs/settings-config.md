@@ -21,7 +21,7 @@ This is used in emails/notifications to enable you to link back to the server. Y
 
 | Name      | Description | Example  |
 |---        |---|---|
-| Timezone  | Server timezone for displaying backup jobs | Europe/London |
+| Timezone  | Server timezone for displaying jobs | Europe/London |
 | Log Level | Numeric value (0=Error, 1=Warn, 2=Info, 3=Verbose, 4=Debug). Higher = more output. | 2 |
 
 ---
@@ -81,7 +81,7 @@ Settings for SMTP server, used if the alert notification type is set to email.
 | Secure    | Whether SMTP server uses secure comms or not | true |
 | SMTP Username | Username for SMTP Server | user |
 | SMTP Password | Password for SMTP Server | Password |
-| Email from | Sender email address | BackupHub@email.com |
+| Email from | Sender email address | Orchelium@email.com |
 | Email to | Recipient email address | receiver@email.com |
 
 
@@ -97,7 +97,7 @@ Settings for webhook URL, used if the alert notification type is set to webhook.
 
 
 ## Rule-Based Thresholds (Metric Rules)
-BackupHub now uses a flexible rule-based system for threshold jobs. Instead of global threshold settings, you define rules for each job or agent. Rules can trigger jobs based on metrics like CPU, storage, file count, file age, and more.
+Orchelium  uses a flexible rule-based system for threshold jobs. You define rules for each job or agent. Rules can trigger jobs based on metrics like CPU, storage, file count, file age, and more.
 
 When a rule triggers a job, the metric data and condition information are passed to the job as **trigger context**, making it available to scripts and orchestrations.
 
@@ -106,11 +106,11 @@ When a rule triggers a job, the metric data and condition information are passed
 When a rule fires and triggers a job:
 
 1. **Scripts receive environment variables** containing the metric data:
-   - `$BACKUPHUB_METRIC_TYPE` - Type of metric (cpu, mount_usage, file_count, etc.)
-   - `$BACKUPHUB_METRIC_VALUE` - Actual value (e.g., 92.5)
-   - `$BACKUPHUB_METRIC_PATH` - Path being monitored (if applicable)
-   - `$BACKUPHUB_CONDITION_OPERATOR` - The operator used (>=, <=, etc.)
-   - `$BACKUPHUB_CONDITION_THRESHOLD` - Threshold value
+   - `$ORCHELIUM_METRIC_TYPE` - Type of metric (cpu, mount_usage, file_count, etc.)
+   - `$ORCHELIUM_METRIC_VALUE` - Actual value (e.g., 92.5)
+   - `$ORCHELIUM_METRIC_PATH` - Path being monitored (if applicable)
+   - `$ORCHELIUM_CONDITION_OPERATOR` - The operator used (>=, <=, etc.)
+   - `$ORCHELIUM_CONDITION_THRESHOLD` - Threshold value
    - And more (see [TRIGGER_CONTEXT_GUIDE.md](../TRIGGER_CONTEXT_GUIDE.md))
 
 2. **Orchestrations can use template substitution** in parameters:
@@ -118,7 +118,7 @@ When a rule fires and triggers a job:
    - `#{context.metric.path}` - Gets replaced with the path
    - Example: `--cleanup-percent #{context.metric.value}` becomes `--cleanup-percent 92.5`
 
-3. **Full JSON context** available as `$BACKUPHUB_TRIGGER_CONTEXT` for advanced processing
+3. **Full JSON context** available as `$ORCHELIUM_TRIGGER_CONTEXT` for advanced processing
 
 ### Example Rule Configuration
 Add a `rules` section to your job or agent config:
@@ -186,7 +186,7 @@ Provide and add any icon name from [here](https://marella.me/material-icons/demo
 
 ## Backup & Restore
 
-BackupHub provides comprehensive backup and restore functionality to protect your configuration and data. Backups can be created and restored through the Settings page.
+Orchelium provides comprehensive backup and restore functionality to protect your configuration and data. Backups can be created and restored through the Settings page.
 
 ### What Gets Backed Up
 
@@ -196,8 +196,8 @@ The following items can be included in backups:
 |---|---|
 | **Server Configuration** | MQTT, SMTP, WebSocket, Notifications, Thresholds, Icons settings |
 | **Agents Configuration** | All registered agent configurations |
-| **Backup Schedules** | All configured backup schedules |
-| **Job Execution History** | Historical logs of all backup job executions |
+| **Job Schedules** | All configured job schedules |
+| **Job Execution History** | Historical logs of all job executions |
 | **Orchestration Jobs** | All configured orchestration job definitions |
 | **Orchestration Execution History** | Historical records of orchestration job executions |
 | **Agent Connection History** | Historical logs of agent connections |
@@ -219,14 +219,14 @@ The following items can be included in backups:
 3. Click **Choose File** and select a previously saved backup `.zip` file
 4. Click **Restore Backup**
 5. The system will restore all selected items from the backup
-6. **Restart the BackupHub server** to ensure all changes take effect
+6. **Restart the Orchelium** to ensure all changes take effect
 
 ### Important Notes
 
-- **No encryption key needed**: User passwords are bcrypt-hashed (not encrypted), so backups can be restored to any BackupHub installation
+- **No encryption key needed**: User passwords are bcrypt-hashed (not encrypted), so backups can be restored to any Orchelium installation
 - **User accounts included**: When you restore a backup, all user accounts are restored with their original login credentials
 - **Historical data**: Job history and execution logs are included, so you maintain a complete record of past executions
-- **Server restart required**: After restoring a backup, restart the BackupHub server for all changes to take effect
+- **Server restart required**: After restoring a backup, restart Orchelium for all changes to take effect
 - **Backup location**: Keep backups in a secure location; treat them as sensitive data since they contain service credentials
 
 ---
@@ -234,11 +234,11 @@ The following items can be included in backups:
 
 ## Webhook Management
 
-Webhooks allow external systems to trigger BackupHub jobs with custom data. Detailed webhook API documentation is available in the [REST API Reference](./REST_API_REFERENCE.md).
+Webhooks allow external systems to trigger Orchelium jobs with custom data. Detailed webhook API documentation is available in the [REST API Reference](./REST_API_REFERENCE.md).
 
 ### Using the Web Interface (Recommended)
 
-**For most users**, manage webhooks through the BackupHub settings interface:
+**For most users**, manage webhooks through the Orchelium settings interface:
 
 1. **Navigate to Settings → Webhooks tab**
 2. **Create Webhook** - Click "Create Webhook" button
@@ -330,8 +330,8 @@ When external systems trigger a webhook, the JSON payload becomes available to:
 
 **Scripts:** Via environment variable
 ```bash
-# $BACKUPHUB_TRIGGER_CONTEXT contains full JSON payload
-payload=$(echo "$BACKUPHUB_TRIGGER_CONTEXT" | jq '.payload')
+# $ORCHELIUM_TRIGGER_CONTEXT contains full JSON payload
+payload=$(echo "$ORCHELIUM_TRIGGER_CONTEXT" | jq '.payload')
 ```
 
 **Orchestrations:** Via template substitution
@@ -358,7 +358,7 @@ The data directory contains all the configuration files, as well as data stores.
 
 ## Related Documentation
 
-- [Installation](./installation.md): Setting up BackupHub
+- [Installation](./installation.md): Setting up Orchelium
 - [Backup Schedules](./backup-schedules.md): Creating and managing schedules
 - [Orchestrations](./orchestrations.md): Building complex workflows
 - [User Management](./user-management.md): User accounts and access control

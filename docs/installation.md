@@ -1,9 +1,9 @@
 # Getting Started
-This secition of the docs guides you through getting started with BackupHub
+This secition of the docs guides you through getting started with Orchelium
 
-## BackupHub Server
+## Orcherlium Server
 
-The BackupHub server is recommended to be installed and executed through the released container image in this repository, however you can run this directly on your server using node
+Orchelium is recommended to be installed and executed through the released container image in this repository, however you can run this directly on your server using node
 
 ### Container Setup
 
@@ -13,24 +13,24 @@ Please ensure you have Docker or any other container execution platform installe
 #### Start an instance of this image
 
 The latest version image can be found here:
-```ghcr.io/dpembo/backuphub/hub:latest```
+```ghcr.io/dpembo/orchelium/hub:latest```
 
 If you want specific versions, you can find these in the packages section of this repository
 
-Starting a Backup server instance is simple:
+Starting an Orchelium server instance is simple:
 
 ```
 docker run \
   -d \
-  --name BackupHub \
+  --name Orchelium \
   -e TZ=Europe/London \
   -p 8082:8082 \
   -p 49981:49981 \  
   --restart unless-stopped \ 
-  -v /custom/BackupHub/data:/usr/src/app/data \
-  -v /custom/BackupHub/scripts:/usr/src/app/scripts \ 
-  -v /custom/BackupHub/logs:/usr/src/app/logs \
-  ghcr.io/dpembo/backuphub/hub:latest
+  -v /custom/Orchelium/data:/usr/src/app/data \
+  -v /custom/Orchelium/scripts:/usr/src/app/scripts \ 
+  -v /custom/Orchelium/logs:/usr/src/app/logs \
+  ghcr.io/dpembo/orchelium/hub:latest
 ```
 
 #### Parameter Details
@@ -40,12 +40,12 @@ docker run \
 | Environment Variable | Description | Example |
 |---|---|--|
 | TZ | Time zone to ensure the container operates in your correct time zone for display of date/times.  Time zone names follow the standard IANA database, of which you can find a list via [wikipedia](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones)| Europe/London |
-| BACKUPHUB_ENCRYPTION_KEY | This variable is used to provide the encryption key used between the Hub and Agents to ensure the data/commmands cannot be compromised, or the link from agent to server be misued.  This has a default value, but its recommended to change this.  Note that the environment variable has to be set the same on the server and any environment where an agent is deployed for the communication to work correctly|MySecretKey|
+| ORCHELIUM_ENCRYPTION_KEY | This variable is used to provide the encryption key used between the Hub and Agents to ensure the data/commmands cannot be compromised, or the link from agent to server be misued.  This has a default value, but its recommended to change this.  Note that the environment variable has to be set the same on the server and any environment where an agent is deployed for the communication to work correctly|MySecretKey|
 | | | |
 | **Volume** | **Description** | **Example** |
-| /usr/src/app/data | This volume is used to hold all the various data that BackupHub uses including job history, user setup, configuration and statistics |-v custom/data:/usr/src/app/data
+| /usr/src/app/data | This volume is used to hold all the various data that Orchelium uses including job history, user setup, configuration and statistics |-v custom/data:/usr/src/app/data
 | usr/src/app/scripts | This is where all your backup/any other shell scripts you schedule are stored|/etc/scripts|
-| usr/src/app/logs | Directory where log information can be outputted|/var/logs/BackupHub|
+| usr/src/app/logs | Directory where log information can be outputted|/var/logs/Orchelium|
 | | | |
 | **Port** | **Description** | **Example** |
 | 8082 | The port the web application is hosted on | -p 8080:8082 |
@@ -59,8 +59,8 @@ Details instructions are provided here as it's recommended to run this from the 
 * Setting environment variables appropritate
 * Launching the app (server.js)
 
-## BackupHub Server Console ##
-Login to the BackupHub Server Console via a webbrowser on your server/ip with the given port, which by default is 8082. e.g.
+## Orchelium Console ##
+Login to the Orchelium  Console via a webbrowser on your server/ip with the given port, which by default is 8082. e.g.
 ```http://localhost:8082```
 
 ### Initial User creation
@@ -94,16 +94,16 @@ Next you'll be asked to provide some server settings
 * **Timezone** is utlized to ensure dates are shown in the configured timezone.  It's recommended the timezone match that of the server runtime, or the environment variable provided to a container. If an environment variable is set, this will ne defaulted to that value.
 * **Hostname** is the name of the host used in emails, notifications, etc
 * **Web Server Port** is the webserver port. Please note, that if you are running as a container, you should not change this, and simply change the port mapping for the container.
-* **Websocker Server Port** is the port for the websocker server, which is used by agents to communicate with the BackupHub server.  It's recommended to leave this as the default.
+* **Websocker Server Port** is the port for the websocker server, which is used by agents to communicate with Orcheliuim.  It's recommended to leave this as the default.
 
 Once completed/confirmed, please press "Next"
 
-* **Completed** you've now completed the initial setup, press next to launch the BackupHub Console.
+* **Completed** you've now completed the initial setup, press next to launch the Orchelium Console.
 ![image info](./screens/setup5.png)
 
 
 
-## BackupHub Agent
+## Orchelium Agent
 
 ### Navigate to Agents Provision
 Once logged into the Hub, navigate to the agents screen from the top menu
@@ -122,7 +122,7 @@ Which will take you here:
 ![image info](./screens/deploy-1.png)
 then press return to execute
 
-3. As you've run this from the BackupHub server console, a number of parameters are defaulted in the command you copied, therefore you'll next see a message indicating this:
+3. As you've run this from the Orchelium console, a number of parameters are defaulted in the command you copied, therefore you'll next see a message indicating this:
 ![image info](./screens/deploy-2.png)
 Please press 'ok' to continue.
 
@@ -155,7 +155,7 @@ By default this is set to /tmp, but can be changed to any path where the agent c
 
 At this point, the agent will run through the installation process and start.
 
-Now switch back to the BackupHub server console, where you'll see a notification once the agent has started:
+Now switch back to the Orchelium console, where you'll see a notification once the agent has started:
 
 ![image info](./screens/deploy-10.png)
 
@@ -171,8 +171,8 @@ Then press submit, and your agent will be added
 
 ## Related Documentation
 
-- [Backup Schedules](./backup-schedules.md): Creating and managing schedules
-- [Orchestrations](./orchestrations.md): Building complex backup workflows
+- [Job Schedules](./backup-schedules.md): Creating and managing schedules
+- [Orchestrations](./orchestrations.md): Building complex  workflows
 - [Settings Configuration](./settings-config.md): Server and agent configuration
 - [User Management](./user-management.md): User accounts and permissions
 - [REST API Reference](./REST_API_REFERENCE.md): Programmatic access

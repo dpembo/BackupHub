@@ -1,6 +1,6 @@
 # Developer Guide
 
-Welcome to the BackupHub Developer Guide! This document will help you understand the project structure, development workflow, and how to extend or contribute to BackupHub.
+Welcome to the Orchelium Developer Guide! This document will help you understand the project structure, development workflow, and how to extend or contribute to Orchelium.
 
 ## CI/CD & GitHub Actions
 

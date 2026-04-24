@@ -1,10 +1,10 @@
 #!/bin/bash
 #
 # Author: Dave Pemberton
-# init script to start backup hub agent
+# init script to start Orchelium agent
 #
 
-INSTALL_DIR="/opt/BackupHubAgent"
+INSTALL_DIR="/opt/OrcheliumAgent"
 SCRIPT_PATH="$INSTALL_DIR/startup_svc.sh"
 SETTINGS_FILE="settings.sh"
 SETTINGS_FILE_LOCATION="$INSTALL_DIR/$SETTINGS_FILE"
@@ -18,8 +18,8 @@ else
     MQTT_ENABLED="false"
     MQTT_SERVER=""
     MQTT_PORT=""
-    BACKUPHUB_SERVER="localhost"
-    BACKUPHUB_PORT="8082"
+    ORCHELIUM_SERVER="localhost"
+    ORCHELIUIM_PORT="8082"
     WS_ENABLED="true"
     WS_SERVER="localhost"
     WS_PORT="49981"
@@ -27,7 +27,7 @@ else
 fi
 
 
-SERVICE_NAME="BackupHubAgent-$AGENT_NAME"    
+SERVICE_NAME="OrcheliumAgent-$AGENT_NAME"    
 SERVICE_FILE="/etc/systemd/system/$SERVICE_NAME.service"
 
 # Check if the script exists
@@ -40,7 +40,7 @@ fi
 echo "Creating systemd service file at $SERVICE_FILE"
 cat <<EOF > $SERVICE_FILE
 [Unit]
-Description=BackupHub Agent Service for Agent $AGENT_NAME
+Description=Orchelium Agent Service for Agent $AGENT_NAME
 After=network.target
 
 [Service]

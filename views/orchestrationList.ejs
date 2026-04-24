@@ -4,7 +4,7 @@
   <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0"/>
   
-  <title>BackupHub | Orchestrations</title>
+  <title>Orchelium | Orchestrations</title>
 
   <%- include('./partials/_head'); %>
   <%- include('./partials/_scripts'); %>
@@ -49,6 +49,12 @@
     let orchestrations = {};
     let orchestrationSort = null;
     let orchestrationOrder = null;
+
+    function updateOrchestrationInfoBar(totalCount) {
+      var infoBar = document.getElementById('infobar');
+      if (!infoBar) return;
+      infoBar.textContent = 'Orchestrations: ' + totalCount;
+    }
     
     // Helper function to escape HTML special characters
     function escapeHtml(text) {
@@ -83,6 +89,8 @@
     function renderOrchestrations() {
       const container = $('#orchestrationContainer');
       container.empty();
+      const totalCount = orchestrations ? Object.keys(orchestrations).length : 0;
+      updateOrchestrationInfoBar(totalCount);
       
       if (!orchestrations || Object.keys(orchestrations).length === 0) {
         container.html(`

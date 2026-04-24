@@ -562,7 +562,7 @@ describe('Execution ID Management', () => {
     const executionId = 'exec-abc123def456';
     const message = {
       name: 'test-agent',
-      topic: 'backup/agent/status',
+      topic: 'orchelium/agent/status',
       server: 'test-server',
       manual: false,
       commsType: 'websocket',
@@ -620,7 +620,7 @@ describe('Execution ID Management', () => {
   it('should handle null executionId for backward compatibility', () => {
     const message = {
       name: 'test-agent',
-      topic: 'backup/agent/status',
+      topic: 'orchelium/agent/status',
       server: 'test-server',
       manual: false,
       commsType: 'websocket',

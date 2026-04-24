@@ -143,7 +143,7 @@ describe('Agent Message Processor - Notification Logic', () => {
         lastStatusReport: new Date().toISOString(),
       });
 
-      await agentMessageProcessor.processMessage('backup/agent/status', message, 'mqtt');
+      await agentMessageProcessor.processMessage('orchelium/agent/status', message, 'mqtt');
 
       expect(notifier.sendNotification).toHaveBeenCalledWith(
         'backup-job-1- job failed',
@@ -168,7 +168,7 @@ describe('Agent Message Processor - Notification Logic', () => {
         lastStatusReport: new Date().toISOString(),
       });
 
-      await agentMessageProcessor.processMessage('backup/agent/status', message, 'mqtt');
+      await agentMessageProcessor.processMessage('orchelium/agent/status', message, 'mqtt');
 
       expect(notifier.sendNotification).not.toHaveBeenCalled();
     });
@@ -188,7 +188,7 @@ describe('Agent Message Processor - Notification Logic', () => {
         lastStatusReport: new Date().toISOString(),
       });
 
-      await agentMessageProcessor.processMessage('backup/agent/status', message, 'mqtt');
+      await agentMessageProcessor.processMessage('orchelium/agent/status', message, 'mqtt');
 
       expect(orchestrationEngine.signalScriptCompletion).toHaveBeenCalledWith(
         'Orchestration [orch-job-1] Execution [exec-123] Node [execute-1]',
@@ -214,7 +214,7 @@ describe('Agent Message Processor - Notification Logic', () => {
         lastStatusReport: new Date().toISOString(),
       });
 
-      await agentMessageProcessor.processMessage('backup/agent/status', message, 'mqtt');
+      await agentMessageProcessor.processMessage('orchelium/agent/status', message, 'mqtt');
 
       expect(notifier.sendNotification).not.toHaveBeenCalled();
     });
@@ -234,7 +234,7 @@ describe('Agent Message Processor - Notification Logic', () => {
         lastStatusReport: new Date().toISOString(),
       });
 
-      await agentMessageProcessor.processMessage('backup/agent/status', message, 'mqtt');
+      await agentMessageProcessor.processMessage('orchelium/agent/status', message, 'mqtt');
 
       expect(notifier.sendNotification).not.toHaveBeenCalled();
     });
@@ -263,7 +263,7 @@ describe('Agent Message Processor - Notification Logic', () => {
           lastStatusReport: new Date().toISOString(),
         });
 
-        await agentMessageProcessor.processMessage('backup/agent/status', message, 'mqtt');
+        await agentMessageProcessor.processMessage('orchelium/agent/status', message, 'mqtt');
 
         expect(notifier.sendNotification).not.toHaveBeenCalled();
       }
@@ -285,7 +285,7 @@ describe('Agent Message Processor - Notification Logic', () => {
         lastStatusReport: new Date().toISOString(),
       });
 
-      await agentMessageProcessor.processMessage('backup/agent/status', message, 'mqtt');
+      await agentMessageProcessor.processMessage('orchelium/agent/status', message, 'mqtt');
 
       // Should send notification because it doesn't match the exact pattern
       expect(notifier.sendNotification).toHaveBeenCalled();
@@ -307,7 +307,7 @@ describe('Agent Message Processor - Notification Logic', () => {
         lastStatusReport: new Date().toISOString(),
       });
 
-      await agentMessageProcessor.processMessage('backup/agent/status', message, 'mqtt');
+      await agentMessageProcessor.processMessage('orchelium/agent/status', message, 'mqtt');
 
       expect(db.deleteData).toHaveBeenCalledWith(
         'orchestration-agent_Orchestration [job] Execution [exec] Node [node1]_exec_log'
@@ -332,7 +332,7 @@ describe('Agent Message Processor - Notification Logic', () => {
 
       // Should not throw
       await expect(
-        agentMessageProcessor.processMessage('backup/agent/status', message, 'mqtt')
+        agentMessageProcessor.processMessage('orchelium/agent/status', message, 'mqtt')
       ).resolves.toBeUndefined();
 
       // Should still signal completion with empty stdout

@@ -91,7 +91,7 @@ function addDateSuffix(date) {
   <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0"/>
   
-  <title>BackupHub | Available Scripts</title>
+  <title>Orchelium | Available Scripts</title>
 
   <%- include('./partials/_head'); %>
   <%- include('./partials/_scripts'); %>
@@ -100,11 +100,148 @@ function addDateSuffix(date) {
 
   var scriptSort = null;
   var scriptOrder = null;
+  var pendingDeleteScriptName = null;
 
   
   function doDelete()
   {
     alert("tbc");
+  }
+
+  function fetchScriptUsage(scriptName) {
+    return fetch(`/rest/jobs-for-script/${encodeURIComponent(scriptName)}`)
+      .then(response => {
+        if (!response.ok) {
+          throw new Error('Failed to fetch script usage');
+        }
+        return response.json();
+      });
+  }
+
+  function setDeleteModalState(isDeleteAllowed, reasonText) {
+    var confirmButton = document.getElementById('confirmScriptDeleteButton');
+    var statusText = document.getElementById('deleteScriptStatusText');
+    if (confirmButton) {
+      confirmButton.disabled = !isDeleteAllowed;
+      if (!isDeleteAllowed) {
+        confirmButton.classList.add('disabled');
+      } else {
+        confirmButton.classList.remove('disabled');
+      }
+    }
+    if (statusText) {
+      statusText.textContent = reasonText || '';
+      statusText.style.color = isDeleteAllowed ? '#2e7d32' : '#c62828';
+    }
+  }
+
+  function renderDeleteUsageRows(items) {
+    var tableBody = document.getElementById('deleteScriptUsageTableBody');
+    var emptyMsg = document.getElementById('deleteScriptUsageEmptyMessage');
+    var usageTable = document.getElementById('deleteScriptUsageTable');
+    if (!tableBody || !emptyMsg || !usageTable) return;
+
+    tableBody.innerHTML = '';
+    if (!items || items.length === 0) {
+      usageTable.style.display = 'none';
+      emptyMsg.style.display = 'block';
+      return;
+    }
+
+    usageTable.style.display = 'table';
+    emptyMsg.style.display = 'none';
+    items.forEach(function(item) {
+      var row = document.createElement('tr');
+      row.style.borderBottom = '1px solid #eee';
+      var nameCell = document.createElement('td');
+      nameCell.style.padding = '12px';
+      nameCell.textContent = item.jobName || '-';
+
+      var descCell = document.createElement('td');
+      descCell.style.padding = '12px';
+      descCell.textContent = item.description || '-';
+
+      var typeCell = document.createElement('td');
+      typeCell.style.padding = '12px';
+
+      var badgeStyle = 'background: #f5f5f5; color: #666;';
+      if ((item.type || '') === 'Orchestration') {
+        badgeStyle = 'background: #e3f2fd; color: #1976d2;';
+      }
+
+      var typeBadge = document.createElement('span');
+      typeBadge.style.cssText = 'padding: 4px 8px; border-radius: 4px; font-size: 12px; ' + badgeStyle;
+      typeBadge.textContent = item.type || '-';
+      typeCell.appendChild(typeBadge);
+
+      var nextRunCell = document.createElement('td');
+      nextRunCell.style.padding = '12px';
+      nextRunCell.textContent = item.nextRunDate || '-';
+
+      row.appendChild(nameCell);
+      row.appendChild(descCell);
+      row.appendChild(typeCell);
+      row.appendChild(nextRunCell);
+      tableBody.appendChild(row);
+    });
+  }
+
+  function openDeleteScriptModal(scriptName) {
+    pendingDeleteScriptName = scriptName;
+    document.getElementById('deleteScriptName').textContent = scriptName;
+    document.getElementById('deleteScriptUsageTable').style.display = 'table';
+    document.getElementById('deleteScriptUsageTableBody').innerHTML = '<tr><td colspan="4" style="padding: 12px; text-align: center; color: #999;">Loading usage...</td></tr>';
+    document.getElementById('deleteScriptUsageEmptyMessage').style.display = 'none';
+    setDeleteModalState(false, 'Checking script usage...');
+
+    const modalElement = document.getElementById('deleteScriptModal');
+    const modalInstance = M.Modal.getInstance(modalElement) || M.Modal.init(modalElement);
+    modalInstance.open();
+
+    fetchScriptUsage(scriptName)
+      .then(data => {
+        const usageItems = (data && data.jobs) ? data.jobs : [];
+        renderDeleteUsageRows(usageItems);
+
+        if (usageItems.length > 0) {
+          setDeleteModalState(false, 'Script is in use and cannot be deleted. Remove references first.');
+        } else {
+          setDeleteModalState(true, 'Script is not in use. You can safely delete it.');
+        }
+      })
+      .catch(error => {
+        console.error('Error checking script usage:', error);
+        renderDeleteUsageRows([]);
+        setDeleteModalState(false, 'Unable to validate usage. Delete is disabled.');
+      });
+  }
+
+  function confirmDeleteScript() {
+    if (!pendingDeleteScriptName) return;
+
+    const csrfToken = '<%= csrf %>';
+    fetch(`/rest/script/${encodeURIComponent(pendingDeleteScriptName)}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': csrfToken
+      }
+    })
+      .then(async response => {
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          const message = payload && payload.error ? payload.error : 'Failed to delete script';
+          throw new Error(message);
+        }
+        return payload;
+      })
+      .then(() => {
+        window.location.href = '/scriptList.html?message=' + encodeURIComponent('Script deleted successfully');
+      })
+      .catch(error => {
+        console.error('Delete script failed:', error);
+        M.toast({ html: error.message || 'Failed to delete script', displayLength: 5000 });
+      });
   }
 
   function doNotify(status,msg)
@@ -248,6 +385,12 @@ function addDateSuffix(date) {
 
     rows.forEach(row => tbody.appendChild(row));
   }
+
+  function updateScriptInfoBar() {
+    var infoBar = document.getElementById('infobar');
+    if (!infoBar) return;
+    infoBar.textContent = 'Scripts: <%= scripts.length %>';
+  }
   </script>
   <style>
     td {
@@ -288,20 +431,40 @@ function addDateSuffix(date) {
 </head>
 <body>
   <%- include('./partials/_header'); %>
-  <div id="confirmationModal" class="modal">
-    <div class="modal-content">}
-        <h4>Delete Script?</h4>
-        <p>Are you sure you want to Delete the Script?<br><br><b>Job Name: </b><span id='inScriptName'></span></p>
-    </div>
-    <div class="modal-footer">
+  <div id="deleteScriptModal" class="modal">
+    <div class="modal-content" style="display: flex; flex-direction: column; height: 100%; max-height: calc(100vh - 130px); padding: 0;">
+      <div style="padding: 20px; padding-bottom: 10px; flex-shrink: 0; border-bottom: 1px solid #e0e0e0;">
+        <h4 style="margin: 0;">Delete Script: <span id="deleteScriptName" style="font-style: italic;"></span></h4>
+        <p id="deleteScriptStatusText" style="margin: 10px 0 0 0; color: #c62828;"></p>
+      </div>
 
-        <a href="#!" class="modal-close waves-effect waves-green btn-flat">Cancel</a>
-        <a href="#" onclick="doDelete()" id="confirmButton" class="modal-close waves-effect waves-green btn-flat">OK</a>
+      <div style="flex: 1; min-height: 0; overflow-y: auto; padding: 20px;">
+        <table id="deleteScriptUsageTable" style="width: 100%; border-collapse: collapse;">
+            <thead>
+              <tr style="border-bottom: 2px solid #ddd;">
+                <th style="text-align: left; padding: 12px; font-weight: 600;">Job Name</th>
+                <th style="text-align: left; padding: 12px; font-weight: 600;">Description</th>
+                <th style="text-align: left; padding: 12px; font-weight: 600;">Job Type</th>
+                <th style="text-align: left; padding: 12px; font-weight: 600;">Next Run</th>
+              </tr>
+            </thead>
+            <tbody id="deleteScriptUsageTableBody">
+              <tr><td colspan="4" style="padding: 12px; text-align: center; color: #999;">Loading usage...</td></tr>
+            </tbody>
+        </table>
+        <div id="deleteScriptUsageEmptyMessage" style="text-align: center; padding: 20px; color: #666; display: none;">
+          No jobs or orchestrations are using this script.
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer" style="flex-shrink: 0;position: sticky;bottom: 0;z-index:20">
+      <a href="#!" class="modal-close waves-effect waves-green btn-flat">Cancel</a>
+      <button id="confirmScriptDeleteButton" type="button" class="waves-effect waves-red btn-flat" onclick="confirmDeleteScript()" disabled>Delete Script</button>
     </div>
   </div>
 
   <div id="jobsListModal" class="modal">
-    <div class="modal-content" style="display: flex; flex-direction: column; height: 100%; max-height: calc(100vh - 100px); padding: 0;">
+    <div class="modal-content" style="display: flex; flex-direction: column; height: 100%; max-height: calc(120vh - 100px); padding: 0;">
         <div style="padding: 20px; padding-bottom: 10px; flex-shrink: 0; border-bottom: 1px solid #e0e0e0;">
           <h4 style="margin: 0;">Jobs Using Script: <span id="jobsListScriptName" style="font-style: italic;"></span></h4>
         </div>
@@ -381,6 +544,7 @@ function addDateSuffix(date) {
                   <!--<a title="info" href="#" onclick="listScriptJobs('<%=scripts[i].data.filename%>'); return false;"><i class="material-icons tableIconButton vertMid">info</i></a>-->
                   <a title="edit" href="/scriptEditor.html?index=<%= i %>"><i class="material-icons tableIconButton vertMid">edit</i></a>
                   <a title="test" href="#" data-script-name="<%=scripts[i].data.filename%>" data-script-description="<%=scripts[i].data.metaDescription || ''%>" data-script-parameters="<%=scripts[i].data.metaParameters || ''%>" onclick="openScriptTestFromList(this.dataset.scriptName, this.dataset.scriptDescription, this.dataset.scriptParameters); return false;"><i class="material-icons tableIconButton vertMid">fact_check</i></a>
+                  <a title="delete" href="#" data-script-name="<%=scripts[i].data.filename%>" onclick="openDeleteScriptModal(this.dataset.scriptName); return false;"><i class="material-icons tableIconButton vertMid">delete</i></a>
                 </td>
 
               </tr>
@@ -415,23 +579,9 @@ function addDateSuffix(date) {
     $(document).ready(function(){
         // Initialize the modals
         $('.modal').modal();
+        updateScriptInfoBar();
     });
 
-    function openModal(inJobName, inId)
-    {
-      document.getElementById('inJobName').innerHTML=inJobName;  
-      $('#confirmationModal').modal('open');
-        
-    }    
-
-        // Attach a click event to the "OK" button in the confirmation dialog
-        //$('#confirmButton').click(function(){
-            // You can add your logic here for the "OK" action
-            // For example, redirect to another page or perform some action
-            //alert('OK button clicked.');
-        //    doDelete();
-        //});
-    //});
   </script>
 <%- include('./partials/_footer'); %>
   

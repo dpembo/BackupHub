@@ -295,7 +295,7 @@ span.themeModeDark{
 }
 
 .headerColor{
-  background-color: #03a9f4;
+  background-color: #263238;
 }
 
 /** Core **/
@@ -362,9 +362,11 @@ main {
 
 .logoimg {
   display: inline-block;
-  width: 100px; /* Adjust as needed */
-  height: 70px; /* Adjust as needed */
-  background-image: url('/images/BackupHubColorWhite.png');
+  width: 200px; /* Adjust as needed */
+  height: 55px; /* Adjust as needed */
+  background-image: url('/images/orchelium-dark.png');
+  position:relative;
+  top:4px;
   background-size: contain;
   background-repeat: no-repeat;
   background-position: center;
@@ -375,10 +377,14 @@ main {
   width: 310px;
   height: 116px;
   display: inline-block;
-  background-image: url('/images/BackupHubColor.png');
+  background-image: url('/images/orchelium-light.png');
   background-size: contain;
   background-repeat: no-repeat;
   background-position: center;
+}
+
+.navicon {
+  color: #cccccc;
 }
 
 
@@ -1203,4 +1209,9 @@ tr.group-header td {
     left: 20px;
     top: -15px;
     z-index: 30;
+}
+
+.page-footer {
+  background-color: #263238;
+  padding-top: 0px;
 }

@@ -352,27 +352,59 @@ async function executeJob(jobId, isManual = false, executionId = null, onNodeCom
             try {
               scriptContent = await fs.readFile(fullScriptPath, 'utf8');
             } catch (readErr) {
-              throw new Error(`Failed to read script [${fullScriptPath}]: ${readErr.message}`);
+              const scriptReadMessage = (readErr && readErr.code === 'ENOENT')
+                ? `Script cannot be found: [${fullScriptPath}]`
+                : `Failed to read script [${fullScriptPath}]: ${readErr.message}`;
+
+              // Record a node-level output so UI/history can show the root cause in response logs.
+              const failureTime = new Date().toISOString();
+              executionLog.scriptOutputs[currentNodeId] = {
+                script: scriptPath,
+                parameters,
+                agent: agentId,
+                status: 'failed',
+                exitCode: 1,
+                stdout: scriptReadMessage,
+                stderr: scriptReadMessage,
+                startTime: failureTime,
+                endTime: failureTime
+              };
+
+              logger.error(`[ORCHESTRATION] ${scriptReadMessage}`);
+              throw new Error(scriptReadMessage);
             }
 
             // Construct job name that matches what agent will report back
             // Format: Orchestration [jobId] Execution [executionId] Node [nodeId]
             const jobName = `Orchestration [${jobId}] Execution [${executionLog.executionId}] Node [${currentNodeId}]`;
             
+            // Convert trigger context to environment variables for script injection
+            let contextEnvVars = {};
+            if (executionLog.triggerContext) {
+              contextEnvVars = triggerContext.contextToEnvVars(executionLog.triggerContext);
+              logger.debug(`[ORCHESTRATION] Prepared ${Object.keys(contextEnvVars).length} trigger context environment variables`);
+            }
+            
             logger.info(`Sending script [${scriptPath}] to agent [${agentId}]`);
             
             // Send script content (not path) to agent using agentComms
             // The agent will create a temp file with this content and execute it
-            agentComms.sendCommand(
+            const sendCommandArgs = [
               agentId,
               'execute/orchestrationScript',
-              scriptContent,  // Send actual script content, not path
+              scriptContent,
               parameters,
               jobName,
               undefined,
               isManual,
               executionLog.executionId
-            );
+            ];
+
+            if (executionLog.triggerContext) {
+              sendCommandArgs.push(executionLog.triggerContext, contextEnvVars);
+            }
+
+            agentComms.sendCommand(...sendCommandArgs);
 
             // Wait for agent response (with 5-minute timeout)
             logger.debug(`[ORCHESTRATION] About to wait for script completion on node [${currentNodeId}]`);
@@ -442,6 +474,15 @@ async function executeJob(jobId, isManual = false, executionId = null, onNodeCom
 
           currentNodeId = nextEdge.to;
         } catch (err) {
+          // Ensure monitor marks the node as completed/failed for local pre-agent failures
+          // (for example missing script files on the server).
+          wsBrowser.emitOrchestrationEvent(jobId, executionLog.executionId, 'orchestrationNodeCompleted', {
+            nodeId: currentNodeId,
+            nodeType: currentNode.type,
+            status: 'failed',
+            exitCode: executionLog.scriptOutputs[currentNodeId]?.exitCode || 1
+          });
+
           executionLog.errors.push({
             node: currentNodeId,
             message: err.message
@@ -748,6 +789,10 @@ async function saveExecutionResult(executionLog) {
     }
 
     await db.putData('ORCHESTRATION_EXECUTIONS', executions);
+
+    // If execution failed before agent callbacks (e.g. missing script file),
+    // synthesize node history entries so History/Monitor can show the failure log.
+    await saveMissingScriptNodeHistory(executionLog);
     
     // Log the execution for reference
     logger.info(`Saved orchestration execution [${jobId}] with status [${executionLog.finalStatus}]`);
@@ -805,6 +850,61 @@ async function saveExecutionResult(executionLog) {
     }
   } catch (err) {
     logger.error(`Failed to save execution result: ${err.message}`);
+  }
+}
+
+/**
+ * Save synthetic history entries for missing-script failures that happen before
+ * agent eta/log callbacks. This keeps History and Monitor views consistent.
+ * @param {Object} executionLog
+ */
+async function saveMissingScriptNodeHistory(executionLog) {
+  try {
+    if (!executionLog || !executionLog.jobId || !executionLog.executionId || !executionLog.scriptOutputs) {
+      return;
+    }
+
+    const history = require('./history.js');
+    const scriptOutputs = executionLog.scriptOutputs || {};
+    const historyItems = (typeof history.getItems === 'function') ? (history.getItems() || []) : [];
+
+    for (const [nodeId, output] of Object.entries(scriptOutputs)) {
+      const stdout = output?.stdout || '';
+      const stderr = output?.stderr || '';
+      const missingScriptMessage = stdout.includes('Script cannot be found') || stderr.includes('Script cannot be found');
+
+      if (!missingScriptMessage) {
+        continue;
+      }
+
+      const nodeJobName = `Orchestration [${executionLog.jobId}] Execution [${executionLog.executionId}] Node [${nodeId}]`;
+      const exists = historyItems.some(item => item && item.jobName === nodeJobName);
+      if (exists) {
+        continue;
+      }
+
+      const startTime = output.startTime || executionLog.startTime || new Date().toISOString();
+      const endTime = output.endTime || executionLog.endTime || startTime;
+      const runTimeSecs = Math.max(0, Math.round((new Date(endTime).getTime() - new Date(startTime).getTime()) / 1000));
+      const returnCode = Number.isInteger(output.exitCode) ? output.exitCode : 1;
+      const logMessage = [stdout, stderr].filter(Boolean).join('\n\n') || 'Script cannot be found';
+
+      const histItem = history.createHistoryItem(
+        nodeJobName,
+        startTime,
+        returnCode,
+        runTimeSecs,
+        logMessage,
+        executionLog.manual || false,
+        executionLog.executionId,
+        executionLog.rerunFrom || null
+      );
+
+      history.add(histItem);
+      logger.info(`[ORCHESTRATION] Added synthetic history entry for missing script on node [${nodeId}]`);
+    }
+  } catch (err) {
+    logger.warn(`[ORCHESTRATION] Failed to save synthetic missing-script history: ${err.message}`);
   }
 }
 

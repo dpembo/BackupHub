@@ -35,6 +35,7 @@ jest.mock('../../communications/wsBrowserTransport.js', () => ({
 jest.mock('../../history.js', () => ({
   add: jest.fn(),
   createHistoryItem: jest.fn(),
+  getItems: jest.fn(),
 }));
 
 // Mock notify module before importing orchestrationEngine
@@ -57,6 +58,7 @@ const wsBrowserTransport = require('../../communications/wsBrowserTransport.js')
 const notifier = require('../../notify.js');
 const orchestrationMonitor = require('../../orchestrationMonitor.js');
 const configuration = require('../../configuration.js');
+const history = require('../../history.js');
 const fs = require('fs');
 
 describe('Orchestration Engine Module', () => {
@@ -94,6 +96,20 @@ describe('Orchestration Engine Module', () => {
 
     // Setup notifier mock
     notifier.sendNotification = jest.fn();
+
+    // Setup history mocks
+    history.add = jest.fn();
+    history.createHistoryItem = jest.fn().mockImplementation((jobName, runDate, returnCode, runTime, log, manual, executionId, rerunFrom) => ({
+      jobName,
+      runDate,
+      returnCode,
+      runTime,
+      log,
+      manual,
+      executionId,
+      rerunFrom,
+    }));
+    history.getItems = jest.fn().mockReturnValue([]);
 
     // Setup orchestrationMonitor mock
     orchestrationMonitor.getJobDefinitionVersion = jest.fn();
@@ -587,6 +603,49 @@ describe('Orchestration Engine Module', () => {
       expect(logger.warn).toHaveBeenCalledWith(
         expect.stringContaining('Failed to send orchestration failure notification')
       );
+    });
+
+    it('should create synthetic node history when script is missing before agent execution', async () => {
+      db.getData.mockResolvedValue({});
+      orchestrationMonitor.getJobDefinitionVersion.mockResolvedValue({
+        id: 'job1',
+        name: 'Missing Script Workflow',
+      });
+      global.serverConfig.server.jobFailEnabled = 'true';
+
+      const executionLog = {
+        jobId: 'job1',
+        executionId: 'exec-missing-script',
+        status: 'failed',
+        finalStatus: 'error',
+        manual: true,
+        startTime: new Date().toISOString(),
+        endTime: new Date().toISOString(),
+        scriptOutputs: {
+          'node-2': {
+            script: 'testnew.sh',
+            exitCode: 1,
+            stdout: 'Script cannot be found: [./scripts/testnew.sh]',
+            stderr: 'Script cannot be found: [./scripts/testnew.sh]',
+            startTime: new Date().toISOString(),
+            endTime: new Date().toISOString(),
+          },
+        },
+      };
+
+      await orchestrationEngine.saveExecutionResult(executionLog);
+
+      expect(history.createHistoryItem).toHaveBeenCalledWith(
+        'Orchestration [job1] Execution [exec-missing-script] Node [node-2]',
+        expect.any(String),
+        1,
+        expect.any(Number),
+        expect.stringContaining('Script cannot be found'),
+        true,
+        'exec-missing-script',
+        null
+      );
+      expect(history.add).toHaveBeenCalled();
     });
   });
 
@@ -1426,13 +1485,18 @@ describe('Orchestration Engine Module', () => {
       it('should throw error when script file not found', async () => {
         const mockJob = createMockJob();
         db.getData.mockResolvedValue({ 'test-job': mockJob });
-        require('fs').promises.readFile.mockRejectedValue(new Error('ENOENT: no such file'));
+        const missingScriptErr = new Error('ENOENT: no such file');
+        missingScriptErr.code = 'ENOENT';
+        require('fs').promises.readFile.mockRejectedValue(missingScriptErr);
 
         const result = await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
 
         expect(result.status).toBe('failed');
         expect(result.finalStatus).toBe('error');
-        expect(result.errors[0].message).toContain('Failed to read script');
+        expect(result.errors[0].message).toContain('Script cannot be found');
+        expect(result.scriptOutputs['execute-node']).toBeDefined();
+        expect(result.scriptOutputs['execute-node'].exitCode).toBe(1);
+        expect(result.scriptOutputs['execute-node'].stdout).toContain('Script cannot be found');
       });
 
       it('should throw error when unknown node type encountered', async () => {

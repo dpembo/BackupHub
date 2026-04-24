@@ -55,7 +55,7 @@ function displaySecs(secs) {
   <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0"/>
 
-  <title>BackupHub | Job History</title>
+  <title>Orchelium | Job History</title>
 
   <%- include('./partials/_head'); %>
   <%- include('./partials/_scripts'); %>
@@ -385,6 +385,7 @@ tbody tr.orch-expanded td {
         })
         .then(data => {
             document.getElementById(elementId).innerHTML = data;
+          updateHistoryInfoBar();
             document.getElementById("refreshindicator").style.display = "none";
 
             // If sort or order changed, open only the first group
@@ -427,6 +428,23 @@ tbody tr.orch-expanded td {
             //alert("Error Fetching List data: " + error);
             document.getElementById("refreshindicator").style.display = "none";
         });
+  }
+
+  function updateHistoryInfoBar() {
+    var infoBar = document.getElementById('infobar');
+    if (!infoBar) return;
+
+    var summaryNode = document.getElementById('history-summary-meta');
+    if (!summaryNode) {
+      infoBar.textContent = 'Jobs: 0 (Success: 0 | Failures: 0)';
+      return;
+    }
+
+    var totalJobs = parseInt(summaryNode.getAttribute('data-total-jobs') || '0', 10);
+    var successJobs = parseInt(summaryNode.getAttribute('data-success-jobs') || '0', 10);
+    var failedJobs = parseInt(summaryNode.getAttribute('data-failed-jobs') || '0', 10);
+
+    infoBar.textContent = 'Jobs: ' + totalJobs + ' (Success: ' + successJobs + ' | Failures: ' + failedJobs + ')';
   }
 
   function toggleOrchestrationGroup(compositeId) {
@@ -606,6 +624,7 @@ tbody tr.orch-expanded td {
     document.addEventListener('DOMContentLoaded', function() {
       var elems = document.querySelectorAll('.modal');
       var instances = M.Modal.init(elems, {});
+      updateHistoryInfoBar();
       
       // Check for message parameter in URL and display as toast
       const urlParams = new URLSearchParams(window.location.search);

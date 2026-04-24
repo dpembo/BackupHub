@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>BackupHub | Initial Setup</title>
+  <title>Orchelium | Initial Setup</title>
   <link rel="stylesheet" href="/css/materialize/materialize.css">
   <link id="maincss" rel="stylesheet" href="/css/light.css">
   <style>
@@ -89,8 +89,8 @@
 <body>
   <div class="card-panel">
     <span class="imgframe"><span class="loginimg"></span></span>
-    <h1 style="position:relative;top:-40px;">BackupHub Initial Setup</h1>
-    <p style="position:relative;top:-45px;">BackupHub communicates with agents via a websocket (default) or an external MQTT sever you must host yourself. 
+    <h1 style="position:relative;top:-40px;">Orchelium Initial Setup</h1>
+    <p style="position:relative;top:-45px;">Orchelium communicates with agents via a websocket (default) or an external MQTT sever you must host yourself. 
       (e.g. <a href="https://mosquitto.org">Mosquitto</a>, <a href="https://hub.docker.com/_/eclipse-mosquitto/">Mosquitto Container</a>).  Please enable the External MQTT server option if required, and press "Next" to continue with the setup</p>
     <form class="col s12" action="/initial-setup1.html" method="POST">
       <input type="hidden" name="_csrf" value="<%= csrf %>">
@@ -99,7 +99,7 @@
       <p style="display:none">
         <label>
           <input type="checkbox" name="websocket" class="filled-in" checked="checked" />
-          <span>BackupHub WebSocket Server</span>
+          <span>Orchelium WebSocket Server</span>
         </label>
       </p>
       <p>

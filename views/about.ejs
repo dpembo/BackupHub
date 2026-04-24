@@ -4,7 +4,7 @@
   <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0"/>
 
-  <title>BackupHub | About</title>
+  <title>Orchelium | About</title>
 
   <%- include('./partials/_head'); %>
   <%- include('./partials/_scripts'); %>
@@ -18,7 +18,7 @@
   function doNotify(status,msg)
   {
       $.pnotify({
-      title: 'Backup Job',
+      title: 'Orchelium Job',
       text: msg,
       type: status,
       history: false,
@@ -27,6 +27,14 @@
   }
  
   </script>
+  <style>
+    span.strapline {
+    font-size: 5pt;
+    position: relative;
+    top: -30px;
+    left: 30px;
+  }
+  </style>
   </head>
 <body onload="checkScroll()">
   <%- include('./partials/_header'); %>
@@ -45,13 +53,17 @@
             <div class="card-content">
               <span class="card-title">-->
 
-                <span class="imgframe"><img src="/images/BackupHubColor.png" style="width:210px;"><br>
-                <h6><%=version%></h6><br>
-
+                <span class="imgframe"><img src="/images/orchelium-light.png" style="width:210px;"><br>
+                <span class="strapline">Distributed automatiobn for real-world systems</span>
+                <br>
+                <a href="http://www.orchelium.com">http://www.orchelium.com</a>
+                <h6>Version: <%=version%></h6>
+                
                 <p>Created by:<br/>
                   <a href="https://pembo.co.uk"><img style="width:120px" src="/images/pembo-small.png"/></a><br/>
-                  <a href="https://github.com/dpembo/BackupHub/blob/main/LICENSE">License</a> / 
-                  <a href="https://github.com/dpembo/BackupHub">Source</a>
+                
+                  <a href="https://github.com/dpembo/orchelium/blob/main/LICENSE">License</a> / 
+                  <a href="https://github.com/dpembo/orchelium">Source</a>
                 </p>
                 </span>  
               <!--</span>

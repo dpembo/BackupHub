@@ -1,14 +1,14 @@
 
-# BackupHub Documentation
+# Orchelium Documentation
 
-BackupHub is a lightweight yet powerful solution for managing and scheduling shell-based executions across a local area network. Designed for IT administrators, it ensures secure, encrypted communication between a central hub and remotely managed agents. BackupHub streamlines job execution, scheduling, monitoring, and notifications, making it an effective tool for backup and automation tasks.
+Orchedlium is a lightweight yet powerful solution for managing and scheduling shell-based executions across a local area network. Designed for IT administrators, it ensures secure, encrypted communication between a central hub and remotely managed agents. Orchelium streamlines job execution, scheduling, monitoring, and notifications, making it an effective tool for Orchelium and automation tasks.
 
 ---
 
 ## Documentation Contents
 
 - [Getting Started / Installation](installation.md)
-- [Backup Schedules](backup-schedules.md)
+- [Job Schedules](backup-schedules.md)
 - [Orchestrations](orchestrations.md)
 - [User Management](user-management.md)
 - [Configuration / Settings](settings-config.md): Rule-based thresholds, agent concurrency, webhook management, and all server/agent options
@@ -25,8 +25,8 @@ BackupHub is a lightweight yet powerful solution for managing and scheduling she
 
 ### About the Docs
 
-- **installation.md** — How to install and set up BackupHub (Docker & manual)
-- **backup-schedules.md** — Creating and managing backup schedules
+- **installation.md** — How to install and set up Orchelium (Docker & manual)
+- **backup-schedules.md** — Creating and managing job schedules
 - **orchestrations.md** — Building complex workflows with visual orchestration builder
 - **user-management.md** — User setup, login, and password management
 - **settings-config.md** — Server and agent configuration options, backup & restore
@@ -47,7 +47,7 @@ See [settings-config.md](settings-config.md) for details and migration notes.
 ### Trigger Context Features
 
 - **Scripts Access Metric Data**: When triggered by rules, scripts receive environment variables containing metric values
-  - `$BACKUPHUB_METRIC_VALUE`, `$BACKUPHUB_METRIC_PATH`, `$BACKUPHUB_CONDITION_THRESHOLD`, etc.
+  - `$ORCHELIUM_METRIC_VALUE`, `$ORCHELIUM_METRIC_PATH`, `$ORCHELIUM_CONDITION_THRESHOLD`, etc.
   
 - **Orchestrations Use Template Substitution**: Reference metric values in script parameters
   - `#{context.metric.value}` → automatically replaced with actual metric value
@@ -63,8 +63,8 @@ See [settings-config.md](settings-config.md) for details and migration notes.
 
 **Example**: Cleanup script triggered when disk usage exceeds 90%:
 ```bash
-if [ "$BACKUPHUB_METRIC_TYPE" = "mount_usage" ]; then
-    echo "Cleaning up $BACKUPHUB_METRIC_PATH (${BACKUPHUB_METRIC_VALUE}% usage)"
+if [ "$ORCHELIUM_METRIC_TYPE" = "mount_usage" ]; then
+    echo "Cleaning up $ORCHELIUM_METRIC_PATH (${ORCHELIUIM_METRIC_VALUE}% usage)"
 fi
 ```
 

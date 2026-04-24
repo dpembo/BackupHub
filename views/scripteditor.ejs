@@ -74,7 +74,7 @@ function displaySecs(secs) {
   <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0"/>
 
-  <title>BackupHub | Script Editor</title>
+  <title>Orchelium | Script Editor</title>
 
   <%- include('./partials/_head'); %>
   <%- include('./partials/_scripts'); %>
@@ -859,7 +859,7 @@ function scriptSelected(element,inScript,inDescription){
 
 
   <div id="templateModal" class="modal" style="overflow:hidden">
-    <div class="modal-content" style="display: flex; flex-direction: column; height: 100%; max-height: calc(100vh - 100px); padding: 0;">
+    <div class="modal-content" style="display: flex; flex-direction: column; height: 100%; max-height: calc(100vh - 120px); padding: 0;">
         <div style="padding: 20px; padding-bottom: 10px; flex-shrink: 0; border-bottom: 0px solid #e0e0e0;">
           <h4 style="margin: 0;">Template Selection</h4>
         </div>
@@ -929,7 +929,7 @@ function scriptSelected(element,inScript,inDescription){
   </div>
 
   <div id="jobsListModal" class="modal">
-    <div class="modal-content" style="display: flex; flex-direction: column; height: 100%; max-height: calc(100vh - 100px); padding: 0;">
+    <div class="modal-content" style="display: flex; flex-direction: column; height: 100%; max-height: calc(100vh - 120px); padding: 0;">
         <div style="padding: 20px; padding-bottom: 10px; flex-shrink: 0; border-bottom: 1px solid #e0e0e0;">
           <h4 style="margin: 0;">Jobs Using Script: <span id="jobsListScriptName" style="font-style: italic;"></span></h4>
         </div>
@@ -1024,19 +1024,19 @@ function scriptSelected(element,inScript,inDescription){
       <div class="palette-section">
         <H4>Trigger Context</H4>
         <div id="scriptParameters">
-          <button class="palette-item" onclick="insertButtonText(this)"><span title='"rule", "webhook", or "sample"'>$BACKUPHUB_TRIGGER_TYPE </span></button>
-          <button class="palette-item" onclick="insertButtonText(this)"><span title='Unique ID for this execution'>$BACKUPHUB_EXECUTION_ID </span></button>
-          <button class="palette-item" onclick="insertButtonText(this)"><span title='"cpu", "mount_usage", "file_count", etc.'>$BACKUPHUB_METRIC_TYPE </span></button>
-          <button class="palette-item" onclick="insertButtonText(this)"><span title='The actual value (e.g., 92.5)'>$BACKUPHUB_METRIC_VALUE </span></button>
-          <button class="palette-item" onclick="insertButtonText(this)"><span title='Unit: "%", "bytes", "seconds", "count"'>$BACKUPHUB_METRIC_UNIT </span></button>
-          <button class="palette-item" onclick="insertButtonText(this)"><span title='Path being monitored (e.g., "/mnt/data")'>$BACKUPHUB_METRIC_PATH </span></button>
-          <button class="palette-item" onclick="insertButtonText(this)"><span title='Agent that detected it'>$BACKUPHUB_METRIC_AGENT </span></button>
-          <button class="palette-item" onclick="insertButtonText(this)"><span title='Condition operator: ">=", "<=", ">", "<", "==", "!="'>$BACKUPHUB_CONDITION_OPERATOR </span></button>
-          <button class="palette-item" onclick="insertButtonText(this)"><span title='Threshold value'>$BACKUPHUB_CONDITION_THRESHOLD </span></button>
-          <button class="palette-item" onclick="insertButtonText(this)"><span title='"true" or "false"'>$BACKUPHUB_CONDITION_MET </span></button>
-          <button class="palette-item" onclick="insertButtonText(this)"><span title='Trigger context as JSON'>$BACKUPHUB_TRIGGER_CONTEXT </span></button>
-          <button class="palette-item" onclick="insertButtonText(this)"><span title='ID of the webhook that triggered'>$BACKUPHUB_WEBHOOK_ID </span></button>
-          <button class="palette-item" onclick="insertButtonText(this)"><span title='Name you gave the webhook'>$BACKUPHUB_WEBHOOK_NAME </span></button>
+          <button class="palette-item" onclick="insertButtonText(this)"><span title='"rule", "webhook", or "sample"'>$ORCHELIUM_TRIGGER_TYPE </span></button>
+          <button class="palette-item" onclick="insertButtonText(this)"><span title='Unique ID for this execution'>$ORCHELIUM_EXECUTION_ID </span></button>
+          <button class="palette-item" onclick="insertButtonText(this)"><span title='"cpu", "mount_usage", "file_count", etc.'>$ORCHELIUM_METRIC_TYPE </span></button>
+          <button class="palette-item" onclick="insertButtonText(this)"><span title='The actual value (e.g., 92.5)'>$ORCHELIUM_METRIC_VALUE </span></button>
+          <button class="palette-item" onclick="insertButtonText(this)"><span title='Unit: "%", "bytes", "seconds", "count"'>$ORCHELIUM_METRIC_UNIT </span></button>
+          <button class="palette-item" onclick="insertButtonText(this)"><span title='Path being monitored (e.g., "/mnt/data")'>$ORCHELIUM_METRIC_PATH </span></button>
+          <button class="palette-item" onclick="insertButtonText(this)"><span title='Agent that detected it'>$ORCHELIUM_METRIC_AGENT </span></button>
+          <button class="palette-item" onclick="insertButtonText(this)"><span title='Condition operator: ">=", "<=", ">", "<", "==", "!="'>$ORCHELIUM_CONDITION_OPERATOR </span></button>
+          <button class="palette-item" onclick="insertButtonText(this)"><span title='Threshold value'>$ORCHELIUM_CONDITION_THRESHOLD </span></button>
+          <button class="palette-item" onclick="insertButtonText(this)"><span title='"true" or "false"'>$ORCHELIUM_CONDITION_MET </span></button>
+          <button class="palette-item" onclick="insertButtonText(this)"><span title='Trigger context as JSON'>$ORCHELIUM_TRIGGER_CONTEXT </span></button>
+          <button class="palette-item" onclick="insertButtonText(this)"><span title='ID of the webhook that triggered'>$ORCHELIUM_WEBHOOK_ID </span></button>
+          <button class="palette-item" onclick="insertButtonText(this)"><span title='Name you gave the webhook'>$ORCHELIUM_WEBHOOK_NAME </span></button>
         </div>
       </div>
       <div class="palette-section" style="display:none">      

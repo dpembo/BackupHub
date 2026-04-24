@@ -121,7 +121,7 @@ fi
 
 
 # Variables
-INSTALL_DIR="${1:-/opt/BackupHubAgent}"
+INSTALL_DIR="${1:-/opt/OrcheliumAgent}"
 
 
 # After the welcome message, continue with your script
@@ -160,7 +160,7 @@ nodePath=`nvm which 20.5.0`
 
 update_progress "Upating for install location"
 
-findText="/opt/BackupHubAgent";
+findText="/opt/OrcheliumAgent";
 replText="$INSTALL_DIR"
 replace_text "$findText" "$replText" startup_cron.sh
 replace_text "$findText" "$replText" startup_pm2.sh
@@ -209,15 +209,15 @@ exec 1>&3 2>&4
 
 cd $INSTALL_DIR
 
-LOG_FILE="/var/log/backupHubAgent.log"
+LOG_FILE="/var/log/OrcheliumAgent.log"
 SETTINGS_FILE="settings.sh"
 
-WELCOME_MESSAGE="Welcome to BackupApp Agent Installer!\n\nThis script will guide you through the installation process to get the agent up and running. Press OK to continue"
+WELCOME_MESSAGE="Welcome to Orchelium Agent Installer!\n\nThis script will guide you through the installation process to get the agent up and running. Press OK to continue"
 
 # Load settings if available
 if [ -f "$SETTINGS_FILE" ]; then
     source "$SETTINGS_FILE"
-    WELCOME_MESSAGE="Welcome to BackupApp Agent Installer - Some configuration has been provided during the provisioning, or this has been installed previously.  Please OK then select an option to contiune"
+    WELCOME_MESSAGE="Welcome to Orchelium Agent Installer - Some configuration has been provided during the provisioning, or this has been installed previously.  Please OK then select an option to contiune"
 fi
 
 dialog --title "Message" --msgbox "$WELCOME_MESSAGE" 10 50
@@ -266,23 +266,23 @@ if [ -z "$AGENT_NAME" ]; then
     AGENT_NAME=$(cat agent_name.txt)
 fi 
 
-# Prompt for BackupHub Server hostname
-if [ -z "$BACKUPHUB_SERVER" ]; then
-    dialog --inputbox "Enter BackupHub Server Hostname (default: localhost)" 10 40 2> backuphub_server.txt
+# Prompt for Orchelium hostname
+if [ -z "$ORCHELIUM_SERVER" ]; then
+    dialog --inputbox "Enter Orchelium Hostname (default: localhost)" 10 40 2> ORCHELIUM_SERVER.txt
     clear
-    BACKUPHUB_SERVER=$(cat backuphub_server.txt)
-    if [ -z "$BACKUPHUB_SERVER" ]; then
-        BACKUPHUB_SERVER="localhost"
+    ORCHELIUM_SERVER=$(cat ORCHELIUM_SERVER.txt)
+    if [ -z "$ORCHELIUM_SERVER" ]; then
+        ORCHELIUM_SERVER="localhost"
     fi
 fi
 
 # Prompt for BackhupHub Server Port
-if [ -z "$BACKUPHUB_PORT" ]; then
-    dialog --inputbox "Enter BackupHub Server Port (default: 8082):" 10 40 2> backuphub_port.txt
+if [ -z "$ORCHELIUIM_PORT" ]; then
+    dialog --inputbox "Enter Orchelium Port (default: 8082):" 10 40 2> ORCHELIUIM_PORT.txt
     clear
-    BACKUPHUB_PORT=$(cat backuphub_port.txt)
-    if [ -z "$BACKUPHUB_PORT" ]; then
-        BACKUPHUB_PORT="8082"
+    ORCHELIUIM_PORT=$(cat ORCHELIUIM_PORT.txt)
+    if [ -z "$ORCHELIUIM_PORT" ]; then
+        ORCHELIUIM_PORT="8082"
     fi
 fi
 
@@ -323,14 +323,14 @@ case $CHOICE in
 
   2)
     #echo "You chose WebSocket."
-    # Prompt for BackupHub Server hostname
+    # Prompt for Orchelium hostname
     MQTT_ENABLED="false"
     if [ -z "$WS_SERVER" ]; then
-        dialog --inputbox "Enter Websocket Server Hostname (default: $BACKUPHUB_SERVER)" 10 40 2> ws_server.txt
+        dialog --inputbox "Enter Websocket Server Hostname (default: $ORCHELIUM_SERVER)" 10 40 2> ws_server.txt
         clear
         WS_SERVER=$(cat ws_server.txt)
         if [ -z "$WS_SERVER" ]; then
-            WS_SERVER="$BACKUPHUB_SERVER"
+            WS_SERVER="$ORCHELIUM_SERVER"
         fi
     fi
 
@@ -384,8 +384,8 @@ if [ "$MQTT_ENABLED" = "true" ]; then
     echo "MQTT_SERVER=\"$MQTT_SERVER\"" >> "$SETTINGS_FILE"
     echo "MQTT_PORT=\"$MQTT_PORT\"" >> "$SETTINGS_FILE"
 fi
-echo "BACKUPHUB_SERVER=\"$BACKUPHUB_SERVER\"" >> "$SETTINGS_FILE"
-echo "BACKUPHUB_PORT=\"$BACKUPHUB_PORT\"" >> "$SETTINGS_FILE"
+echo "ORCHELIUM_SERVER=\"$ORCHELIUM_SERVER\"" >> "$SETTINGS_FILE"
+echo "ORCHELIUIM_PORT=\"$ORCHELIUIM_PORT\"" >> "$SETTINGS_FILE"
 if [ "$WS_ENABLED" = "true" ]; then
   echo "WS_SERVER=\"$WS_SERVER\"" >> "$SETTINGS_FILE"
   echo "WS_PORT=\"$WS_PORT\"" >> "$SETTINGS_FILE"
@@ -414,9 +414,6 @@ case "$STARTUP_TYPE" in
         ;;
     "Service")
         echo "You chose to use init.d for startup."
-        #cp startup_svc.sh /usr/local/etc/init.d/S99BackupHubAgent
-        #chmod +x /usr/local/etc/init.d/S99BackupHubAgent
-        #/usr/local/etc/init.d/S99BackupHubAgent start
         source "setup_svc.sh"
         ;;
      "Docker")

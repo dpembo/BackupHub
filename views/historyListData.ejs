@@ -57,7 +57,25 @@ function displaySecs(secs) {
   return ret;
 }
 
+var totalJobs = Array.isArray(historyList) ? historyList.length : 0;
+var successfulJobs = 0;
+var failedJobs = 0;
+
+if (Array.isArray(historyList)) {
+  for (var summaryIdx = 0; summaryIdx < historyList.length; summaryIdx++) {
+    if (parseInt(historyList[summaryIdx].returnCode) === 0) {
+      successfulJobs++;
+    } else {
+      failedJobs++;
+    }
+  }
+}
+
 %>
+
+<tr id="history-summary-meta" data-total-jobs="<%=totalJobs%>" data-success-jobs="<%=successfulJobs%>" data-failed-jobs="<%=failedJobs%>" style="display:none;">
+  <td colspan="8"></td>
+</tr>
 
                
         <% let currentGroup = null; %>

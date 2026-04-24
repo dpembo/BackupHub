@@ -2,7 +2,7 @@
 
 **Status:** ✅ All 3 Phases Complete & Tested
 
-This document provides a comprehensive overview of BackupHub's trigger context system - a 3-phase implementation enabling scripts and orchestrations to access metric data from rule-based triggers and webhook integrations.
+This document provides a comprehensive overview of Orchelium's trigger context system - a 3-phase implementation enabling scripts and orchestrations to access metric data from rule-based triggers and webhook integrations.
 
 ---
 
@@ -35,7 +35,7 @@ The trigger context system allows jobs to receive structured data about **what t
 │  Phase 1: TRIGGER CONTEXT CREATION (triggerContext.js)             │
 │  - createRuleTriggerContext() → Wraps rule with executionId        │
 │  - createWebhookTriggerContext() → Wraps webhook payload           │
-│  - contextToEnvVars() → Flattens to BACKUPHUB_* variables          │
+│  - contextToEnvVars() → Flattens to ORCHELIUM_* variables          │
 │  - substituteTemplate() → Replaces #{context.X} placeholders       │
 └─────────────────────────────────────────────────────────────────────┘
                       │
@@ -73,7 +73,7 @@ The trigger context system allows jobs to receive structured data about **what t
 │          agent/agent.js                                           │
 │          - Merges contextEnvVars into                             │
 │            spawn() process.env                                    │
-│          - Child scripts access via $BACKUPHUB_* vars             │
+│          - Child scripts access via $ORCHELIUM_* vars             │
 │                    │                                               │
 │      ┌─────────────┼─────────────┐                                │
 │      │             │             │                                │
@@ -143,14 +143,14 @@ const envVars = contextToEnvVars(context);
 /*
 Returns:
 {
-  BACKUPHUB_TRIGGER_TYPE: "rule",
-  BACKUPHUB_METRIC_TYPE: "cpu_usage",
-  BACKUPHUB_METRIC_VALUE: "95",
-  BACKUPHUB_METRIC_UNIT: "%",
-  BACKUPHUB_CONDITION_OPERATOR: ">",
-  BACKUPHUB_CONDITION_THRESHOLD: "90",
-  BACKUPHUB_EXECUTION_ID: "exec-12345",
-  BACKUPHUB_TRIGGER_CONTEXT: "{...full JSON...}"
+  ORCHELIUM_TRIGGER_TYPE: "rule",
+  ORCHELIUM_METRIC_TYPE: "cpu_usage",
+  ORCHELIUM_METRIC_VALUE: "95",
+  ORCHELIUM_METRIC_UNIT: "%",
+  ORCHELIUM_CONDITION_OPERATOR: ">",
+  ORCHELIUM_CONDITION_THRESHOLD: "90",
+  ORCHELIUM_EXECUTION_ID: "exec-12345",
+  ORCHELIUM_TRIGGER_CONTEXT: "{...full JSON...}"
 }
 */
 ```
@@ -182,14 +182,14 @@ contextToEnvVars()
     │
     ├─ Flattens JSON structure
     ├─ Converts to shell-friendly format
-    └─ Creates $BACKUPHUB_* variables
+    └─ Creates $ORCHELIUM_* variables
          │
          ▼
 Environment Variables Ready
     │
-    ├─ BACKUPHUB_TRIGGER_TYPE=rule
-    ├─ BACKUPHUB_METRIC_TYPE=cpu_usage
-    ├─ BACKUPHUB_METRIC_VALUE=95
+    ├─ ORCHELIUM_TRIGGER_TYPE=rule
+    ├─ ORCHELIUM_METRIC_TYPE=cpu_usage
+    ├─ ORCHELIUM_METRIC_VALUE=95
     └─ ...more variables...
 ```
 
@@ -200,9 +200,9 @@ Environment Variables Ready
 #!/bin/bash
 # Script receives trigger context as environment variables
 
-if [ "$BACKUPHUB_METRIC_TYPE" = "cpu_usage" ]; then
-    CPU_USAGE=$BACKUPHUB_METRIC_VALUE
-    THRESHOLD=$BACKUPHUB_CONDITION_THRESHOLD
+if [ "$ORCHELIUM_METRIC_TYPE" = "cpu_usage" ]; then
+    CPU_USAGE=$ORCHELIUM_METRIC_VALUE
+    THRESHOLD=$ORCHELIUM_CONDITION_THRESHOLD
     
     echo "CPU usage ($CPU_USAGE%) exceeded threshold ($THRESHOLD%)"
     
@@ -433,11 +433,11 @@ Done! Update external systems
 2. EXTERNAL SYSTEM MAKES API CALL
    ├─ POST /webhooks/trigger?jobName=cleanup&key=abc123
    ├─ JSON: {"severity": "high", "path": "/mnt/backup"}
-   └─→ HTTPS request to BackupHub
+   └─→ HTTPS request to Orchelium
         │
         ▼ server.js webhook handler
 
-3. BACKUPHUB VALIDATES REQUEST
+3. ORCHELIUM VALIDATES REQUEST
    ├─ Lookup webhook key in database
    ├─ Match found ✓
    └─ Extract jobName="cleanup"
@@ -455,10 +455,10 @@ Done! Update external systems
 5. CONVERT TO ENVIRONMENT VARIABLES
    ├─ contextToEnvVars()
    └─ Creates:
-      ├─ BACKUPHUB_TRIGGER_TYPE=webhook
-      ├─ BACKUPHUB_WEBHOOK_ID=webhook-123
-      ├─ BACKUPHUB_EXECUTION_ID=exec-789xyz
-      ├─ BACKUPHUB_TRIGGER_CONTEXT={full JSON}
+      ├─ ORCHELIUM_TRIGGER_TYPE=webhook
+      ├─ ORCHELIUM_WEBHOOK_ID=webhook-123
+      ├─ ORCHELIUM_EXECUTION_ID=exec-789xyz
+      ├─ ORCHELIUM_TRIGGER_CONTEXT={full JSON}
       └─ (and more...)
         │
         ▼ agentCommunication.js
@@ -486,8 +486,8 @@ Done! Update external systems
 
 9. SCRIPT ACCESSES TRIGGER DATA
    ├─ #!/bin/bash
-   ├─ echo "Severity: $BACKUPHUB_WEBHOOK_ID"
-   ├─ PAYLOAD=$(echo "$BACKUPHUB_TRIGGER_CONTEXT" | jq .)
+   ├─ echo "Severity: $ORCHELIUM_WEBHOOK_ID"
+   ├─ PAYLOAD=$(echo "$ORCHELIUM_TRIGGER_CONTEXT" | jq .)
    ├─ SEVERITY=$(echo "$PAYLOAD" | jq -r '.payload.severity')
    └─ PATH=$(echo "$PAYLOAD" | jq -r '.payload.path')
         │
@@ -517,7 +517,7 @@ Done! Update external systems
 
 13. COMPLETE
     ├─ Monitoring system receives: 200 OK
-    ├─ BackupHub has record of trigger
+    ├─ Orchelium has record of trigger
     ├─ Job successfully executed with context data
     └─ Stats updated for auditing
 ```
@@ -553,22 +553,22 @@ LevelDB (data.db)
 
 ```bash
 # For ALL trigger types
-BACKUPHUB_TRIGGER_TYPE           # "rule" | "webhook" | "sample"
-BACKUPHUB_EXECUTION_ID           # Unique execution ID
-BACKUPHUB_TRIGGER_CONTEXT        # Full JSON
+ORCHELIUM_TRIGGER_TYPE           # "rule" | "webhook" | "sample"
+ORCHELIUM_EXECUTION_ID           # Unique execution ID
+ORCHELIUM_TRIGGER_CONTEXT        # Full JSON
 
 # For rule triggers
-BACKUPHUB_METRIC_TYPE            # "cpu_usage", "mount_usage", etc.
-BACKUPHUB_METRIC_VALUE           # Numeric value
-BACKUPHUB_METRIC_UNIT            # "%", "GB", etc.
-BACKUPHUB_METRIC_PATH            # "/mnt/disk", etc.
-BACKUPHUB_CONDITION_OPERATOR     # ">", "<", "==", etc.
-BACKUPHUB_CONDITION_THRESHOLD    # Threshold value
-BACKUPHUB_CONDITION_MET          # true
+ORCHELIUM_METRIC_TYPE            # "cpu_usage", "mount_usage", etc.
+ORCHELIUM_METRIC_VALUE           # Numeric value
+ORCHELIUM_METRIC_UNIT            # "%", "GB", etc.
+ORCHELIUM_METRIC_PATH            # "/mnt/disk", etc.
+ORCHELIUM_CONDITION_OPERATOR     # ">", "<", "==", etc.
+ORCHELIUM_CONDITION_THRESHOLD    # Threshold value
+ORCHELIUM_CONDITION_MET          # true
 
 # For webhook triggers
-BACKUPHUB_WEBHOOK_ID             # Webhook UUID
-BACKUPHUB_WEBHOOK_NAME           # User-provided name
+ORCHELIUM_WEBHOOK_ID             # Webhook UUID
+ORCHELIUM_WEBHOOK_NAME           # User-provided name
 ```
 
 ---

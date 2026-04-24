@@ -39,7 +39,7 @@ async function sendEmail(subject,body) {
   
       // Send mail with defined transport object
       let info = await transporter.sendMail({
-        from: `"BackupHub" <${serverConfig.smtp.emailFrom}>`, // Sender address
+        from: `"Orchelium" <${serverConfig.smtp.emailFrom}>`, // Sender address
         to: serverConfig.smtp.emailTo,                        // List of recipients
         subject: subject,                                     // Subject line
         text: body,                                           // Plain text body

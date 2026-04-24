@@ -130,7 +130,7 @@ async function startMqttConnectionProcess(reset){
     var brokerUrl = 'mqtt://' + serverConfig.mqtt.server + ':' + serverConfig.mqtt.port;
 
     var clientOptions={};
-    clientOptions.clientId="BackupHub_Server"
+    clientOptions.clientId="Orchelium_Server"
   
     if(confighandler.isMqttUserPresent()){
       logger.debug("Setting MQTT Auth credentials");
@@ -154,7 +154,7 @@ async function startMqttConnectionProcess(reset){
         logger.warn("Unable to connect to MQTT Broker: " + JSON.stringify(error));
         //Send disconnect notification too
         if(mqttDisconnectNotificiationSent==false){
-          if(serverConfig.server.connectionEnabled=="true")notifier.sendNotification("BackupHub - MQTT Disconnect",`BackupHub Server [${serverConfig.server.hostname}] Disconnected from MQTT Broker [${serverConfig.mqtt.server}] with error [${JSON.stringify(error)}]`,"WARNING","/agentstatus.html");
+          if(serverConfig.server.connectionEnabled=="true")notifier.sendNotification("Orchelium - MQTT Disconnect",`Orchelium Server [${serverConfig.server.hostname}] Disconnected from MQTT Broker [${serverConfig.mqtt.server}] with error [${JSON.stringify(error)}]`,"WARNING","/agentstatus.html");
           mqttDisconnectNotificiationSent=true;
         }
         // Handle the error (e.g., retry the connection, alert the user, etc.)
@@ -169,7 +169,7 @@ async function startMqttConnectionProcess(reset){
     logger.info("Connecting to MQTT Server; Broker URL: " + brokerUrl);
   
     var clientOptions={};
-    clientOptions.clientId="BackupHub_Server"
+    clientOptions.clientId="Orchelium_Server"
   
     if(confighandler.isMqttUserPresent()){
       logger.debug("Setting MQTT Auth credentials");
@@ -201,7 +201,7 @@ async function startMqttConnectionProcess(reset){
           
           //Send disconnect notification too
           if(mqttDisconnectNotificiationSent==false){
-            if(serverConfig.server.connectionEnabled=="true")notifier.sendNotification("BackupHub - MQTT Disconnect",`BackupHub Server [${serverConfig.server.hostname}] Disconnected from MQTT Broker [${serverConfig.mqtt.server}] with error [${JSON.stringify(error)}]`,"WARNING","/agentstatus.html");
+            if(serverConfig.server.connectionEnabled=="true")notifier.sendNotification("Orchelium - MQTT Disconnect",`Orchelium Server [${serverConfig.server.hostname}] Disconnected from MQTT Broker [${serverConfig.mqtt.server}] with error [${JSON.stringify(error)}]`,"WARNING","/agentstatus.html");
             mqttDisconnectNotificiationSent=true;
           }
           //client = undefined;
@@ -234,7 +234,7 @@ async function startMqttConnectionProcess(reset){
       // MQTT client disconnect event
       client.on('disconnect', () => {
         logger.debug("MQTT Disconnect Occurred");
-        if(serverConfig.server.connectionEnabled=="true")notifier.sendNotification("BackupHub - MQTT Disconnect",`BackupHub Server [${serverConfig.server.hostname}] Disconnected from MQTT Broker [${serverConfig.mqtt.server}]`,"WARNING","/agentstatus.html");
+        if(serverConfig.server.connectionEnabled=="true")notifier.sendNotification("Orchelium - MQTT Disconnect",`Orchelium Server [${serverConfig.server.hostname}] Disconnected from MQTT Broker [${serverConfig.mqtt.server}]`,"WARNING","/agentstatus.html");
         if (!connected) {
           logger.warn('Disconnected from MQTT broker before establishing a connection');
           reject(new Error('Disconnected before successful connection'));

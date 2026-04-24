@@ -2,7 +2,7 @@
 
 ## Overview
 
-Phase 3 implements a comprehensive user interface for managing webhooks directly within the BackupHub settings page. This eliminates the need for manual API calls or curl commands for typical webhook operations.
+Phase 3 implements a comprehensive user interface for managing webhooks directly within the Orchelium settings page. This eliminates the need for manual API calls or curl commands for typical webhook operations.
 
 ---
 
@@ -118,7 +118,7 @@ Displays all webhooks for the current job with pagination-friendly design:
 [a1b2c3d4-e5f6-4a5b-8c9d-e1f2g3h4i5j6] [Copy]
 
 Usage:
-curl -X POST https://your-backuphub/webhooks/trigger \
+curl -X POST https://your-orchelium/webhooks/trigger \
   -H "X-Webhook-Key: <YOUR_API_KEY>" \
   -H "Content-Type: application/json" \
   -d '{"data": "value"}'
@@ -473,7 +473,7 @@ POST /rest/webhooks/:jobName
 ## Integration with Phases 1 & 2
 
 ### Phase 1: Trigger Context System
-- Scripts receive `$BACKUPHUB_TRIGGER_CONTEXT` containing webhook payload
+- Scripts receive `$ORCHELIUM_TRIGGER_CONTEXT` containing webhook payload
 - Template substitution in orchestrations: `#{context.webhook.field}`
 
 ### Phase 2: Database & REST API
@@ -519,7 +519,7 @@ webhooksData.js
 ## Deployment Considerations
 
 ### Requirements
-- Existing BackupHub server with Phase 2 (webhooksData.js, REST APIs)
+- Existing Orchelium with Phase 2 (webhooksData.js, REST APIs)
 - Materialize CSS framework (already integrated)
 - Browser with JavaScript enabled
 - Modern browser (ES6+ support)

@@ -84,6 +84,33 @@ function addDateSuffix(date) {
   return date + suffix;
 }
 
+function getEffectiveTriggerType(scheduleItem) {
+  var scheduleType = scheduleItem && scheduleItem.scheduleType;
+  return (scheduleItem && scheduleItem.triggerType) || (
+    (scheduleType === 'daily' || scheduleType === 'weekly' || scheduleType === 'monthly') ? 'clock' : 'legacy_threshold'
+  );
+}
+
+var totalJobCount = Array.isArray(schedules) ? schedules.length : 0;
+var clockJobCount = 0;
+var metricsJobCount = 0;
+var webhookJobCount = 0;
+
+if (Array.isArray(schedules)) {
+  for (var scheduleIdx = 0; scheduleIdx < schedules.length; scheduleIdx++) {
+    var triggerType = getEffectiveTriggerType(schedules[scheduleIdx]);
+    if (triggerType === 'clock') {
+      clockJobCount++;
+    } else if (triggerType === 'rule') {
+      metricsJobCount++;
+    } else if (triggerType === 'webhook') {
+      webhookJobCount++;
+    } else if (triggerType === 'legacy_threshold' || triggerType === 'metric') {
+      metricsJobCount++;
+    }
+  }
+}
+
 
 %>
 <html lang="en">
@@ -91,7 +118,7 @@ function addDateSuffix(date) {
   <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0"/>
   
-  <title>BackupHub | Job Schedules</title>
+  <title>Orchelium | Job Schedules</title>
 
   <%- include('./partials/_head'); %>
   <%- include('./partials/_scripts'); %>
@@ -245,6 +272,13 @@ function addDateSuffix(date) {
     rows.forEach(function(row) {
       tbody.appendChild(row);
     });
+  }
+
+  function updateScheduleInfoBar() {
+    var infoBar = document.getElementById('infobar');
+    if (!infoBar) return;
+
+    infoBar.textContent = 'Jobs: <%= totalJobCount %> (Clock: <%= clockJobCount %> | Metric: <%= metricsJobCount %> | Webhook: <%= webhookJobCount %>)';
   }
    
     
@@ -473,6 +507,10 @@ function addDateSuffix(date) {
   </div>
   <script>
     //Toast Script
+    document.addEventListener('DOMContentLoaded', function() {
+      updateScheduleInfoBar();
+    });
+
     const urlParams = new URLSearchParams(window.location.search);
     const message = urlParams.get('message');
     
