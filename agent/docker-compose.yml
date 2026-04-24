@@ -1,7 +1,7 @@
 services:
   web:
-    image: backup-agent
-    container_name: backup-agent
+    image: orchelium-agent
+    container_name: orchelium-agent
     ports:
       - "49991:49991"
     privileged: true  # Equivalent to --privileged

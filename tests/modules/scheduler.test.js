@@ -418,15 +418,28 @@ describe('Scheduler Module', () => {
         status: 'online',
       });
 
-      fs.promises.readFile.mockRejectedValue(new Error('ENOENT: file not found'));
+      const missingScriptErr = new Error('ENOENT: file not found');
+      missingScriptErr.code = 'ENOENT';
+      fs.promises.readFile.mockRejectedValue(missingScriptErr);
 
       const result = await scheduler.runJob('test-job', false);
 
       expect(result.status).toBe('error');
       expect(result.executionId).toBeNull();
+      expect(mockHistory.createHistoryItem).toHaveBeenCalledWith(
+        'test-job',
+        expect.any(String),
+        1,
+        0,
+        expect.stringContaining('Script cannot be found'),
+        false,
+        expect.any(String),
+        null
+      );
+      expect(mockHistory.add).toHaveBeenCalled();
       expect(global.notifier.sendNotification).toHaveBeenCalledWith(
         expect.stringContaining('Error reading backup script'),
-        expect.anything(),
+        expect.stringContaining('Script cannot be found'),
         expect.anything(),
         expect.anything()
       );

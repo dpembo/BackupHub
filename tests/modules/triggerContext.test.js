@@ -293,13 +293,13 @@ describe('Trigger Context Module', () => {
 
       const envVars = triggerContext.contextToEnvVars(ruleMeta);
 
-      expect(envVars.BACKUPHUB_TRIGGER_TYPE).toBe('rule');
-      expect(envVars.BACKUPHUB_EXECUTION_ID).toBe('exec-123');
-      expect(envVars.BACKUPHUB_METRIC_TYPE).toBe('cpu_usage');
-      expect(envVars.BACKUPHUB_METRIC_VALUE).toBe('85');
-      expect(envVars.BACKUPHUB_METRIC_UNIT).toBe('%');
-      expect(envVars.BACKUPHUB_CONDITION_OPERATOR).toBe('>=');
-      expect(envVars.BACKUPHUB_CONDITION_THRESHOLD).toBe('80');
+      expect(envVars.ORCHELIUM).toBe('rule');
+      expect(envVars.ORCHELIUM_EXECUTION_ID).toBe('exec-123');
+      expect(envVars.ORCHELIUM_METRIC_TYPE).toBe('cpu_usage');
+      expect(envVars.ORCHELIUM_METRIC_VALUE).toBe('85');
+      expect(envVars.ORCHELIUM_METRIC_UNIT).toBe('%');
+      expect(envVars.ORCHELIUM_CONDITION_OPERATOR).toBe('>=');
+      expect(envVars.ORCHELIUM_CONDITION_THRESHOLD).toBe('80');
     });
 
     it('should include full context as JSON', () => {
@@ -312,8 +312,8 @@ describe('Trigger Context Module', () => {
 
       const envVars = triggerContext.contextToEnvVars(webhookContext);
 
-      expect(envVars.BACKUPHUB_TRIGGER_CONTEXT).toBeDefined();
-      const parsed = JSON.parse(envVars.BACKUPHUB_TRIGGER_CONTEXT);
+      expect(envVars.ORCHELIUM_TRIGGER_CONTEXT).toBeDefined();
+      const parsed = JSON.parse(envVars.ORCHELIUM_TRIGGER_CONTEXT);
       expect(parsed.type).toBe('webhook');
       expect(parsed.webhook.payload.severity).toBe('high');
     });
@@ -328,10 +328,10 @@ describe('Trigger Context Module', () => {
 
       const envVars = triggerContext.contextToEnvVars(webhookCtx);
 
-      expect(envVars.BACKUPHUB_TRIGGER_TYPE).toBe('webhook');
-      expect(envVars.BACKUPHUB_WEBHOOK_ID).toBe('webhook-123');
-      expect(envVars.BACKUPHUB_WEBHOOK_PAYLOAD).toBeDefined();
-      const payload = JSON.parse(envVars.BACKUPHUB_WEBHOOK_PAYLOAD);
+      expect(envVars.ORCHELIUM_TRIGGER_TYPE).toBe('webhook');
+      expect(envVars.ORCHELIUM_WEBHOOK_ID).toBe('webhook-123');
+      expect(envVars.ORCHELIUM_WEBHOOK_PAYLOAD).toBeDefined();
+      const payload = JSON.parse(envVars.ORCHELIUM_WEBHOOK_PAYLOAD);
       expect(payload.alert).toBe('test');
     });
 
@@ -351,7 +351,7 @@ describe('Trigger Context Module', () => {
 
       const envVars = triggerContext.contextToEnvVars(ctx);
 
-      expect(envVars.BACKUPHUB_TRIGGER_TIMESTAMP).toBeDefined();
+      expect(envVars.ORCHELIUM_TRIGGER_TIMESTAMP).toBeDefined();
     });
 
     it('should convert numeric values to strings', () => {
@@ -365,10 +365,10 @@ describe('Trigger Context Module', () => {
 
       const envVars = triggerContext.contextToEnvVars(ctx);
 
-      expect(typeof envVars.BACKUPHUB_METRIC_VALUE).toBe('string');
-      expect(envVars.BACKUPHUB_METRIC_VALUE).toBe('123.45');
-      expect(typeof envVars.BACKUPHUB_CONDITION_THRESHOLD).toBe('string');
-      expect(envVars.BACKUPHUB_CONDITION_THRESHOLD).toBe('100');
+      expect(typeof envVars.ORCHELIUM_METRIC_VALUE).toBe('string');
+      expect(envVars.ORCHELIUM_METRIC_VALUE).toBe('123.45');
+      expect(typeof envVars.ORCHELIUM_CONDITION_THRESHOLD).toBe('string');
+      expect(envVars.ORCHELIUM_CONDITION_THRESHOLD).toBe('100');
     });
 
     it('should handle undefined metric values', () => {
@@ -382,7 +382,7 @@ describe('Trigger Context Module', () => {
 
       const envVars = triggerContext.contextToEnvVars(ctx);
 
-      expect(envVars.BACKUPHUB_METRIC_VALUE).toBe('');
+      expect(envVars.ORCHELIUM_METRIC_VALUE).toBe('');
     });
   });
 
@@ -657,8 +657,8 @@ describe('Trigger Context Module', () => {
 
       // Convert to env vars
       const envVars = triggerContext.contextToEnvVars(context);
-      expect(envVars.BACKUPHUB_TRIGGER_TYPE).toBe('rule');
-      expect(envVars.BACKUPHUB_METRIC_VALUE).toBe('95');
+      expect(envVars.ORCHELIUM_TRIGGER_TYPE).toBe('rule');
+      expect(envVars.ORCHELIUM_METRIC_VALUE).toBe('95');
 
       // Substitute template
       const template = '--agent #{context.metric.agent} --value #{context.metric.value} --threshold #{context.condition.threshold} --change #{context.metric.changePercent}%';
@@ -690,7 +690,7 @@ describe('Trigger Context Module', () => {
 
       // Convert to env vars
       const envVars = triggerContext.contextToEnvVars(context);
-      expect(envVars.BACKUPHUB_TRIGGER_TYPE).toBe('webhook');
+      expect(envVars.ORCHELIUM_TRIGGER_TYPE).toBe('webhook');
 
       // Substitute template
       const template = '--severity #{context.webhook.payload.severity} --mount #{context.webhook.payload.mountPoint} --usage #{context.webhook.payload.value}%';

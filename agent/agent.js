@@ -31,9 +31,9 @@ const DEFAULT_MQTT_SERVER = 'localhost';
 const DEFAULT_MQTT_SERVER_PORT = '1883';
 const DEFAULT_WS_SERVER = 'localhost';
 const DEFAULT_WS_SERVER_PORT = '49981';
-const TOPIC_COMMAND = 'backup/agent/command';
-const TOPIC_STATUS = 'backup/agent/status';
-const LOG_STATUS = 'backup/agent/log';
+const TOPIC_COMMAND = 'orchelium/agent/command';
+const TOPIC_STATUS = 'orchelium/agent/status';
+const LOG_STATUS = 'orchelium/agent/log';
 
 let RETRY_TIMEOUT = 5000;
 let FILE_SYSTEMS = "/,/home,/var,/tmp,/boot,/usr";
@@ -51,7 +51,7 @@ const AGENT_STATUS = Object.freeze({
 let status = AGENT_STATUS.OFFLINE;
 
 // Generate agent ID using hostname
-let INSTALL_DIR = "/opt/BackupHubAgent";
+let INSTALL_DIR = "/opt/OrcheliumAgent";
 let STARTUP_TYPE = "INSTALL";
 const HOSTNAME = os.hostname();
 const agentNameIndex = process.argv.indexOf('--agent');
@@ -100,8 +100,8 @@ let debugTokenExpiry = null;
 const DEBUG_TOKEN_EXPIRY_MS = 10 * 60 * 1000;  // 10 minutes
 
 function initializeEncryptionKey() {
-  let key = process.env.BACKUPHUB_ENCRYPTION_KEY;
-  const keyEnforceLevel = process.env.BACKUPHUB_KEY_ENFORCE || 'warn'; // 'strict', 'warn', or 'silent'
+  let key = process.env.ORCHELIUM_ENCRYPTION_KEY;
+  const keyEnforceLevel = process.env.ORCHELIUM_KEY_ENFORCE || 'warn'; // 'strict', 'warn', or 'silent'
   
   if(!key || key.length === 0) {
     const DEFAULT_KEY = "CHANGEIT";
@@ -112,7 +112,7 @@ function initializeEncryptionKey() {
         console.error("═══════════════════════════════════════════════════════════════");
         console.error("CRITICAL: Default encryption key in use. Agent will not start.");
         console.error("═══════════════════════════════════════════════════════════════");
-        console.error("Set BACKUPHUB_ENCRYPTION_KEY environment variable before starting.");
+        console.error("Set ORCHELIUM_ENCRYPTION_KEY environment variable before starting.");
         console.error("This key must match the key configured on the Server.");
         console.error("═══════════════════════════════════════════════════════════════");
         process.exit(1);
@@ -121,7 +121,7 @@ function initializeEncryptionKey() {
         console.warn("⚠️  WARNING: Using default encryption key (CHANGEIT)");
         console.warn("═══════════════════════════════════════════════════════════════");
         console.warn("This key should ONLY be used for development/testing.");
-        console.warn("For production, set BACKUPHUB_ENCRYPTION_KEY environment variable.");
+        console.warn("For production, set ORCHELIUM_ENCRYPTION_KEY environment variable.");
         console.warn("The same key must be set on the Server for communications.");
         console.warn("═══════════════════════════════════════════════════════════════");
         break;
@@ -129,10 +129,10 @@ function initializeEncryptionKey() {
         debug(DEBUG_LEVEL.DEBUG, "Using default encryption key (not recommended for production)");
         break;
       default:
-        console.warn("Unknown BACKUPHUB_KEY_ENFORCE value: " + keyEnforceLevel);
+        console.warn("Unknown ORCHELIUM_KEY_ENFORCE value: " + keyEnforceLevel);
     }
   } else {
-    debug(DEBUG_LEVEL.INFO, "Custom encryption key loaded from BACKUPHUB_ENCRYPTION_KEY");
+    debug(DEBUG_LEVEL.INFO, "Custom encryption key loaded from ORCHELIUM_ENCRYPTION_KEY");
   }
   
   return padStringTo256Bits(key);
@@ -456,7 +456,7 @@ function executeBackupCommand(command, commandParams, jobName, callback, manual,
   });
   
   status = AGENT_STATUS.RUNNING;
-  publishStatusUpdate('running', `Backup in progress for job [${jobName}]`, null, jobName, undefined, manual, executionId, 0, executionContext);
+  publishStatusUpdate('running', `Job in progress [${jobName}]`, null, jobName, undefined, manual, executionId, 0, executionContext);
 
   const file = `${workingDir}/${generateRandomFileName()}.sh`;
   const logfile = `${workingDir}/${sanitizeUnixFilename(jobName)}_${getCurrentDateTimeFormatted()}.log`;
@@ -472,7 +472,7 @@ function executeBackupCommand(command, commandParams, jobName, callback, manual,
 
   const runCommand = `. ${file} ${sanitizedParams} >> ${logfile}`;
   const start = new Date().getTime();
-  debug(DEBUG_LEVEL.INFO, `Starting backup: ${jobName}`);
+  debug(DEBUG_LEVEL.INFO, `Starting job: ${jobName}`);
 
   // Prepare environment for child process
   // Start with current process environment, then overlay trigger context variables
@@ -495,13 +495,13 @@ function executeBackupCommand(command, commandParams, jobName, callback, manual,
   
   // Add error handler for spawn failures
   childProcess.on('error', (err) => {
-    debug(DEBUG_LEVEL.ERROR, `Failed to spawn backup process for [${jobName}]: ${err.message}`);
+    debug(DEBUG_LEVEL.ERROR, `Failed to spawn process for job [${jobName}]: ${err.message}`);
     if (jobRecord && jobRecord.logStreamInterval) {
       clearInterval(jobRecord.logStreamInterval);
       removeIntervalReference(jobRecord.logStreamInterval);
     }
     activeJobs.delete(activeJobKey);
-    publishStatusUpdate('error', `Backup failed to start: ${err.message}`, null, jobName, undefined, manual, executionId, 0, executionContext);
+    publishStatusUpdate('error', `Job failed to start: ${err.message}`, null, jobName, undefined, manual, executionId, 0, executionContext);
   });
 
   let lastOffset = 0;
@@ -536,7 +536,7 @@ function executeBackupCommand(command, commandParams, jobName, callback, manual,
           clearInterval(logStreamInterval);
           removeIntervalReference(logStreamInterval);
           const stop = new Date().getTime();
-          debug(DEBUG_LEVEL.INFO, `Backup completed: ${jobName} [exit code: ${localReturnCode}]`);
+          debug(DEBUG_LEVEL.INFO, `Job completed: ${jobName} [exit code: ${localReturnCode}]`);
           localReturnCode !== 0 ? failJobCount++ : successJobCount++;
           activeJobs.delete(activeJobKey);
           status = AGENT_STATUS.IDLE;
@@ -609,7 +609,7 @@ function publishLogData(logData, jobName, eta, returnCode, callback, manual, exe
 function backupComplete(jobName, eta, manual, executionId = null, executionContext = null, completionReturnCode = null) {
   status = AGENT_STATUS.IDLE;
   publishLogData("", jobName, eta, completionReturnCode, undefined, manual, executionId, executionContext);
-  debug(DEBUG_LEVEL.INFO, `Backup completed in ${eta} seconds`);
+  debug(DEBUG_LEVEL.INFO, `Job completed in ${eta} seconds`);
 }
 
 function sanitizeUnixFilename(filename) {
@@ -649,7 +649,7 @@ function isValidDebugToken(token) {
 }
 
 async function handleCommand(message) {
-  debug(DEBUG_LEVEL.TRACE, "Received Command from BackupHub Server");
+  debug(DEBUG_LEVEL.TRACE, "Received Command from Orchelium Server");
   subCount++;
   validateJWTToken(message).then(async decodedPayload => {
     const {
@@ -669,6 +669,7 @@ async function handleCommand(message) {
     } = decodedPayload;
     debug(DEBUG_LEVEL.TRACE, `Job: [${jobName}] for agent: [${agentId}] with executionId: [${executionId}]`);
     debug(DEBUG_LEVEL.TRACE, `Command: ${command}, Manual: ${manual}, Params: ${commandParams}`);
+    debug(DEBUG_LEVEL.TRACE, `Context Env Vars: ${JSON.stringify(contextEnvVars)}`);
 
     if (agentId !== AGENT_ID) return;
 
@@ -719,6 +720,7 @@ async function handleCommand(message) {
     // Log trigger context details if present
     if (triggerContext || Object.keys(contextEnvVars).length > 0) {
       debug(DEBUG_LEVEL.INFO, `[TRIGGER CONTEXT] Job triggered with context. Type: [${triggerContext?.type || 'none'}], Env vars: [${Object.keys(contextEnvVars).length}]`);
+      debug(DEBUG_LEVEL.trace, `[TRIGGER CONTEXT] Job triggered with context. Type: [${triggerContext?.type || 'none'}], Env vars: [${JSON.stringify(contextEnvVars)}], Context: [${JSON.stringify(triggerContext)}]`);
     }
 
     executeBackupCommand(command, commandParams, jobName, backupComplete, manual, executionId, triggerContext, contextEnvVars, executionContext);
@@ -1213,7 +1215,7 @@ console.log('888                                                                
 console.log('888                                                                                           ');
 console.log('\x1b[36m _________________');
 console.log('|# \x1b[30m\x1b[47m:           :\x1b[0m\x1b[36m #|');
-console.log('|  \x1b[30m\x1b[47m: BackupHub :\x1b[0m\x1b[36m  |');
+console.log('|  \x1b[30m\x1b[47m: Orchelium :\x1b[0m\x1b[36m  |');
 console.log('|  \x1b[30m\x1b[47m:   Agent   :\x1b[0m\x1b[36m  |');
 console.log('|  \x1b[30m\x1b[47m:           :\x1b[0m\x1b[36m  |       \x1b[32mVersion: ' + version + '\x1b[36m');
 console.log('|  \x1b[30m\x1b[47m:___________:\x1b[0m\x1b[36m  |');
@@ -1222,7 +1224,7 @@ console.log('|    \x1b[90m| __      |\x1b[36m  |');
 console.log('|    \x1b[90m||  |     |\x1b[36m  |');
 console.log('\\____\x1b[90m||__|_____|\x1b[36m__|\x1b[0m');
 console.log("");
-console.log("\x1b[32mBackup Agent\x1b[33m");
+console.log("\x1b[Orcheliuim Agent\x1b[33m");
 console.log("\x1b[32m----------------------------------------------------------------------------------------------\x1b[0m\n");
 
 parseSettingsFile("settings.sh");
@@ -1393,7 +1395,7 @@ const separator = `${colors.brightYellow}${'═'.repeat(63)}${colors.reset}`;
 const divider = `${colors.yellow}${'─'.repeat(63)}${colors.reset}`;
 
 console.log(`\n${separator}`);
-console.log(`${colors.brightYellow}  🤖 BACKUPHUB AGENT CONFIGURATION${colors.reset}`);
+console.log(`${colors.brightYellow}  🤖 ORCHELIUM AGENT CONFIGURATION${colors.reset}`);
 console.log(`${separator}\n`);
 
 // Agent Information Section

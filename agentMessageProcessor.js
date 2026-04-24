@@ -1,5 +1,5 @@
-const status_topic = 'backup/agent/status';
-const command_topic = 'backup/agent/command';
+const status_topic = 'orchelium/agent/status';
+const command_topic = 'orchelium/agent/command';
 const EventEmitter = require('events');
 const metricResultEmitter = new EventEmitter();
 const scriptTestManager = require('./scriptTestManager.js');
@@ -37,7 +37,7 @@ async function processMessage(topic, message,protocol) {
       }
       
       //Status Notification from Agent
-      if (topic == "backup/agent/status" && obj.status == "notification") {
+      if (topic == "orchelium/agent/status" && obj.status == "notification") {
         logger.info("Received Notification From Agent:" + obj.name);
         try {
           logger.info(obj.data);
@@ -54,17 +54,17 @@ async function processMessage(topic, message,protocol) {
       }
   
       //Known agent registering
-      if (topic == "backup/agent/status" && obj.status == "register") {
+      if (topic == "orchelium/agent/status" && obj.status == "register") {
         agents.updateAgentStatus(obj.name, "online", "Agent Back Online",null,null,null,message,protocol);
       }
   
       //known agent going Offline
-      if (topic == "backup/agent/status" && obj.status == "offline") {
+      if (topic == "orchelium/agent/status" && obj.status == "offline") {
         agents.updateAgentStatus(obj.name, obj.status, obj.description,null,null,null,message,protocol);
       }
   
       //known agent running status
-      if (topic == "backup/agent/status" && obj.status == "running") {
+      if (topic == "orchelium/agent/status" && obj.status == "running") {
         logger.debug(">>>>>> RUNNING\n" + JSON.stringify(obj));
         logger.info(`Agent running: jobName=[${obj.jobName}], executionId=[${obj.executionId}], manual=[${obj.manual}]`);
         agents.updateAgentStatus(obj.name, obj.status, obj.description, null,obj.jobName, new Date(),message,protocol);
@@ -85,7 +85,7 @@ async function processMessage(topic, message,protocol) {
       }
   
       //Ping response received
-      if (topic == "backup/agent/status" && obj.status == "pong") {
+      if (topic == "orchelium/agent/status" && obj.status == "pong") {
         logger.debug("PONG RECEIVED: " + obj.status);
         logger.debug("AGENT STATUS: " + agents.getAgent(obj.name).status);
         logger.debug("--------------------------------------");
@@ -106,7 +106,7 @@ async function processMessage(topic, message,protocol) {
       }
 
       // Metric query result received
-      if (topic == "backup/agent/status" && obj.status == "metric_result") {
+      if (topic == "orchelium/agent/status" && obj.status == "metric_result") {
         logger.info(`[METRIC] Received metric_result from agent [${obj.name}] for job [${obj.jobName}]`);
         try {
           const result = JSON.parse(obj.data);
@@ -229,7 +229,7 @@ async function processMessage(topic, message,protocol) {
     }
     else {
       //Register an unknown agent
-      if (topic == "backup/agent/status" && obj.status == "register") {
+      if (topic == "orchelium/agent/status" && obj.status == "register") {
         agents.addObjToAgentStatusDict(obj).catch(err => {
           logger.error(`Failed to register unknown agent [${obj.name}]:`, err.message);
         });

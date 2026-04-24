@@ -49,12 +49,13 @@ function createRuleTriggerContext(ruleId, jobId, metricResult, ruleCondition, ex
  * @param {string} jobId - Job being triggered
  * @param {object} payload - Arbitrary JSON payload from webhook
  * @param {string} executionId - Execution ID for tracking
- * @returns {object} Structured trigger context
+ * @returns {Promise<object>} Structured trigger context
  */
 function createWebhookTriggerContext(webhookId, jobId, payload, executionId) {
   return {
     type: 'webhook',
     webhookId,
+    webhookName: '',
     jobId,
     executionId,
     timestamp: new Date().toISOString(),
@@ -92,35 +93,40 @@ function contextToEnvVars(triggerContext) {
   if (!triggerContext) return {};
 
   const envVars = {
-    BACKUPHUB_TRIGGER_TYPE: triggerContext.type,
-    BACKUPHUB_TRIGGER_TIMESTAMP: triggerContext.timestamp,
-    BACKUPHUB_EXECUTION_ID: triggerContext.executionId || '',
+    ORCHELIUM: triggerContext.type,
+    ORCHELIUM_TRIGGER_TYPE: triggerContext.type,
+    ORCHELIUM_TRIGGER_TIMESTAMP: triggerContext.timestamp,
+    ORCHELIUM_EXECUTION_ID: triggerContext.executionId || '',
+    ORCHELIUM_JOB_ID: triggerContext.jobId || '',
   };
 
   // Rule-specific env vars
   if (triggerContext.type === 'rule' && triggerContext.metric) {
-    envVars.BACKUPHUB_TRIGGER_RULE_ID = triggerContext.ruleId || '';
-    envVars.BACKUPHUB_METRIC_TYPE = triggerContext.metric.type || '';
-    envVars.BACKUPHUB_METRIC_VALUE = String(triggerContext.metric.value !== undefined ? triggerContext.metric.value : '');
-    envVars.BACKUPHUB_METRIC_UNIT = triggerContext.metric.unit || '%';
-    envVars.BACKUPHUB_METRIC_PATH = triggerContext.metric.path || '';
-    envVars.BACKUPHUB_METRIC_PATTERN = triggerContext.metric.pattern || '';
-    envVars.BACKUPHUB_METRIC_PREVIOUS_VALUE = String(triggerContext.metric.previousValue !== null && triggerContext.metric.previousValue !== undefined ? triggerContext.metric.previousValue : '');
-    envVars.BACKUPHUB_METRIC_CHANGE_PERCENT = String(triggerContext.metric.changePercent !== null && triggerContext.metric.changePercent !== undefined ? triggerContext.metric.changePercent : '');
-    envVars.BACKUPHUB_METRIC_AGENT = triggerContext.metric.agent || '';
-    envVars.BACKUPHUB_CONDITION_OPERATOR = triggerContext.condition.operator || '';
-    envVars.BACKUPHUB_CONDITION_THRESHOLD = String(triggerContext.condition.threshold || '');
+    envVars.ORCHELIUM_TRIGGER_RULE_ID = triggerContext.ruleId || '';
+    envVars.ORCHELIUM_METRIC_TYPE = triggerContext.metric.type || '';
+    envVars.ORCHELIUM_METRIC_VALUE = String(triggerContext.metric.value !== undefined ? triggerContext.metric.value : '');
+    envVars.ORCHELIUM_METRIC_UNIT = triggerContext.metric.unit || '%';
+    envVars.ORCHELIUM_METRIC_PATH = triggerContext.metric.path || '';
+    envVars.ORCHELIUM_METRIC_PATTERN = triggerContext.metric.pattern || '';
+    envVars.ORCHELIUM_METRIC_PREVIOUS_VALUE = String(triggerContext.metric.previousValue !== null && triggerContext.metric.previousValue !== undefined ? triggerContext.metric.previousValue : '');
+    envVars.ORCHELIUM_METRIC_CHANGE_PERCENT = String(triggerContext.metric.changePercent !== null && triggerContext.metric.changePercent !== undefined ? triggerContext.metric.changePercent : '');
+    envVars.ORCHELIUM_METRIC_AGENT = triggerContext.metric.agent || '';
+    envVars.ORCHELIUM_CONDITION_OPERATOR = triggerContext.condition.operator || '';
+    envVars.ORCHELIUM_CONDITION_THRESHOLD = String(triggerContext.condition.threshold || '');
   }
 
   // Webhook-specific env vars
-  if (triggerContext.type === 'webhook' && triggerContext.webhook) {
-    envVars.BACKUPHUB_WEBHOOK_ID = triggerContext.webhookId || '';
-    envVars.BACKUPHUB_WEBHOOK_PAYLOAD = JSON.stringify(triggerContext.webhook.payload);
-    envVars.BACKUPHUB_WEBHOOK_RECEIVED_AT = triggerContext.webhook.receivedAt || '';
+  if (triggerContext.type === 'webhook') {
+    envVars.ORCHELIUM_WEBHOOK_ID = triggerContext.webhookId || '';
+    envVars.ORCHELIUM_WEBHOOK_NAME = triggerContext.webhookName || '';
+    if(triggerContext.webhook){
+      envVars.ORCHELIUM_WEBHOOK_PAYLOAD = JSON.stringify(triggerContext.webhook.payload);
+      envVars.ORCHELIUM_WEBHOOK_RECEIVED_AT = triggerContext.webhook.receivedAt || '';
+    }
   }
 
   // Always include full context as JSON for advanced users
-  envVars.BACKUPHUB_TRIGGER_CONTEXT = JSON.stringify(triggerContext);
+  envVars.ORCHELIUM_TRIGGER_CONTEXT = JSON.stringify(triggerContext);
 
   return envVars;
 }
@@ -132,7 +138,6 @@ function contextToEnvVars(triggerContext) {
  */
 function isValidTriggerContext(context) {
   if (!context || typeof context !== 'object') return false;
-  
   const validTypes = ['rule', 'webhook', 'sample'];
   if (!validTypes.includes(context.type)) return false;
   

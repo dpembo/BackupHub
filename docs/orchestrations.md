@@ -59,7 +59,7 @@ For detailed examples and webhook trigger usage, see [TRIGGER_CONTEXT_GUIDE.md](
 
 # Orchestrations
 
-Orchestrations allow you to create complex backup workflows by chaining multiple backup scripts together with conditional logic. Instead of running a single script per schedule, you can design sophisticated multi-step processes with decision branches, error handling, and complex execution paths.
+Orchestrations allow you to create complex workflows by chaining multiple scripts together with conditional logic. Instead of running a single script per schedule, you can design sophisticated multi-step processes with decision branches, error handling, and complex execution paths.
 
 ## Overview
 
@@ -69,16 +69,16 @@ An orchestration is a visual workflow that defines:
 - **Conditionals**: Branches based on return codes, script output, or execution time
 - **Terminal states**: Success or failure outcomes
 
-Once created, orchestrations can be integrated directly into schedules, providing a powerful way to automate complex backup scenarios.
+Once created, orchestrations can be integrated directly into schedules, providing a powerful way to automate complex  scenarios.
 
 ---
 
 ## Getting Started
 
 ### Prerequisites
-1. BackupHub Server installed and running
+1. Orchelium installed and running
 2. At least one agent deployed
-3. Backup scripts already created
+3. Appropriate scripts already created
 4. Admin access to create orchestrations
 
 ### Accessing the Orchestration Builder
@@ -100,7 +100,7 @@ The builder is divided into four main sections:
 ### 2. Left Palette
 A panel containing draggable node types:
 - **Start**: Entry point for the workflow (only one allowed)
-- **Execute Script**: Run a backup script on a target agent
+- **Execute Script**: Run a script on a target agent
 - **Condition**: Branch execution based on test results
 - **Success**: Terminal node for successful completion
 - **Failure**: Terminal node for failed completion
@@ -134,9 +134,9 @@ Appears when you select a node, showing configuration options specific to that n
 - **Output**: Single arrow to the next node
 
 ### Execute Script Node
-- **Purpose**: Run a specific backup script on a target agent
+- **Purpose**: Run a specific script on a target agent
 - **Configuration**:
-  - **Script**: Dropdown list of available backup scripts
+  - **Script**: Dropdown list of available scripts
   - **Target Agent**: Which agent to run the script on
   - **Script Info**: Displays description and parameters for the selected script
   - **Parameters**: Custom command parameters or command override
@@ -177,7 +177,7 @@ Appears when you select a node, showing configuration options specific to that n
 ### Step 1: Create and Configure Nodes
 
 1. **Add Start Node**: Drag the Start node from the palette onto the canvas
-2. **Add Execute Nodes**: Drag Execute Script nodes for each backup step
+2. **Add Execute Nodes**: Drag Execute Script nodes for each  step
 3. **Add Logic**: Add Condition nodes for branching
 4. **Add Terminals**: Connect to Success or Failure nodes
 
@@ -344,12 +344,12 @@ To re-run a failed orchestration from history:
 
 1. **Monitor execution time**: Use Execution Time conditions to catch hung processes
 2. **Parallel execution**: Orchestrations execute serially (one node at a time)
-3. **Cleanup**: Add nodes to clean up temporary files after backup completion
+3. **Cleanup**: Add nodes to clean up temporary files after job completion
 
 ### Documentation
 
 1. **Use descriptions**: Set orchestration descriptions explaining the workflow
-2. **Comment in scripts**: Add comments in backup scripts about expected parameters
+2. **Comment in scripts**: Add comments in job scripts about expected parameters
 3. **Document schedules**: Note why each orchestration is scheduled and what it does
 
 ---
@@ -430,7 +430,7 @@ You can create sophisticated patterns:
 
 ## Related Documentation
 
-- [Backup Schedules](./backup-schedules.md): How to create schedules
-- [Installation](./installation.md): Setting up BackupHub
+- [Backup Schedules](./backup-schedules.md): How to create job schedules
+- [Installation](./installation.md): Setting up Orchelium
 - [Settings Configuration](./settings-config.md): Server configuration options
 - [User Management](./user-management.md): Permission and user setup

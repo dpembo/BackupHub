@@ -2,7 +2,7 @@
 
 ## Overview
 
-BackupHub includes a complete webhook system that allows external services to trigger backup jobs with custom data. No more manual job execution - let your monitoring systems, CI/CD pipelines, and applications trigger BackupHub jobs automatically!
+Orchelium includes a complete webhook system that allows external services to trigger jobs with custom data. No more manual job execution - let your monitoring systems, CI/CD pipelines, and applications trigger jobs automatically!
 
 ---
 
@@ -10,7 +10,7 @@ BackupHub includes a complete webhook system that allows external services to tr
 
 ### Create Your First Webhook (5 minutes)
 
-1. **Log in to BackupHub** and navigate to **Settings**
+1. **Log in to Orchelium** and navigate to **Settings**
 2. Click the **Webhooks** tab
 3. Click **Create Webhook**
 4. Enter a name (e.g., "Monitoring Alert") and optional description
@@ -23,7 +23,7 @@ BackupHub includes a complete webhook system that allows external services to tr
 Use the trigger URL to test:
 
 ```bash
-curl -X POST "https://your-backuphub/webhooks/trigger?jobName=my-job&key=YOUR_API_KEY" \
+curl -X POST "https://your-orchelium/webhooks/trigger?jobName=my-job&key=YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"alert": "High CPU detected"}'
 ```
@@ -36,18 +36,18 @@ If successful, your job will start immediately!
 
 ### What is a Webhook?
 
-A webhook is a way for external systems to communicate with BackupHub. Instead of BackupHub polling external services, external services send BackupHub a message when something happens.
+A webhook is a way for external systems to communicate with Orchelium. Instead of Orchelium polling external services, external services send Orchelium a message when something happens.
 
 **Example scenarios:**
 - ✅ Monitoring system detects high disk usage → Triggers cleanup job
 - ✅ CI/CD pipeline completes → Triggers backup of artifacts
 - ✅ Database gets corrupted → Application triggers recovery job
-- ✅ Scheduled maintenance window → External system triggers backup
+- ✅ Scheduled maintenance window → External system triggers job
 
 ### How Webhooks Work
 
 ```
-External System          BackupHub Server           Backup Job
+External System          Orchelium Server            Job
      │                         │                          │
      │  1. Something happens   │                          │
      │───────────────────────> │                          │
@@ -73,7 +73,7 @@ External System          BackupHub Server           Backup Job
 
 **Via API (Advanced):**
 ```bash
-curl -X POST "https://your-backuphub/rest/webhooks/my-job" \
+curl -X POST "https://your-orchelium/rest/webhooks/my-job" \
   -H "Content-Type: application/json" \
   -H "Cookie: session=your-session-cookie" \
   -d '{"name": "My Webhook", "description": "Triggers on alert"}'
@@ -116,7 +116,7 @@ If you think your API key was compromised:
 ### Trigger URL Format
 
 ```
-https://your-backuphub/webhooks/trigger?jobName=JOBNAME&key=APIKEY
+https://your-orchelium/webhooks/trigger?jobName=JOBNAME&key=APIKEY
 ```
 
 **Parameters:**
@@ -128,19 +128,19 @@ https://your-backuphub/webhooks/trigger?jobName=JOBNAME&key=APIKEY
 
 #### 1. Simple GET Request
 ```bash
-curl -X GET "https://your-backuphub/webhooks/trigger?jobName=backup&key=a1b2c3d4"
+curl -X GET "https://your-orchelium/webhooks/trigger?jobName=backup&key=a1b2c3d4"
 ```
 
 #### 2. POST with Custom Data
 ```bash
-curl -X POST "https://your-backuphub/webhooks/trigger?jobName=cleanup&key=a1b2c3d4" \
+curl -X POST "https://your-orchelium/webhooks/trigger?jobName=cleanup&key=a1b2c3d4" \
   -H "Content-Type: application/json" \
   -d '{"severity": "high", "reason": "Disk full"}'
 ```
 
 #### 3. Header-based API Key (More Secure)
 ```bash
-curl -X POST "https://your-backuphub/webhooks/trigger?jobName=backup" \
+curl -X POST "https://your-orchelium/webhooks/trigger?jobName=backup" \
   -H "X-Webhook-Key: a1b2c3d4" \
   -H "Content-Type: application/json" \
   -d '{"files": 100}'
@@ -150,10 +150,10 @@ curl -X POST "https://your-backuphub/webhooks/trigger?jobName=backup" \
 
 #### GitHub Actions
 ```yaml
-- name: Trigger BackupHub Job
+- name: Trigger Orchelium Job
   run: |
-    curl -X POST "${{ secrets.BACKUPHUB_WEBHOOK_URL }}" \
-      -H "X-Webhook-Key: ${{ secrets.BACKUPHUB_API_KEY }}" \
+    curl -X POST "${{ secrets.ORCHELIUM_WEBHOOK_URL }}" \
+      -H "X-Webhook-Key: ${{ secrets.ORCHELIUM_API_KEY }}" \
       -H "Content-Type: application/json" \
       -d '{
         "event": "deployment",
@@ -167,7 +167,7 @@ curl -X POST "https://your-backuphub/webhooks/trigger?jobName=backup" \
 {
   "webhook_configs": [
     {
-      "url": "https://your-backuphub/webhooks/trigger?jobName=alert_cleanup&key=YOUR_KEY"
+      "url": "https://your-orchelium/webhooks/trigger?jobName=alert_cleanup&key=YOUR_KEY"
     }
   ]
 }
@@ -178,7 +178,7 @@ curl -X POST "https://your-backuphub/webhooks/trigger?jobName=backup" \
 import requests
 
 def trigger_backup(reason):
-    url = "https://your-backuphub/webhooks/trigger"
+    url = "https://your-orchelium/webhooks/trigger"
     params = {
         "jobName": "database_backup",
         "key": "YOUR_API_KEY"
@@ -192,10 +192,10 @@ def trigger_backup(reason):
 #### Application Code (Node.js)
 ```javascript
 async function triggerBackup(reason) {
-  const response = await fetch('https://your-backuphub/webhooks/trigger', {
+  const response = await fetch('https://your-orchelium/webhooks/trigger', {
     method: 'POST',
     headers: {
-      'X-Webhook-Key': process.env.BACKUPHUB_API_KEY,
+      'X-Webhook-Key': process.env.ORCHELIUM_API_KEY,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
@@ -222,11 +222,11 @@ Access webhook data via environment variables:
 #!/bin/bash
 
 # The full webhook JSON payload
-echo "Payload: $BACKUPHUB_TRIGGER_CONTEXT"
+echo "Payload: $ORCHELIUM_TRIGGER_CONTEXT"
 
 # Parse specific fields
-REASON=$(echo "$BACKUPHUB_TRIGGER_CONTEXT" | jq -r '.payload.reason')
-ENVIRONMENT=$(echo "$BACKUPHUB_TRIGGER_CONTEXT" | jq -r '.payload.environment')
+REASON=$(echo "$ORCHELIUM_TRIGGER_CONTEXT" | jq -r '.payload.reason')
+ENVIRONMENT=$(echo "$ORCHELIUM_TRIGGER_CONTEXT" | jq -r '.payload.environment')
 
 echo "Trigger reason: $REASON"
 echo "Environment: $ENVIRONMENT"
@@ -251,11 +251,11 @@ Use template syntax to reference webhook data in orchestration parameters:
 ### Available Variables
 
 ```bash
-BACKUPHUB_TRIGGER_TYPE          # "webhook" for webhooks
-BACKUPHUB_TRIGGER_CONTEXT      # Full JSON payload and metadata
-BACKUPHUB_EXECUTION_ID         # Unique ID for this execution
-BACKUPHUB_WEBHOOK_ID           # ID of the webhook that triggered
-BACKUPHUB_WEBHOOK_NAME         # Name you gave the webhook
+ORCHELIUM_TRIGGER_TYPE          # "webhook" for webhooks
+ORCHELIUM_TRIGGER_CONTEXT      # Full JSON payload and metadata
+ORCHELIUM_EXECUTION_ID         # Unique ID for this execution
+ORCHELIUM_WEBHOOK_ID           # ID of the webhook that triggered
+ORCHELIUM_WEBHOOK_NAME         # Name you gave the webhook
 ```
 
 ---
@@ -448,11 +448,11 @@ const key = "a1b2c3d4-e5f6-4a5b-8c9d-e1f2g3h4i5j6";
 **✅ RIGHT - Use environment variables:**
 ```bash
 # .env file (don't commit this!)
-BACKUPHUB_API_KEY=a1b2c3d4-e5f6-4a5b-8c9d-e1f2g3h4i5j6
+ORCHELIUM_API_KEY=a1b2c3d4-e5f6-4a5b-8c9d-e1f2g3h4i5j6
 ```
 
 ```javascript
-const key = process.env.BACKUPHUB_API_KEY;
+const key = process.env.ORCHELIUM_API_KEY;
 ```
 
 ### Webhook URL Security
@@ -481,10 +481,10 @@ const key = process.env.BACKUPHUB_API_KEY;
 **Problem:** External system sends request but job doesn't start
 
 **Solutions:**
-- Verify the job exists and is enabled in BackupHub
+- Verify the job exists and is enabled in Orchelium
 - Check the webhook shows as "Active" (green)
 - Confirm API key is correct with `curl` test first
-- Check BackupHub server logs for errors
+- Check Orchelium logs for errors
 - Verify HTTPS certificate if using HTTPS
 
 ### "Job Not Found" Error
@@ -494,7 +494,7 @@ const key = process.env.BACKUPHUB_API_KEY;
 **Solutions:**
 - Verify job name exactly matches (case-sensitive)
 - Check job hasn't been deleted
-- Confirm you're connected to correct BackupHub server
+- Confirm you're connected to correct Orchelium server
 
 ### Rate Limiting
 
@@ -525,7 +525,7 @@ After webhook triggers a job:
 1. Go to **History** or **Job Monitor**
 2. Find your job in the list
 3. Click to view execution log
-4. Look for `BACKUPHUB_WEBHOOK_*` environment variables
+4. Look for `ORCHELIUM_WEBHOOK_*` environment variables
 
 ---
 
@@ -575,7 +575,7 @@ Your job scripts can examine webhook data to make decisions:
 #!/bin/bash
 # Example: Different cleanup based on webhook severity
 
-PAYLOAD="$BACKUPHUB_TRIGGER_CONTEXT"
+PAYLOAD="$ORCHELIUM_TRIGGER_CONTEXT"
 SEVERITY=$(echo "$PAYLOAD" | jq -r '.payload.severity // "normal"')
 
 case "$SEVERITY" in
@@ -602,14 +602,14 @@ Periodically verify your webhooks are working:
 #!/bin/bash
 # Health check: Test all webhooks
 
-BACKUPHUB_URL="https://your-backuphub"
+ORCHELIUM_URL="https://your-orchelium"
 API_KEY="YOUR_API_KEY"
 JOB_NAME="health-check"
 
 # Create a test-run
 
 HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
-  "$BACKUPHUB_URL/webhooks/trigger?jobName=$JOB_NAME&key=$API_KEY" \
+  "$ORCHELIUM_URL/webhooks/trigger?jobName=$JOB_NAME&key=$API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"test": true}')
 

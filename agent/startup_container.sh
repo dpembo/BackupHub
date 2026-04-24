@@ -135,18 +135,16 @@ echo " Setting up Container "
 echo " ------------------------------------ "
 
 # Now buliding container
-echo "  * Building backup-agent container"
+echo "  * Building orchelium-agent container"
 echo "  * Changing to $INSTALL_DIR"
 cd $INSTALL_DIR
 pwd
 
-docker build -t backup-agent .
+docker build -t orchelium-agent .
 
 echo " ----------------------- "
 echo " Starting        "
 echo " ----------------------- "
-#cd $INSTALL_DIR/agent
-#node agent.js --agent "$AGENT_NAME" --mqttServer "$MQTT_SERVER" --mqttPort "$MQTT_PORT" --workingDir "$WORKING_DIR" >> /var/log/backupApp2.log 2>&1 &
 
 
 # Export the variables
@@ -163,4 +161,3 @@ export WORKING_DIR="$WORKING_DIR"
 # Run Docker Compose
 docker compose up -d
 
-#docker run -d -p 49991:49991 --name backup-agent --restart always backup-agent --agent "$AGENT_NAME" --mqttServer "$MQTT_SERVER" --mqttPort "$MQTT_PORT" --workingDir "$WORKING_DIR"

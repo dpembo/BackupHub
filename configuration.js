@@ -123,7 +123,7 @@ function loadConfigJson(filename) {
 
     //Setup default template settings
     inConfigObj.templates.enabled="true";
-    inConfigObj.templates.repositoryUrl="https://www.pembo.co.uk/BackupHub/template-repository/";
+    inConfigObj.templates.repositoryUrl="https://orchelium.com/template-repository/";
     
     //Job Icons
     inConfigObj.job_icons=[

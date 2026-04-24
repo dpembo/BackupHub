@@ -3,8 +3,8 @@ const jwt = require('jsonwebtoken');
 const algorithm = 'aes-256-cbc';
 
 function initializeEncryptionKey() {
-  let key = process.env.BACKUPHUB_ENCRYPTION_KEY;
-  const keyEnforceLevel = process.env.BACKUPHUB_KEY_ENFORCE || 'warn'; // 'strict', 'warn', or 'silent'
+  let key = process.env.ORCHELIUM_ENCRYPTION_KEY;
+  const keyEnforceLevel = process.env.ORCHELIUM_KEY_ENFORCE || 'warn'; // 'strict', 'warn', or 'silent'
   
   if(!key || key.length === 0) {
     const DEFAULT_KEY = "CHANGEIT";
@@ -15,7 +15,7 @@ function initializeEncryptionKey() {
         logger.error("═══════════════════════════════════════════════════════════════");
         logger.error("CRITICAL: Default encryption key in use. Server will not start.");
         logger.error("═══════════════════════════════════════════════════════════════");
-        logger.error("Set BACKUPHUB_ENCRYPTION_KEY environment variable before starting.");
+        logger.error("Set ORCHELIUM_ENCRYPTION_KEY environment variable before starting.");
         logger.error("This key must match the key configured on all agents.");
         logger.error("═══════════════════════════════════════════════════════════════");
         process.exit(1);
@@ -24,7 +24,7 @@ function initializeEncryptionKey() {
         logger.warn("⚠️  WARNING: Using default encryption key (CHANGEIT)");
         logger.warn("═══════════════════════════════════════════════════════════════");
         logger.warn("This key should ONLY be used for development/testing.");
-        logger.warn("For production, set BACKUPHUB_ENCRYPTION_KEY environment variable.");
+        logger.warn("For production, set ORCHELIUM_ENCRYPTION_KEY environment variable.");
         logger.warn("The same key must be set on all agents for communications.");
         logger.warn("═══════════════════════════════════════════════════════════════");
         break;
@@ -32,10 +32,10 @@ function initializeEncryptionKey() {
         logger.debug("Using default encryption key (not recommended for production)");
         break;
       default:
-        logger.warn("Unknown BACKUPHUB_KEY_ENFORCE value: " + keyEnforceLevel);
+        logger.warn("Unknown ORCHELIUM_KEY_ENFORCE value: " + keyEnforceLevel);
     }
   } else {
-    logger.info("Custom encryption key loaded from BACKUPHUB_ENCRYPTION_KEY");
+    logger.info("Custom encryption key loaded from ORCHELIUM_ENCRYPTION_KEY");
   }
   
   return padStringTo256Bits(key);
@@ -102,7 +102,6 @@ function decrypt(text) {
   return decrypted.toString();
 }
 
-//old encryption padding function
 function padStringTo256Bits(inputString) {
     const blockSize = 32; // 256 bits / 8 bits per byte = 32 bytes
     const inputLength = Buffer.from(inputString, 'utf8').length;

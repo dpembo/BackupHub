@@ -1,15 +1,15 @@
 {
-  "name": "backuphub_agent",
+  "name": "orchelium-agent",
   "version": "1.0.0",
-  "description": "Agent for BackupHub",
+  "description": "Agent for Orchelium",
   "main": "agent.js",
   "scripts": {
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage"
   },
-  "author": "pembo.co.uk",
-  "license": "ISC",
+  "author": "orchelium.com",
+  "license": "MIT",
   "dependencies": {
     "express": "^5.2.0",
     "jsonwebtoken": "^9.0.3",

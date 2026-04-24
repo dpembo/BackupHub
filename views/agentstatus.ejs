@@ -14,12 +14,42 @@ function hasValidAgents(obj) {
   <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0"/>
   
-  <title>BackupHub | Agent Status</title>
+  <title>Orchelium | Agent Status</title>
 
   <%- include('./partials/_head'); %>
   <%- include('./partials/_scripts'); %>
   
   <script>
+
+  function normalizeAgentStatus(status) {
+    var normalized = (status || '').toString().toLowerCase();
+    if (normalized === 'online') return 'online';
+    if (normalized === 'offline') return 'offline';
+    if (normalized === 'running') return 'running';
+    if (normalized === 'register') return 'register';
+    return 'unknown';
+  }
+
+  function updateAgentInfoBar() {
+    var infoBar = document.getElementById('infobar');
+    if (!infoBar) return;
+
+    var rows = document.querySelectorAll('#agentTableBody tr');
+    var counts = {
+      online: 0,
+      offline: 0,
+      running: 0,
+      register: 0,
+      unknown: 0
+    };
+
+    rows.forEach(function(row) {
+      var statusKey = normalizeAgentStatus(row.getAttribute('data-status'));
+      counts[statusKey] = (counts[statusKey] || 0) + 1;
+    });
+
+    infoBar.textContent = 'Agents: ' + rows.length + ' (Online: ' + counts.online + ' | Offline: ' + counts.offline + ' | Running: ' + counts.running + ' | Register: ' + counts.register + ' | Unknown: ' + counts.unknown + ')';
+  }
 
   function deleteAgent(agentName)
   {
@@ -62,6 +92,12 @@ function hasValidAgents(obj) {
               elem.innerHTML=unknown;
               break;
           }
+
+          var parentRow = elem ? elem.closest('tr') : null;
+          if (parentRow) {
+            parentRow.setAttribute('data-status', normalizeAgentStatus(data.status));
+          }
+          updateAgentInfoBar();
       })
       .catch(error => {
           // Handle errors that may occur during the fetch request
@@ -103,7 +139,7 @@ function hasValidAgents(obj) {
     if(wsEnabled.toUpperCase()=="TRUE")wsParams+=" --wsServer=<%=WS_SERVER%> --wsPort=<%=WS_PORT%>";
     if(mqttEnabled.toUpperCase()=="TRUE")mqttParams+=" --mqttServer=<%=MQTT_SERVER%> --mqttPort=<%=MQTT_SERVER_PORT%>";
 
-    document.getElementById('installcommand').innerText="wget -qO- " + serverProtocol + "//" + serverDomain + ":" + serverPort + "/agent/install.sh | bash -s -- --backupHubUrl=" + serverProtocol + "//" + serverDomain + ":" + serverPort + " --installDir=/opt/BackupHubAgent" + mqttParams + wsParams ;
+    document.getElementById('installcommand').innerText="wget -qO- " + serverProtocol + "//" + serverDomain + ":" + serverPort + "/agent/install.sh | bash -s -- --orcheliumUrl=" + serverProtocol + "//" + serverDomain + ":" + serverPort + " --installDir=/opt/OrcheliumAgent" + mqttParams + wsParams ;
     $('#confirmationModal').modal('open');
   }
 
@@ -486,7 +522,7 @@ function hasValidAgents(obj) {
           </a>
           <br>
           
-        <!--<input type="text" id="installcommand" value="/opt/BackupHubAgent" style="font-family: 'Courier New', Courier, monospace;font-size:10pt;">-->
+        <!--<input type="text" id="installcommand" value="/opt/OrcheliumAgent" style="font-family: 'Courier New', Courier, monospace;font-size:10pt;">-->
         
         <textarea id="updateCommand" style="font-family: 'Courier New', Courier, monospace;font-size:10pt;width: 800px"></textarea>
         <br><br>
@@ -512,7 +548,7 @@ function hasValidAgents(obj) {
           </a>
           <br>
         
-        <!--<input type="text" id="installcommand" value="/opt/BackupHubAgent" style="font-family: 'Courier New', Courier, monospace;font-size:10pt;">-->
+        <!--<input type="text" id="installcommand" value="/opt/OrcheliumAgent" style="font-family: 'Courier New', Courier, monospace;font-size:10pt;">-->
         <textarea id="installcommand" style="font-family: 'Courier New', Courier, monospace;font-size:10pt;width: 800px"></textarea>
         <br>
         <i>Note: To update an agent, please login to your server, change to the install directory run update.sh, and then restart</i></p>
@@ -591,7 +627,7 @@ function hasValidAgents(obj) {
         <%
           var agentVersion = "unknown";
           var startupType = "none";
-          var installDir = "/opt/BackupHubAgent";
+          var installDir = "/opt/OrcheliumAgent";
           if(value.message!==undefined && value.message!==null && value.message.length>0){
             var jsonStr = value.message;
             var messageObj = JSON.parse(jsonStr);
@@ -612,7 +648,7 @@ function hasValidAgents(obj) {
           } 
         %>
 
-        <tr data-name="<%= value.name || '' %>" data-server="<%= value.server || '' %>" data-connection="<%= value.commsType || '' %>" data-lastupdated="<%= value.lastStatusReport || '' %>">
+        <tr data-name="<%= value.name || '' %>" data-server="<%= value.server || '' %>" data-connection="<%= value.commsType || '' %>" data-lastupdated="<%= value.lastStatusReport || '' %>" data-status="<%= value.status || 'unknown' %>">
           <td id="<%=value.name%>_ball">
             <% switch (value.status){
               case "online":%>
@@ -704,6 +740,7 @@ function hasValidAgents(obj) {
   <script>
     M.FormSelect.init(document.querySelectorAll('select'));
     $('.modal').modal();
+    updateAgentInfoBar();
   </script>
 
 

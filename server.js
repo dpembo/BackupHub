@@ -40,7 +40,7 @@ log4js.configure({
   }
 });
 
-logger = log4js.getLogger("BackupHubServer");
+logger = log4js.getLogger("OrcheliumServer");
 logger.level="info";
 
 //debug.setLogLevel(3);
@@ -70,7 +70,7 @@ const bcrypt = require('bcrypt');
 
 const TemplateRepository = require('./TemplateRepository');
 var templates;
-let REPOSITORY_URL = 'https://www.pembo.co.uk/BackupHub/template-repository/';
+let REPOSITORY_URL = 'https://orchelium.com/template-repository/';
 
 var path = require('path');
 fs = require('fs');
@@ -208,7 +208,6 @@ else{
   }
 })();
 
-const logpath = "/media/net/BackupHOMENAS/backups/";
 const port = serverConfig.server.port;
 
 
@@ -1277,7 +1276,7 @@ app.post('/api/backup/create', User.isAuthenticated, asyncHandler(async (req, re
 
     // Generate filename with timestamp
     const timestamp = new Date().toISOString().split('T')[0].replace(/-/g, '');
-    const filename = `backuphub-backup-${timestamp}.zip`;
+    const filename = `orchelium-backup-${timestamp}.zip`;
 
     // Send file to client
     res.setHeader('Content-Type', 'application/zip');
@@ -1377,12 +1376,13 @@ app.post('/api/webhook/trigger/:jobName', asyncHandler(async (req, res) => {
     const crypto = require('crypto');
     const executionId = crypto.randomBytes(8).toString('hex');
     
-    const webhookTriggerContext = triggerContextModule.createWebhookTriggerContext(
+    const webhookTriggerContext = await triggerContextModule.createWebhookTriggerContext(
       validatedWebhook.id,
       jobName,
       payload,
       executionId
     );
+    webhookTriggerContext.webhookName = validatedWebhook.name || '';
     
     // Record the trigger event
     try {
@@ -1888,7 +1888,7 @@ app.get('/rest/notifty/test', User.isAuthenticated, (req, res) => {
   if (!user) {
     return res.redirect('/register.html');
   }
-  notifier.sendNotification("Test Notification","This is a test notification from BackupHub.","INFORMATION","/settings.html");
+  notifier.sendNotification("Test Notification","This is a test notification from Orchelium Server.","INFORMATION","/settings.html");
   res.sendStatus(200);
 });
 
@@ -2449,64 +2449,62 @@ app.post('/rest/script-test/:executionId/terminate', User.isAuthenticated, async
   res.json({ success: true, execution: scriptTestManager.getExecution(req.params.executionId) });
 }));
 
+async function getScriptUsageEntries(scriptName) {
+  const allSchedules = scheduler.getSchedules();
+
+  const jobsUsingScript = allSchedules.filter(schedule => {
+    return schedule.scheduleMode === 'classic' && schedule.command === scriptName;
+  });
+
+  const formattedJobs = jobsUsingScript.map(job => ({
+    jobName: job.jobName,
+    description: job.description || '',
+    type: 'Single Script',
+    nextRunDate: job.nextRunDate || 'n/a',
+    triggerType: job.triggerType || 'clock'
+  }));
+
+  try {
+    const allOrchestrations = await orchestration.getAllJobs();
+
+    Object.values(allOrchestrations).forEach(orchJob => {
+      const currentVersion = orchJob.versions[orchJob.versions.length - 1];
+      if (!currentVersion || !currentVersion.nodes) {
+        return;
+      }
+
+      const usesScript = currentVersion.nodes.some(node => node.data && node.data.script === scriptName);
+      if (usesScript) {
+        formattedJobs.push({
+          jobName: orchJob.name,
+          description: orchJob.description || '',
+          type: 'Orchestration',
+          nextRunDate: 'Manual/Scheduled',
+          triggerType: 'orchestration'
+        });
+      }
+    });
+  } catch (err) {
+    logger.warn('Could not search orchestrations for script usage:', err.message);
+  }
+
+  return formattedJobs;
+}
+
 app.get('/rest/jobs-for-script/:scriptName', User.isAuthenticated, asyncHandler(async (req, res) => {
   try {
     const scriptName = req.params.scriptName;
-    
-    // Get all schedules
-    const allSchedules = scheduler.getSchedules();
-    
-    // Filter schedules that use this script (classic mode)
-    const jobsUsingScript = allSchedules.filter(schedule => {
-      if (schedule.scheduleMode === 'classic' && schedule.command === scriptName) {
-        return true;
-      }
-      return false;
-    });
-
-    // Format scheduled jobs
-    const formattedJobs = jobsUsingScript.map(job => ({
-      jobName: job.jobName,
-      description: job.description || '',
-      type: 'Single Script',
-      nextRunDate: job.nextRunDate || 'n/a',
-      triggerType: job.triggerType || 'clock'
-    }));
-
-    // Now check orchestrations for this script
-    try {
-      const allOrchestrations = await orchestration.getAllJobs();
-      
-      Object.values(allOrchestrations).forEach(orchJob => {
-        // Get the current version of the orchestration
-        const currentVersion = orchJob.versions[orchJob.versions.length - 1];
-        if (currentVersion && currentVersion.nodes) {
-          // Check if any node uses this script
-          const usesScript = currentVersion.nodes.some(node => 
-            node.data && node.data.script === scriptName
-          );
-          
-          if (usesScript) {
-            formattedJobs.push({
-              jobName: orchJob.name,
-              description: orchJob.description || '',
-              type: 'Orchestration',
-              nextRunDate: 'Manual/Scheduled',
-              triggerType: 'orchestration'
-            });
-          }
-        }
-      });
-    } catch (err) {
-      logger.warn('Could not search orchestrations for script usage:', err.message);
-      // Continue without orchestration search if it fails
+    if (!SCRIPT_FILENAME_REGEX.test(scriptName)) {
+      return res.status(400).json({ success: false, error: 'Invalid script filename' });
     }
+
+    const usageEntries = await getScriptUsageEntries(scriptName);
 
     res.json({
       success: true,
       script: scriptName,
-      jobs: formattedJobs,
-      count: formattedJobs.length
+      jobs: usageEntries,
+      count: usageEntries.length
     });
   } catch (err) {
     logger.error('Error fetching jobs for script:', err.message);
@@ -2514,6 +2512,43 @@ app.get('/rest/jobs-for-script/:scriptName', User.isAuthenticated, asyncHandler(
       success: false,
       error: 'Failed to fetch jobs for script: ' + err.message
     });
+  }
+}));
+
+app.delete('/rest/script/:scriptName', User.isAuthenticated, asyncHandler(async (req, res) => {
+  const scriptName = req.params.scriptName;
+  const csrfToken = req.headers['x-csrf-token'];
+
+  if (!csrfToken || csrfToken !== req.session.csrfToken) {
+    return res.status(403).json({ success: false, error: 'CSRF token validation failed' });
+  }
+
+  if (!SCRIPT_FILENAME_REGEX.test(scriptName)) {
+    return res.status(400).json({ success: false, error: 'Invalid script filename' });
+  }
+
+  const usageEntries = await getScriptUsageEntries(scriptName);
+  if (usageEntries.length > 0) {
+    return res.status(409).json({
+      success: false,
+      error: 'Script is currently used by jobs or orchestrations',
+      jobs: usageEntries,
+      count: usageEntries.length
+    });
+  }
+
+  const scriptPath = getValidatedScriptPath(scriptName);
+
+  try {
+    await fs.promises.unlink(scriptPath);
+    logger.info(`Script deleted successfully: ${scriptName}`);
+    return res.json({ success: true, script: scriptName });
+  } catch (err) {
+    if (err && err.code === 'ENOENT') {
+      return res.status(404).json({ success: false, error: 'Script not found' });
+    }
+    logger.error(`Error deleting script [${scriptName}]: ${err.message}`);
+    return res.status(500).json({ success: false, error: 'Failed to delete script' });
   }
 }));
 
@@ -2857,13 +2892,13 @@ app.get('/scheduleList.html',User.isAuthenticated, asyncHandler(async (req, res)
       };
   }));
 
-  console.time('render');
+  //console.time('render');
   res.render('scheduleList', {
     schedules: processedSchedules,
     hist:hist,
     csrf: req.csrfToken(), 
   });
-  console.timeEnd('render');
+  //console.timeEnd('render');
 }));
 
 app.get('/scheduleListCalendar.html',User.isAuthenticated, (req, res) => {
@@ -3124,7 +3159,7 @@ app.get('/',User.isAuthenticated, async (request, response) => {
 
   response.render('index', {
 
-    subject: 'BackupHub',
+    subject: 'Orchelium',
     name: 'Control',
     runningCount: runningCount,
     successCount, successCount,

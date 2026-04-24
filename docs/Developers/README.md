@@ -1,6 +1,6 @@
 # Developer Documentation Index
 
-Welcome to the BackupHub developer documentation! This section contains all guides, standards, and test documentation for contributors and advanced users.
+Welcome to the Orchelium developer documentation! This section contains all guides, standards, and test documentation for contributors and advanced users.
 
 ## Contents
 
@@ -17,4 +17,4 @@ Welcome to the BackupHub developer documentation! This section contains all guid
 
 ---
 
-For more information, see the main [BackupHub Documentation](../README.MD).
+For more information, see the main [Orchelium Documentation](../README.MD).

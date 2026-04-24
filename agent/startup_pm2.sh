@@ -1,5 +1,5 @@
 #!/bin/bash
-INSTALL_DIR="/opt/BackupHubAgent"
+INSTALL_DIR="/opt/OrcheliumAgent"
 
 # Check if running with sudo privileges
 if [ "$EUID" -ne 0 ]; then

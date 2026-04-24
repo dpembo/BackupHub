@@ -1,7 +1,7 @@
 {
-    "name": "BackupHub",
+    "name": "Orchelium",
     "version": "1.0.0",
-    "description": "Automated backup management system with scheduling, agent coordination, and job monitoring",
+    "description": "Orchelium is a lightweight yet powerful solution for managing and scheduling shell-based executions across a local area network. Designed for IT administrators, Orchelium ensures secure, encrypted communication between a central hub and remotely managed agents. It streamlines job execution, scheduling, monitoring, and notifications while maintaining a simple yet effective approach to backup and automation.",
     "main": "server.js",
     "scripts": {
         "start": "node server.js",
@@ -19,7 +19,7 @@
         "automation",
         "agent"
     ],
-    "author": "BackupHub Contributors",
+    "author": "Orchelium Contributors",
     "license": "MIT",
     "dependencies": {
         "@mdi/js": "^7.4.47",

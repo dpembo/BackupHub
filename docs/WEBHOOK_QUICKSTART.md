@@ -1,6 +1,6 @@
 # Quick Start: Create a Webhook-Triggerable Job
 
-**Step-by-step guide for creating a job and webhook through the BackupHub UI**
+**Step-by-step guide for creating a job and webhook through the Orchelium UI**
 
 ---
 
@@ -18,7 +18,7 @@ To create a job that can be triggered by webhooks, you need to:
 
 ### Where to Click
 
-1. **Open BackupHub** - Navigate to `http://localhost:8082`
+1. **Open Orchelium** - Navigate to `http://localhost:8082`
 2. Look for **"Schedules"** or **"Jobs"** in the main navigation
 3. Look for a **"+"** button or **"Add Schedule"** button
 4. Click it
@@ -58,10 +58,10 @@ echo ""
 echo "Current Time: $(date)"
 echo ""
 echo "Environment Variables from Webhook:"
-echo "Trigger Type: $BACKUPHUB_TRIGGER_TYPE"
-echo "Execution ID: $BACKUPHUB_EXECUTION_ID"
+echo "Trigger Type: $ORCHELIUM_TRIGGER_TYPE"
+echo "Execution ID: $ORCHELIUM_EXECUTION_ID"
 echo "Full Trigger Context:"
-echo "$BACKUPHUB_TRIGGER_CONTEXT" | jq . 2>/dev/null || echo "$BACKUPHUB_TRIGGER_CONTEXT"
+echo "$ORCHELIUM_TRIGGER_CONTEXT" | jq . 2>/dev/null || echo "$ORCHELIUM_TRIGGER_CONTEXT"
 echo ""
 echo "Job completed successfully!"
 echo "=========================================="
@@ -127,7 +127,7 @@ After saving, a modal will pop up showing:
 [xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx] [Copy Button]
 
 Usage:
-curl -X POST https://your-backuphub/api/webhook/trigger/webhook-test \
+curl -X POST https://your-orchelium/api/webhook/trigger/webhook-test \
   -H "X-Webhook-Key: <YOUR_API_KEY>" \
   -H "Content-Type: application/json" \
   -d '{"message": "test payload"}'
@@ -202,7 +202,7 @@ curl -X POST "http://localhost:8082/api/webhook/trigger/webhook-test" \
 
 ### Verify the Job Executed
 
-1. In BackupHub UI, go to **"History"** or **"Job Monitor"**
+1. In Orchelium UI, go to **"History"** or **"Job Monitor"**
 2. Look for your "webhook-test" job in the recent executions
 3. Click on it to view the execution log
 4. You should see:
@@ -272,7 +272,7 @@ Now that you understand the workflow, here's a real-world example:
 #!/bin/bash
 # This script will receive trigger data via webhook
 
-PAYLOAD=$(echo "$BACKUPHUB_TRIGGER_CONTEXT" | jq '.payload')
+PAYLOAD=$(echo "$ORCHELIUM_TRIGGER_CONTEXT" | jq '.payload')
 TARGET_PATH=$(echo "$PAYLOAD" | jq -r '.targetPath // "/backup"')
 DAYS_OLD=$(echo "$PAYLOAD" | jq -r '.daysOld // "30"')
 
@@ -328,7 +328,7 @@ The job will receive this data and can make decisions based on it!
 **Solution:**
 1. Clear browser cache (Ctrl+Shift+Delete)
 2. Hard refresh the page (Ctrl+Shift+R)
-3. Restart BackupHub server:
+3. Restart Orchelium:
    ```bash
    npm start
    ```
@@ -344,7 +344,7 @@ The job will receive this data and can make decisions based on it!
 
 **Solution:**
 1. Click "Refresh" button on Webhooks tab
-2. If still not updating, check BackupHub server logs for errors
+2. If still not updating, check Orchelium server logs for errors
 
 ---
 
@@ -406,7 +406,7 @@ See [WEBHOOK_USER_GUIDE.md](./docs/WEBHOOK_USER_GUIDE.md) for integration exampl
 
 **If you were to watch someone do this:**
 
-1. 0:00 - Login to BackupHub
+1. 0:00 - Login to Orchelium
 2. 0:10 - Click Schedules → Create new schedule
 3. 0:30 - Fill in job name "webhook-test", select agent, add script
 4. 1:00 - Save job

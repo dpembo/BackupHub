@@ -37,10 +37,10 @@ The Trigger Context system enables scripts and orchestrations to receive structu
 │ contextToEnvVars()        │           │ Template Substitution │
 │ Flattens context to:      │           │ Replaces:             │
 │                           │           │ "#{context.X}"        │
-│ BACKUPHUB_METRIC_VALUE    │           │ with actual values    │
-│ BACKUPHUB_METRIC_TYPE     │           │                       │
-│ BACKUPHUB_METRIC_PATH     │           │ Example:              │
-│ BACKUPHUB_CONDITION_*     │           │ "--path #{context... │
+│ ORCHELIUM_METRIC_VALUE    │           │ with actual values    │
+│ ORCHELIUM_METRIC_TYPE     │           │                       │
+│ ORCHELIUM_METRIC_PATH     │           │ Example:              │
+│ ORCHELIUM_CONDITION_*     │           │ "--path #{context... │
 │ etc.                      │           │ cleanup.sh"           │
 └───────────┬───────────────┘           └──────────┬────────────┘
             ↓                                      ↓
@@ -49,7 +49,7 @@ The Trigger Context system enables scripts and orchestrations to receive structu
       script environment                passes to scripts
             ↓                                      ↓
       Script can read:                   Scripts/orchestration
-      $BACKUPHUB_*                       receives metric data
+      $ORCHELIUM_*                       receives metric data
 ```
 
 ## For Script Writers
@@ -60,23 +60,23 @@ When your script is triggered by a threshold rule, these environment variables a
 
 ```bash
 # Core Information
-$BACKUPHUB_TRIGGER_TYPE        # "rule", "webhook", or "sample"
-$BACKUPHUB_EXECUTION_ID        # Unique ID for this execution
+$ORCHELIUM_TRIGGER_TYPE        # "rule", "webhook", or "sample"
+$ORCHELIUM_EXECUTION_ID        # Unique ID for this execution
 
 # Metric Data
-$BACKUPHUB_METRIC_TYPE         # "cpu", "mount_usage", "file_count", etc.
-$BACKUPHUB_METRIC_VALUE        # The actual value (e.g., 92.5)
-$BACKUPHUB_METRIC_UNIT         # Unit: "%", "bytes", "seconds", "count"
-$BACKUPHUB_METRIC_PATH         # Path being monitored (e.g., "/mnt/data")
-$BACKUPHUB_METRIC_AGENT        # Agent that detected it
+$ORCHELIUM_METRIC_TYPE         # "cpu", "mount_usage", "file_count", etc.
+$ORCHELIUM_METRIC_VALUE        # The actual value (e.g., 92.5)
+$ORCHELIUM_METRIC_UNIT         # Unit: "%", "bytes", "seconds", "count"
+$ORCHELIUM_METRIC_PATH         # Path being monitored (e.g., "/mnt/data")
+$ORCHELIUM_METRIC_AGENT        # Agent that detected it
 
 # Condition Information
-$BACKUPHUB_CONDITION_OPERATOR  # ">=", "<=", ">", "<", "==", "!="
-$BACKUPHUB_CONDITION_THRESHOLD # The threshold value
-$BACKUPHUB_CONDITION_MET       # "true" or "false"
+$ORCHELIUM_CONDITION_OPERATOR  # ">=", "<=", ">", "<", "==", "!="
+$ORCHELIUM_CONDITION_THRESHOLD # The threshold value
+$ORCHELIUM_CONDITION_MET       # "true" or "false"
 
 # Full Context as JSON
-$BACKUPHUB_TRIGGER_CONTEXT     # {"type":"rule","metric":{...},...}
+$ORCHELIUM_TRIGGER_CONTEXT     # {"type":"rule","metric":{...},...}
 ```
 
 ### Example: Disk Cleanup Script
@@ -85,19 +85,19 @@ $BACKUPHUB_TRIGGER_CONTEXT     # {"type":"rule","metric":{...},...}
 #!/bin/bash
 
 # If triggered by high disk usage rule, respond intelligently
-if [ "$BACKUPHUB_METRIC_TYPE" = "mount_usage" ] && [ "$BACKUPHUB_CONDITION_MET" = "true" ]; then
-    echo "Disk usage alert: ${BACKUPHUB_METRIC_VALUE}% on ${BACKUPHUB_METRIC_PATH}"
+if [ "$ORCHELIUM_METRIC_TYPE" = "mount_usage" ] && [ "$ORCHELIUM_CONDITION_MET" = "true" ]; then
+    echo "Disk usage alert: ${ORCHELIUM_METRIC_VALUE}% on ${ORCHELIUM_METRIC_PATH}"
     
     # Only clean up if we hit the threshold we care about
-    if (( $(echo "$BACKUPHUB_METRIC_VALUE > 85" | bc -l) )); then
+    if (( $(echo "$ORCHELIUM_METRIC_VALUE > 85" | bc -l) )); then
         
         # Remove old backups (older than 30 days)
-        find "${BACKUPHUB_METRIC_PATH}/backups" -type f -mtime +30 -delete
+        find "${ORCHELIUM_METRIC_PATH}/backups" -type f -mtime +30 -delete
         
         # Compress old logs
-        find "${BACKUPHUB_METRIC_PATH}/logs" -type f -mtime +7 -exec gzip {} \;
+        find "${ORCHELIUM_METRIC_PATH}/logs" -type f -mtime +7 -exec gzip {} \;
         
-        echo "Cleanup completed. New usage: $(df -h ${BACKUPHUB_METRIC_PATH} | tail -1)"
+        echo "Cleanup completed. New usage: $(df -h ${ORCHELIUM_METRIC_PATH} | tail -1)"
     fi
 fi
 ```
@@ -108,17 +108,11 @@ fi
 #!/bin/bash
 
 # When CPU is high, reduce I/O load
-if [ "$BACKUPHUB_METRIC_TYPE" = "cpu" ]; then
-    cpu_usage="${BACKUPHUB_METRIC_VALUE%.*}"  # Remove decimal
+if [ "$ORCHELIUM_METRIC_TYPE" = "cpu" ]; then
+    cpu_usage="${ORCHELIUM_METRIC_VALUE%.*}"  # Remove decimal
     
     if [ "$cpu_usage" -gt 80 ]; then
         echo "High CPU detected: $cpu_usage%"
-        
-        # Pause resource-intensive operations
-        # kill $(pgrep -f "heavy_process")
-        
-        # Reduce concurrent backups
-        # systemctl set-property backup.service CPUQuota=50%
         
         echo "Resource management activated"
     fi
@@ -220,7 +214,7 @@ The webhook payload is passed as `#{context.payload.*}` in orchestrations.
 
 ### Sample Templates
 
-BackupHub includes 5 pre-built sample templates for testing:
+Orchelium includes 5 pre-built sample templates for testing:
 
 1. **cpu_spike** - CPU at 95% (up from 45%)
 2. **storage_full** - Mount at 98% usage
@@ -235,15 +229,15 @@ BackupHub includes 5 pre-built sample templates for testing:
 # Test that your script handles trigger context properly
 
 # Set test environment variables
-export BACKUPHUB_TRIGGER_TYPE="rule"
-export BACKUPHUB_METRIC_TYPE="mount_usage"
-export BACKUPHUB_METRIC_VALUE="92.5"
-export BACKUPHUB_METRIC_UNIT="%"
-export BACKUPHUB_METRIC_PATH="/mnt/data"
-export BACKUPHUB_CONDITION_OPERATOR=">="
-export BACKUPHUB_CONDITION_THRESHOLD="90"
-export BACKUPHUB_CONDITION_MET="true"
-export BACKUPHUB_EXECUTION_ID="test-exec-123"
+export ORCHELIUM_TRIGGER_TYPE="rule"
+export ORCHELIUM_METRIC_TYPE="mount_usage"
+export ORCHELIUM_METRIC_VALUE="92.5"
+export ORCHELIUM_METRIC_UNIT="%"
+export ORCHELIUM_METRIC_PATH="/mnt/data"
+export ORCHELIUM_CONDITION_OPERATOR=">="
+export ORCHELIUM_CONDITION_THRESHOLD="90"
+export ORCHELIUM_CONDITION_MET="true"
+export ORCHELIUM_EXECUTION_ID="test-exec-123"
 
 # Run your script
 ./scripts/your_script.sh
@@ -301,14 +295,14 @@ export BACKUPHUB_EXECUTION_ID="test-exec-123"
 
 1. **Always check trigger type**: Scripts may run manually or triggered
    ```bash
-   if [ "$BACKUPHUB_TRIGGER_TYPE" = "rule" ]; then
+   if [ "$ORCHELIUM_TRIGGER_TYPE" = "rule" ]; then
        # Use trigger context
    fi
    ```
 
 2. **Validate values**: Check that environment variables exist
    ```bash
-   if [ -z "$BACKUPHUB_METRIC_VALUE" ]; then
+   if [ -z "$ORCHELIUM_METRIC_VALUE" ]; then
        echo "No trigger context available"
        exit 1
    fi
@@ -321,12 +315,12 @@ export BACKUPHUB_EXECUTION_ID="test-exec-123"
 
 4. **Log execution context**: Include execution ID in logs
    ```bash
-   echo "[${BACKUPHUB_EXECUTION_ID}] Processing metric: $BACKUPHUB_METRIC_VALUE"
+   echo "[${ORCHELIUM_EXECUTION_ID}] Processing metric: $ORCHELIUM_METRIC_VALUE"
    ```
 
 5. **Handle edge cases**: Account for metric not being available
    ```bash
-   METRIC_VALUE="${BACKUPHUB_METRIC_VALUE:-0}"
+   METRIC_VALUE="${ORCHELIUM_METRIC_VALUE:-0}"
    if [ -z "$METRIC_VALUE" ]; then
        METRIC_VALUE=0
    fi

@@ -1,6 +1,6 @@
 # Developer Database Reference
 
-This document describes all persistent databases used in BackupHub, their structure, and provides code samples for accessing each. All databases use [LevelDB](https://github.com/Level/level) via the `level` Node.js package, with JSON value encoding.
+This document describes all persistent databases used in Orchelium, their structure, and provides code samples for accessing each. All databases use [LevelDB](https://github.com/Level/level) via the `level` Node.js package, with JSON value encoding.
 
 ---
 
@@ -33,7 +33,7 @@ const jobs = await db.getData('ORCHESTRATION_JOBS');
 
 // Add a notification
 let notifications = await db.getData('NOTIFICATIONS_DATA');
-notifications.push({ type: 'info', message: 'Backup completed' });
+notifications.push({ type: 'info', message: 'Job completed' });
 await db.putData('NOTIFICATIONS_DATA', notifications);
 ```
 
@@ -254,7 +254,7 @@ const myData = await db.getData('MY_KEY');
   "runDate": "2026-03-27T02:00:00Z",
   "returnCode": 0,
   "runTime": 120,
-  "log": "Backup completed successfully",
+  "log": "Job completed successfully",
   "manual": false,
   "executionId": "exec-abc-123"
 }

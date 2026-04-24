@@ -2,7 +2,7 @@
  * Webhook Management Module
  * 
  * Handles webhook configuration, API key generation, and webhook trigger tracking.
- * Webhooks allow external systems to trigger BackupHub jobs with custom JSON payloads.
+ * Webhooks allow external systems to trigger Orchelium jobs with custom JSON payloads.
  */
 
 const crypto = require('crypto');

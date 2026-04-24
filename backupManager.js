@@ -1,6 +1,6 @@
 /**
  * Backup and Restore Manager
- * Handles exporting and importing BackupHub settings and data
+ * Handles exporting and importing Orchelium settings and data
  */
 
 const fs = require('fs').promises;
@@ -39,12 +39,12 @@ function getBackupItems() {
       description: 'All registered agent configurations',
     },
     schedules: {
-      name: 'Backup Schedules & Rules',
-      description: 'All configured backup schedules and metric-based rules',
+      name: 'Job Schedules & Rules',
+      description: 'All configured Job schedules and metric-based rules',
     },
     jobHistory: {
       name: 'Job Execution History',
-      description: 'Historical logs of all backup job executions',
+      description: 'Historical logs of all job executions',
     },
     orchestrationJobs: {
       name: 'Orchestration Jobs',
@@ -379,7 +379,7 @@ async function restoreBackup(zipBuffer) {
       success: true,
       itemsRestored: [],
       warnings: [],
-      recommendations: ['Restart the BackupHub server to ensure all changes take effect.'],
+      recommendations: ['Restart Orchelium server to ensure all changes take effect.'],
     };
 
     // Restore server config

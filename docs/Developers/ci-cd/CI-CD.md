@@ -1,10 +1,10 @@
 # CI/CD & GitHub Actions
 
-This document describes the CI/CD workflows and GitHub Actions used in the BackupHub project.
+This document describes the CI/CD workflows and GitHub Actions used in the Orchelium project.
 
 ## Overview
 
-BackupHub uses GitHub Actions for continuous integration and deployment. The workflows are defined in `.github/workflows/` and automate tasks such as linting, testing, and release management.
+Orchelium uses GitHub Actions for continuous integration and deployment. The workflows are defined in `.github/workflows/` and automate tasks such as linting, testing, and release management.
 
 ## Workflows
 
@@ -39,4 +39,4 @@ BackupHub uses GitHub Actions for continuous integration and deployment. The wor
 
 ## References
 - [GitHub Actions Documentation](https://docs.github.com/en/actions)
-- [BackupHub Workflows](../../.github/workflows/)
+- [Orchelium Workflows](../../.github/workflows/)

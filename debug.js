@@ -140,8 +140,8 @@ function startBanner(version){
     console.log(' 888                                                                                           ');
     console.log('\x1b[36m _________________');
     console.log('|# \x1b[30m\x1b[47m:           :\x1b[0m\x1b[36m #|');
-    console.log('|  \x1b[30m\x1b[47m:  BACK-UP  :\x1b[0m\x1b[36m  |');
-    console.log('|  \x1b[30m\x1b[47m:  CONTROL  :\x1b[0m\x1b[36m  |');
+    console.log('|  \x1b[30m\x1b[47m: Orchelium :\x1b[0m\x1b[36m  |');
+    console.log('|  \x1b[30m\x1b[47m:  Server   :\x1b[0m\x1b[36m  |');
     console.log('|  \x1b[30m\x1b[47m:           :\x1b[0m\x1b[36m  |       \x1b[32mVersion: ' + version + '\x1b[36m');
     console.log('|  \x1b[30m\x1b[47m:___________:\x1b[0m\x1b[36m  |');
     console.log('|    \x1b[90m _________\x1b[36m   |');

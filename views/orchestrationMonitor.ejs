@@ -1345,10 +1345,24 @@
         return;
       }
 
-      // Canvas configuration (same as orchestrationBuilder)
+      // Canvas configuration - calculate height dynamically based on node positions
+      const containerWidth = document.getElementById('diagramContainer').offsetWidth || 900;
+      
+      // Calculate minimum height needed to fit all nodes
+      let maxY = 0;
+      nodes.forEach(node => {
+        if (node.y !== undefined) {
+          const nodeBottomEdge = node.y + (node.type === 'start' || node.type === 'end-success' || node.type === 'end-failure' ? 28 : 35) + 40; // node extent + label space + padding
+          maxY = Math.max(maxY, nodeBottomEdge);
+        }
+      });
+      
+      // Ensure minimum height and add bottom padding
+      const calculatedHeight = Math.max(600, maxY + 60);
+      
       const CANVAS = {
-        width: document.getElementById('diagramContainer').offsetWidth || 900,
-        height: 600,
+        width: containerWidth,
+        height: calculatedHeight,
         nodeWidth: 180,
         nodeHeight: 70,
         portRadius: 6
@@ -1479,7 +1493,9 @@
 
       // Check if node is a circular node type (start, end-success, end-failure)
       const isCircularNode = node.type === 'start' || node.type === 'end-success' || node.type === 'end-failure';
+      const isDiamondNode = node.type === 'condition';
       const circleRadius = 28;
+      const diamondSize = 28;
 
       if (isCircularNode) {
         // Circular background for start, success, failure nodes
@@ -1517,8 +1533,48 @@
         text.setAttribute('dominant-baseline', 'middle');
         text.textContent = node.label;
         g.appendChild(text);
+      } else if (isDiamondNode) {
+        // Diamond background for condition nodes
+        const diamond = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+        const points = [
+          [node.x, node.y - diamondSize],           // top
+          [node.x + diamondSize, node.y],           // right
+          [node.x, node.y + diamondSize],           // bottom
+          [node.x - diamondSize, node.y]            // left
+        ];
+        diamond.setAttribute('points', points.map(p => p.join(',')).join(' '));
+        diamond.setAttribute('fill', getCSSVariable('--surface-color', '#ffffff'));
+        diamond.setAttribute('stroke', borderColor);
+        diamond.setAttribute('stroke-width', '2');
+        g.appendChild(diamond);
+
+        // Status icon above center in diamond
+        if (statusIcon) {
+          const iconText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          iconText.setAttribute('class', 'node-status-icon');
+          iconText.setAttribute('x', node.x);
+          iconText.setAttribute('y', node.y - 6);
+          iconText.setAttribute('font-size', '14');
+          iconText.setAttribute('fill', borderColor);
+          iconText.setAttribute('dominant-baseline', 'middle');
+          iconText.setAttribute('text-anchor', 'middle');
+          iconText.textContent = statusIcon;
+          g.appendChild(iconText);
+        }
+
+        // Node label below icon in diamond
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('x', node.x);
+        text.setAttribute('y', node.y + 6);
+        text.setAttribute('font-size', '11');
+        text.setAttribute('font-weight', '500');
+        text.setAttribute('fill', 'var(--text-primary)');
+        text.setAttribute('text-anchor', 'middle');
+        text.setAttribute('dominant-baseline', 'middle');
+        text.textContent = node.label;
+        g.appendChild(text);
       } else {
-        // Rectangle background for other node types (execute, condition)
+        // Rectangle background for execute nodes
         const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
         rect.setAttribute('x', node.x - CANVAS.nodeWidth / 2);
         rect.setAttribute('y', node.y - CANVAS.nodeHeight / 2);
@@ -1592,7 +1648,10 @@
       // Determine node types to calculate proper port positions
       const fromIsCircular = fromNode.type === 'start' || fromNode.type === 'end-success' || fromNode.type === 'end-failure';
       const toIsCircular = toNode.type === 'start' || toNode.type === 'end-success' || toNode.type === 'end-failure';
+      const fromIsDiamond = fromNode.type === 'condition';
+      const toIsDiamond = toNode.type === 'condition';
       const circleRadius = 28;
+      const diamondSize = 28;
 
       // Calculate port positions based on node type
       let fromX, fromY, toX, toY;
@@ -1600,6 +1659,9 @@
       if (fromIsCircular) {
         fromX = fromNode.x;
         fromY = fromNode.y + circleRadius + 4; // Account for circle radius + small buffer
+      } else if (fromIsDiamond) {
+        fromX = fromNode.x;
+        fromY = fromNode.y + diamondSize + 4; // Account for diamond size + small buffer
       } else {
         fromX = fromNode.x;
         fromY = fromNode.y + CANVAS.nodeHeight / 2;
@@ -1608,6 +1670,9 @@
       if (toIsCircular) {
         toX = toNode.x;
         toY = toNode.y - circleRadius - 4; // Account for circle radius + small buffer
+      } else if (toIsDiamond) {
+        toX = toNode.x;
+        toY = toNode.y - diamondSize - 4; // Account for diamond size + small buffer
       } else {
         toX = toNode.x;
         toY = toNode.y - CANVAS.nodeHeight / 2;

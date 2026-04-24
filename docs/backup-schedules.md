@@ -1,6 +1,6 @@
 # Rule-Based Scheduling and Thresholds
 
-BackupHub supports rule-based scheduling, allowing jobs to be triggered by system metrics (CPU, disk usage, file count, etc.) using flexible rules. This replaces the old global threshold job system.
+Orchelium supports rule-based scheduling, allowing jobs to be triggered by system metrics (CPU, disk usage, file count, etc.) using flexible rules. This replaces the old global threshold job system.
 
 ## Trigger Context System
 
@@ -12,20 +12,20 @@ When your script is triggered by a threshold rule, these environment variables a
 
 ```bash
 # Metric Information
-$BACKUPHUB_METRIC_TYPE              # "cpu", "mount_usage", "file_count", etc.
-$BACKUPHUB_METRIC_VALUE             # Actual numeric value (92.5)
-$BACKUPHUB_METRIC_UNIT              # Unit ("%", "bytes", "count", etc.)
-$BACKUPHUB_METRIC_PATH              # Path being monitored (if applicable)
+$ORCHELIUM_METRIC_TYPE              # "cpu", "mount_usage", "file_count", etc.
+$ORCHELIUM_METRIC_VALUE             # Actual numeric value (92.5)
+$ORCHELIUM_METRIC_UNIT              # Unit ("%", "bytes", "count", etc.)
+$ORCHELIUM_METRIC_PATH              # Path being monitored (if applicable)
 
 # Condition Information
-$BACKUPHUB_CONDITION_OPERATOR       # ">=", "<=", ">", "<", "==", "!="
-$BACKUPHUB_CONDITION_THRESHOLD      # Threshold value (90)
-$BACKUPHUB_CONDITION_MET            # "true" or "false"
+$ORCHELIUM_CONDITION_OPERATOR       # ">=", "<=", ">", "<", "==", "!="
+$ORCHELIUM_CONDITION_THRESHOLD      # Threshold value (90)
+$ORCHELIUM_CONDITION_MET            # "true" or "false"
 
 # Execution Tracking
-$BACKUPHUB_EXECUTION_ID             # Unique execution ID for this run
-$BACKUPHUB_TRIGGER_TYPE             # "rule", "webhook", or "sample"
-$BACKUPHUB_TRIGGER_CONTEXT          # Full JSON context object
+$ORCHELIUM_EXECUTION_ID             # Unique execution ID for this run
+$ORCHELIUM_TRIGGER_TYPE             # "rule", "webhook", or "sample"
+$ORCHELIUM_TRIGGER_CONTEXT          # Full JSON context object
 ```
 
 ### Example: Smart Disk Cleanup
@@ -33,21 +33,21 @@ $BACKUPHUB_TRIGGER_CONTEXT          # Full JSON context object
 ```bash
 #!/bin/bash
 # Only respond if triggered by a rule (not manual execution)
-if [ "$BACKUPHUB_TRIGGER_TYPE" = "rule" ] && [ "$BACKUPHUB_METRIC_TYPE" = "mount_usage" ]; then
+if [ "$ORCHELIUM_TRIGGER_TYPE" = "rule" ] && [ "$ORCHELIUM_METRIC_TYPE" = "mount_usage" ]; then
     
     # Only proceed if threshold actually met
-    if [ "$BACKUPHUB_CONDITION_MET" = "true" ]; then
-        echo "Disk alert on ${BACKUPHUB_METRIC_PATH}: ${BACKUPHUB_METRIC_VALUE}% usage"
+    if [ "$ORCHELIUM_CONDITION_MET" = "true" ]; then
+        echo "Disk alert on ${ORCHELIUM_METRIC_PATH}: ${ORCHELIUM_METRIC_VALUE}% usage"
         
         # Only clean up if we're truly over threshold
-        if (( $(echo "$BACKUPHUB_METRIC_VALUE > 85" | bc -l) )); then
+        if (( $(echo "$ORCHELIUM_METRIC_VALUE > 85" | bc -l) )); then
             echo "Usage exceeds 85% - starting cleanup"
             
             # Remove old backups
-            find "${BACKUPHUB_METRIC_PATH}/backups" -type f -mtime +7 -delete
+            find "${ORCHELIUM_METRIC_PATH}/backups" -type f -mtime +7 -delete
             
             # Compress old logs
-            find "${BACKUPHUB_METRIC_PATH}/logs" -type f -name "*.log" -mtime +3 | xargs gzip
+            find "${ORCHELIUM_METRIC_PATH}/logs" -type f -name "*.log" -mtime +3 | xargs gzip
             
             echo "Cleanup complete"
         fi
@@ -89,15 +89,15 @@ Each agent can run multiple jobs in parallel, up to its concurrency limit (defau
 
 If the limit is reached, new jobs are queued or skipped until capacity is available.
 
-# Backup Schedules
+# Job Schedules
 
-Creating a backup schedule is a relatively simple task.  This guide will take you step by step through adding a schedule for a test job.
+Creating a Job schedule is a relatively simple task.  This guide will take you step by step through adding a schedule for a test job.
 
 
 > Prerequsities
->1. You've installed the BackupHub Server following the installation guide
->2. You've deployed an agent - this can be on the same machine as the BackupHub server, or any other machine.
->3. You'll need to have a backup script to use.  This guide will utilize a test script.
+>1. You've installed Orchelium following the installation guide
+>2. You've deployed an agent - this can be on the same machine as Orcheliuim, or any other machine.
+>3. You'll need to have created a script to use.  This guide will utilize a test script.
 
 ## Creating a schedule
 
@@ -115,7 +115,7 @@ The script editor is likely to be empty if you've not already created some scrip
 In the script editor
 ![image info](./screens/scripteditor.png)
 Click the tempalates icon.  This will connect to the URL defined in settings for templates.  By default this will be set to:
-```https://www.pembo.co.uk/BackupHub/template-repository/``` which is a template repository of backup jobs provided by BackupHub based on Pembo's own backup needs.
+```https://orchelium.com/template-repository/``` which is a template repository of job scripts provided by Orchelium.
 
 Clicking the icon (2nd icon) will bring up the templates list
 
@@ -224,8 +224,8 @@ You might also want to try and create a script of your own, edit a script, add m
 
 ## Related Documentation
 
-- [Installation](./installation.md): Setting up BackupHub
-- [Orchestrations](./orchestrations.md): Building complex backup workflows
+- [Installation](./installation.md): Setting up Orchelium
+- [Orchestrations](./orchestrations.md): Building complex workflows
 - [Settings Configuration](./settings-config.md): Server configuration and backup/restore
 - [User Management](./user-management.md): User accounts and access control
 - [Back to Documentation Index](./README.MD)

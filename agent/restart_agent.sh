@@ -11,7 +11,7 @@ show_help() {
   echo "  WORKING_DIR     The working directory for the agent"
   echo
   echo "Example:"
-  echo "  $0 pm2 backupAgent /opt/BackupHubAgent 127.0.0.1 1883 /tmp"
+  echo "  $0 pm2 OrcheliumAgent /opt/OrcheliumAgent 127.0.0.1 1883 /tmp"
 }
 
 # Check if --help is passed
@@ -39,17 +39,17 @@ case "$STARTUP_TYPE" in
     pkill -f "node agent"
     echo "Starting updated instance"
     cd "$INSTALL_DIR/agent" || exit
-    nohup node agent.js --agent "$AGENT_NAME" --mqttServer "$MQTT_SERVER" --mqttPort "$MQTT_PORT" --workingDir "$WORKING_DIR" >> /var/log/backupApp2.log 2>&1 &
+    nohup node agent.js --agent "$AGENT_NAME" --mqttServer "$MQTT_SERVER" --mqttPort "$MQTT_PORT" --workingDir "$WORKING_DIR" >> /var/log/OrcheliumAgent.log 2>&1 &
     echo "Done"
     ;;
   Service)
     echo "Restarting Service"
-    systemctl restart BackupHubAgent-"$AGENT_NAME"
+    systemctl restart OrcheliumAgent-"$AGENT_NAME"
     echo "Done"
     ;;
   Docker)
     echo "Stopping container and preserving"
-    stop_preserve_container "backup-agent"
+    stop_preserve_container "orchelium-agent"
     bash "$INSTALL_DIR/startup_container.sh"
     echo "Done"
     ;;

@@ -670,9 +670,32 @@ async function runJob(jobName, isManual, inData, triggerContextParam = null, rer
         
         publishExecute(schedItem.agent, data, commandParams, jobName, isManual, executionId, triggerContextParam, rerunFrom);
       } catch (err) {
-        logger.error(`Error reading script file for job [${jobName}]:`, err.message);
+        const scriptPath = `./scripts/${command}`;
+        const missingScriptMsg = `Script cannot be found for job [${jobName}] at path [${scriptPath}]`;
+        const logMessage = (err && err.code === 'ENOENT')
+          ? missingScriptMsg
+          : `Failed to read script for job [${jobName}] at path [${scriptPath}]: ${err.message}`;
+
+        logger.error(logMessage);
+
+        try {
+          const histItem = hist.createHistoryItem(
+            jobName,
+            new Date().toISOString(),
+            1,
+            0,
+            logMessage,
+            isManual,
+            executionId,
+            rerunFrom
+          );
+          hist.add(histItem);
+        } catch (historyErr) {
+          logger.warn(`Unable to add history entry for missing script on job [${jobName}]: ${historyErr.message}`);
+        }
+
         if (serverConfig.server.jobFailEnabled == "true") {
-          notifier.sendNotification(`Error reading backup script for job [${jobName}]`, `${err.message}`, "ERROR", `/scheduler.html?jobname=${jobName}`);
+          notifier.sendNotification(`Error reading backup script for job [${jobName}]`, logMessage, "ERROR", `/scheduler.html?jobname=${jobName}`);
         }
         return { status: "error", executionId: null };
       }

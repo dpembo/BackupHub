@@ -8,7 +8,7 @@ jest.mock('../../agentMessageProcessor.js');
 jest.mock('../../communications/wsBrowserTransport.js');
 jest.mock('../../communications/wsServerTransport.js');
 jest.mock('../../communications/mqttTransport.js', () => ({
-  getCommandTopic: jest.fn().mockReturnValue('backup/agent/command'),
+  getCommandTopic: jest.fn().mockReturnValue('orchelium/agent/command'),
 }));
 jest.mock('node-schedule');
 

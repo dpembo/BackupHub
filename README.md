@@ -1,20 +1,20 @@
 
-![BackupHub Logo](./public/images/BackupHubColorBlue.png)
+![Orchelium Logo](./public/images/orchelium-light.png)
 
-# BackupHub
+# Orcheliuim
 
 
-![GitHub Repo stars](https://img.shields.io/github/stars/dpembo/BackupHub?style=flat)
+![GitHub Repo stars](https://img.shields.io/github/stars/dpembo/orchelium?style=flat)
 
-![GitHub License](https://img.shields.io/github/license/dpembo/BackupHub)
+![GitHub License](https://img.shields.io/github/license/dpembo/orchelium)
 
-![GitHub Issues](https://img.shields.io/github/issues/dpembo/BackupHub)
+![GitHub Issues](https://img.shields.io/github/issues/dpembo/orchelium)
 
-*A lightweight automation and backup orchestration platform for home labs, NAS devices, and small server fleets.*
+*A lightweight automation and orchestration platform for home labs, NAS devices, and small server fleets.*
 
-BackupHub started as a simple backup scheduler. It has since evolved into a distributed automation engine with real‑time orchestration, multi‑agent execution, and a clean web UI for managing scripts, workflows, and triggers across your entire environment.
+Orchelium started as a simple backup scheduler. It has since evolved into a distributed automation engine with real‑time orchestration, multi‑agent execution, and a clean web UI for managing scripts, workflows, and triggers across your entire environment.
 
-Whether you're running a Proxmox cluster, a handful of Linux servers, or a mixed home‑lab setup, BackupHub gives you a central place to automate, monitor, and coordinate your tasks.
+Whether you're running a Proxmox cluster, a handful of Linux servers, or a mixed home‑lab setup, Orchelium gives you a central place to automate, monitor, and coordinate your tasks.
 
 ---
 
@@ -50,7 +50,7 @@ Trigger jobs using:
 - Webhooks
 - Agent online/offline events
 
-This turns BackupHub into a general automation platform, not just a backup runner.
+This turns Orchelium into a general automation platform, not just a backup runner.
 
 ---
 
@@ -78,7 +78,7 @@ It feels like a modern automation dashboard — because it is.
 ---
 
 ### 📦 Script Templates & Library
-BackupHub includes ready‑to‑use templates for:
+Orchelium includes (but not limited to) ready‑to‑use templates for:
 - Proxmox VM backups
 - Rsync jobs
 - MySQL/MariaDB dumps
@@ -86,7 +86,7 @@ BackupHub includes ready‑to‑use templates for:
 - Threshold checks
 - System maintenance tasks
 
-You can also create and store your own reusable scripts.
+You can also create and store your own reusable scripts, and host your oewn template servder
 
 ---
 
@@ -98,7 +98,7 @@ Trigger jobs or orchestrations from:
 - Monitoring systems
 - Any service that can send an HTTP request
 
-BackupHub also exposes REST endpoints for external control.
+Orchelium also exposes REST endpoints for external control.
 
 ---
 
@@ -117,7 +117,7 @@ Fast, reliable, and easy to back up.
 ## 🚀 Quick Start
 
 ### Run the Hub
-``docker run -p 8082:8082 ghcr.io/dpembo/backuphub/hub
+``docker run -p 8082:8082 ghcr.io/dpembo/orchelium/hub
 ``
 
 Then open your browser at:
@@ -140,11 +140,11 @@ Agents automatically:
 
 ## 📚 Documentation
 User documentation is available here:
-https://github.com/dpembo/BackupHub/blob/main/docs/README.MD
+https://github.com/dpembo/orchelium/blob/main/docs/README.MD
 
 Full documentation is available at:
 
-https://deepwiki.com/dpembo/BackupHub
+https://deepwiki.com/dpembo/orchleium
 
 This includes:
 - Architecture overview
@@ -159,10 +159,10 @@ This includes:
 ## 🛠 Roadmap
 Planned features include:
 - Plugin system for custom nodes
-- Metrics dashboard
-- BackupHub Cloud relay mode
 - Windows agent
+- Extended Metrics dashboard
 - Multi‑Hub federation
+- Orchelium Cloud relay mode
 
 ---
 
@@ -173,7 +173,7 @@ Whether it’s bug reports, feature ideas, or pull requests — everything helps
 ---
 
 ## ⭐ Support the Project
-If BackupHub is useful to you:
+If Orchelium is useful to you:
 - Star the repo
 - Share it with your home‑lab friends
 - Open issues with ideas or feedback
@@ -183,9 +183,9 @@ If BackupHub is useful to you:
 
 
 ## License
-This project is licensed under the MIT License. See the [LICENSE](https://github.com/dpembo/BackupHub/blob/main/LICENSE) file for details.
+This project is licensed under the MIT License. See the [LICENSE](https://github.com/dpembo/orchelium/blob/main/LICENSE) file for details.
 
 
 ## Support
-For issues or feature requests, open an issue on [GitHub Issues](https://github.com/dpembo/BackupHub/issues).
+For issues or feature requests, open an issue on [GitHub Issues](https://github.com/dpembo/orchelium/issues).
 For general inquiries, please use GitHub Discussions or open an issue.

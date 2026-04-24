@@ -41,7 +41,7 @@ stop_preserve_container() {
 }
 
 echo "=============================="
-echo "BackupHub Agent Updater"
+echo "Orchelium Agent Updater"
 echo "=============================="
 
 restart=false
@@ -69,8 +69,8 @@ if [ -f "$script_dir/settings.sh" ]; then
   echo "* Getting settings from the existing settings.sh file"
   source "$script_dir/settings.sh"
   # Set host and port from settings.sh
-  host="$BACKUPHUB_SERVER"
-  port="$BACKUPHUB_PORT"
+  host="$ORCHELIUM_SERVER"
+  port="$ORCHELIUIM_PORT"
   destination="${destination:-$script_dir}"
 else
   # If settings.sh is not found, fall back to command line arguments for host and port
@@ -123,19 +123,19 @@ new_version=$(grep -oP '(?<=var version=)[^;]+' "$temp_dir/version.js" | tr -d '
 # Check if versions are the same, and neither is %%UNDEFINED%%
 if [[ "$current_version" == "$new_version" && "$new_version" != "%%UNDEFINED%%" && "$current_version" != "%%UNDEFINED%%" ]]; then
   if [ "$quiet" = false ]; then
-    dialog --msgbox "BackupHub Agent Updater\n\nThe current version ($current_version) is the same as the new version ($new_version). No update necessary." 10 60
+    dialog --msgbox "Orchelium Agent Updater\n\nThe current version ($current_version) is the same as the new version ($new_version). No update necessary." 10 60
   else
-    echo "BackupHub Agent Updater / The current version ($current_version) is the same as the new version ($new_version). No update necessary."
+    echo "Orchelium Agent Updater / The current version ($current_version) is the same as the new version ($new_version). No update necessary."
   fi
   rm -rf "$temp_dir"
   exit 0
 else
-  echo "BackupHub Agent Updater / Initiating upgrade - current version ($current_version) / new version ($new_version)."
+  echo "Orchelium Agent Updater / Initiating upgrade - current version ($current_version) / new version ($new_version)."
 fi
 
 # Use dialog to confirm the upgrade
 if [ "$quiet" = false ]; then
-  dialog --yesno "BackupHub Agent Updater\n\nUpgrade from version $current_version to $new_version?" 10 60
+  dialog --yesno "Orchelium Agent Updater\n\nUpgrade from version $current_version to $new_version?" 10 60
   response=$?
   clear
   # Check the user's response
@@ -163,7 +163,7 @@ if [ "$restart" = true ]; then
   echo "Restarting Agent"
   if [ "$quiet" = true ]; then
     echo "Restarting Agent in quiet mode."
-    nohup bash "$script_dir/restart_agent.sh" "$STARTUP_TYPE" "$AGENT_NAME" "$INSTALL_DIR" "$MQTT_SERVER" "$MQTT_PORT" "$WORKING_DIR"  >> /var/log/backupApp2.log 2>&1 &
+    nohup bash "$script_dir/restart_agent.sh" "$STARTUP_TYPE" "$AGENT_NAME" "$INSTALL_DIR" "$MQTT_SERVER" "$MQTT_PORT" "$WORKING_DIR"  >> /var/log/OrcheliumAgent.log 2>&1 &
 
     echo "Restart initiated asynchronously in quiet mode."
     exit 0
@@ -179,7 +179,7 @@ else
       echo "To restart the service, you may need to stop the running agent and reload the crontab using: crontab -e"
       ;;
     Service)
-      echo "To restart the service, use: systemctl restart BackupHubAgent"
+      echo "To restart the service, use: systemctl restart OrcheliumAgent"
       ;;
     Docker)
       echo "To restart the Docker container, stop the currently running container, then  use: ./startup_container.sh to build and start a new version."

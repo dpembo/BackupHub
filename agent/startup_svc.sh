@@ -1,10 +1,10 @@
 #!/bin/bash
 #
 # Author: Dave Pemberton
-# init script to start backup hub agent
+# init script to start Orchelium agent
 #
 
-INSTALL_DIR="/opt/BackupHubAgent"
+INSTALL_DIR="/opt/OrcheliumAgent"
 SETTINGS_FILE="settings.sh"
 SETTINGS_FILE_LOCATION="$INSTALL_DIR/$SETTINGS_FILE"
 PARAMS=""
@@ -20,8 +20,8 @@ else
     MQTT_ENABLED="false"
     MQTT_SERVER=""
     MQTT_PORT=""
-    BACKUPHUB_SERVER="localhost"
-    BACKUPHUB_PORT="8082"
+    ORCHELIUM_SERVER="localhost"
+    ORCHELIUIM_PORT="8082"
     WS_ENABLED="true"
     WS_SERVER="localhost"
     WS_PORT="49981"

@@ -1,5 +1,5 @@
 #!/bin/bash
-INSTALL_DIR="/opt/BackupHubAgent"
+INSTALL_DIR="/opt/OrcheliumAgent"
 
 # Default values for variables
 mqttServer=""
@@ -8,15 +8,15 @@ wsServer=""
 wsPort=""
 mqttEnabled="false"
 wsEnabled="false"
-backupHubUrl=""
+orchelium=""
 
 # Help function to display usage information
 function show_help() {
     echo "Usage: $0 [options]"
     echo ""
     echo "Options:"
-    echo "  --backupHubUrl=<url>     (Mandatory) URL of the BackupHub."
-    echo "  --installDir=<path>      Installation directory (default: /opt/BackupHubAgent)."
+    echo "  --orcheliumUrl=<url>     (Mandatory) URL of Orchelium."
+    echo "  --installDir=<path>      Installation directory (default: /opt/OrcheliumAgent)."
     echo "  --mqttServer=<ip>        IP address of the MQTT server."
     echo "  --mqttPort=<port>        Port of the MQTT server."
     echo "  --wsServer=<ip>          IP address of the WebSocket server."
@@ -29,8 +29,8 @@ function show_help() {
 for arg in "$@"
 do
     case $arg in
-        --backupHubUrl=*)
-            backupHubUrl="${arg#*=}"
+        --orcheliumUrl=*)
+            orcheliumUrl="${arg#*=}"
             ;;
         --installDir=*)
             INSTALL_DIR="${arg#*=}"
@@ -59,9 +59,9 @@ do
     esac
 done
 
-# Ensure backupHubUrl is provided
-if [ -z "$backupHubUrl" ]; then
-    echo "Error: --backupHubUrl is mandatory."
+# Ensure orcheliumUrl is provided
+if [ -z "$orcheliumUrl" ]; then
+    echo "Error: --orcheliumUrl is mandatory."
     show_help
 fi
 
@@ -218,10 +218,10 @@ echo '2. Change to install location
 cd "$INSTALL_DIR"
 
 
-echo '3. Download agent bundle from BackupHub
+echo '3. Download agent bundle from Orchelium
 '
 
-wget "$backupHubUrl/agent/agent.tar"
+wget "$orcheliumUrl/agent/agent.tar"
 
 echo '4. Untar the Agent bundle
 '
@@ -231,21 +231,21 @@ tar -xvf agent.tar
 echo '5. Set MQTT Settings
 '
 
-hostname=$(echo "$backupHubUrl" | sed -E 's|.*://([^:/]+).*|\1|')
-port=$(echo "$backupHubUrl" | sed -E 's|.*://[^:/]+:([0-9]+).*|\1|')
+hostname=$(echo "$orcheliumUrl" | sed -E 's|.*://([^:/]+).*|\1|')
+port=$(echo "$orcheliumUrl" | sed -E 's|.*://[^:/]+:([0-9]+).*|\1|')
 SETTINGS_FILE="settings.sh"
 
 echo "MQTT_ENABLED=\"$mqttEnabled\"" >> "$SETTINGS_FILE"
 echo "MQTT_SERVER=\"$mqttServer\"" >> "$SETTINGS_FILE"
 echo "MQTT_PORT=\"$mqttPort\"" >> "$SETTINGS_FILE"
-echo "BACKUPHUB_SERVER=\"$hostname\"" >> "$SETTINGS_FILE"
-echo "BACKUPHUB_PORT=\"$port\"" >> "$SETTINGS_FILE"
+echo "ORCHELIUM_SERVER=\"$hostname\"" >> "$SETTINGS_FILE"
+echo "ORCHELIUIM_PORT=\"$port\"" >> "$SETTINGS_FILE"
 echo "WS_ENABLED=\"$wsEnabled\"" >> "$SETTINGS_FILE"
 echo "WS_SERVER=\"$wsServer\"" >> "$SETTINGS_FILE"
 echo "WS_PORT=\"$wsPort\"" >> "$SETTINGS_FILE"
 
 # Print the results
-echo "BackupHub URL          : $backupHubUrl"
+echo "Orchelium URL          : $orcheliumUrl"
 echo "Hostname               : $hostname"
 echo "Port                   : $port"
 echo "Installation Directory : $INSTALL_DIR"
