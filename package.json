@@ -21,6 +21,10 @@
     ],
     "author": "Orchelium Contributors",
     "license": "MIT",
+    "engines": {
+        "node": ">=22",
+        "npm": ">=10"
+    },
     "dependencies": {
         "@mdi/js": "^7.4.47",
         "archiver": "^7.0.1",
