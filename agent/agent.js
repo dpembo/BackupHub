@@ -167,13 +167,14 @@ function parseSettingsFile(filePath) {
       if (match) {
         const [, key, value] = match;
         switch (key) {
-          case 'AGENT_NAME': agentName = AGENT_ID = value; break;
-          case 'MQTT_SERVER': MQTT_SERVER = value; break;
-          case 'MQTT_PORT': MQTT_SERVER_PORT = value; break;
-          case 'MQTT_ENABLED': MQTT_ENABLED = value.toUpperCase() === 'TRUE'; break;
-          case 'WS_SERVER': WS_SERVER = value; break;
-          case 'WS_PORT': WS_SERVER_PORT = value; break;
-          case 'WORKING_DIR': workingDir = value; break;
+          // CLI args take priority — only apply settings file value if not already set via argv
+          case 'AGENT_NAME': if (agentNameIndex === -1) { agentName = AGENT_ID = value; } break;
+          case 'MQTT_SERVER': if (mqttServerIndex === -1) MQTT_SERVER = value; break;
+          case 'MQTT_PORT': if (mqttPortIndex === -1) MQTT_SERVER_PORT = value; break;
+          case 'MQTT_ENABLED': if (!process.argv.includes('--mqttServer')) MQTT_ENABLED = value.toUpperCase() === 'TRUE'; break;
+          case 'WS_SERVER': if (wsServerIndex === -1) WS_SERVER = value; break;
+          case 'WS_PORT': if (wsPortIndex === -1) WS_SERVER_PORT = value; break;
+          case 'WORKING_DIR': if (workingDirIndex === -1) workingDir = value; break;
           case 'INSTALL_DIR': INSTALL_DIR = value; break;
           case 'STARTUP_TYPE': STARTUP_TYPE = value; break;
           case 'CONNECTION_RETRIES': RETRY_ATTEMPTS = parseInt(value); break;
