@@ -26,6 +26,17 @@ echo " "
 tag_response=$(curl -s -X POST -H "Authorization: token $ACCESS_TOKEN" -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/$ORG_NAME/$REPO_NAME/git/refs -d "{\"ref\": \"refs/tags/$TAG_NAME\", \"sha\": \"$shaId\"}")
 echo "Tag creation response:"
 echo "$tag_response" | jq '.' 2>/dev/null || echo "$tag_response"
+tag_ref=$(echo "$tag_response" | jq -r '.ref // empty' 2>/dev/null)
+tag_msg=$(echo "$tag_response" | jq -r '.message // empty' 2>/dev/null)
+
+if [ -z "$tag_ref" ] && [ "$tag_msg" != "Reference already exists" ]; then
+	echo "ERROR: Failed to create tag and it does not already exist."
+	exit 1
+fi
+
+if [ "$tag_msg" = "Reference already exists" ]; then
+	echo "INFO: Tag $TAG_NAME already exists; continuing to release creation."
+fi
 echo " "
 
 echo "+-----------------------------------------------------+"
