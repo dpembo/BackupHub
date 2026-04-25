@@ -148,10 +148,20 @@ echo " ----------------------- "
 echo " ----------------------- "
 echo " Setting Env variables   "
 echo " ----------------------- "
-export AGENT="$AGENT_NAME"
+if [ "$MQTT_ENABLED" = "true" ]; then
+    AGENT_EXTRA_ARGS="--mqttServer \"$MQTT_SERVER\" --mqttPort \"$MQTT_PORT\""
+else
+    AGENT_EXTRA_ARGS="--wsServer \"$WS_SERVER\" --wsPort \"$WS_PORT\""
+fi
+
+export AGENT_NAME="$AGENT_NAME"
+export MQTT_ENABLED="$MQTT_ENABLED"
 export MQTT_SERVER="$MQTT_SERVER"
 export MQTT_PORT="$MQTT_PORT"
+export WS_SERVER="$WS_SERVER"
+export WS_PORT="$WS_PORT"
 export WORKING_DIR="$WORKING_DIR"
+export AGENT_EXTRA_ARGS="$AGENT_EXTRA_ARGS"
 
 # Run Docker Compose
 docker compose up -d
