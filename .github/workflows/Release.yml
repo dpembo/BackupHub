@@ -115,7 +115,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push BackupHub/hub image
+      - name: Build and push Orchelium/hub image
         id: build-and-push-hub
         uses: docker/build-push-action@v5
         with:
@@ -123,21 +123,21 @@ jobs:
           file: ./Dockerfile
           push: true
           tags: |
-            ghcr.io/dpembo/backuphub/hub:latest
-            ghcr.io/dpembo/backuphub/hub:${{ steps.set_version.outputs.version }}
+            ghcr.io/dpembo/orchelium/hub:latest
+            ghcr.io/dpembo/orchelium/hub:${{ steps.set_version.outputs.version }}
           labels: |
-            org.opencontainers.image.title=dpembo/backuphub/hub
+            org.opencontainers.image.title=dpembo/orchelium/hub
             org.opencontainers.image.version=${{ steps.set_version.outputs.version }}
 
-      - name: Attest build provenance for BackupHub/hub
+      - name: Attest build provenance for Orchelium/hub
         uses: actions/attest-build-provenance@v2
         with:
-          subject-name: ghcr.io/dpembo/backuphub/hub
+          subject-name: ghcr.io/dpembo/orchelium/hub
           subject-digest: ${{ steps.build-and-push-hub.outputs.digest }}
           push-to-registry: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push backuphub/agent image
+      - name: Build and push Orchelium/agent image
         id: build-and-push-agent
         uses: docker/build-push-action@v5
         with:
@@ -145,16 +145,16 @@ jobs:
           file: ./agent/Dockerfile
           push: true
           tags: |
-            ghcr.io/dpembo/backuphub/agent:latest
-            ghcr.io/dpembo/backuphub/agent:${{ steps.set_version.outputs.version }}
+            ghcr.io/dpembo/orchelium/agent:latest
+            ghcr.io/dpembo/orchelium/agent:${{ steps.set_version.outputs.version }}
           labels: |
-            org.opencontainers.image.title=dpembo/backuphub/agent
+            org.opencontainers.image.title=dpembo/orchelium/agent
             org.opencontainers.image.version=${{ steps.set_version.outputs.version }}
 
-      - name: Attest build provenance for backuphub/agent
+      - name: Attest build provenance for orchelium/agent
         uses: actions/attest-build-provenance@v2
         with:
-          subject-name: ghcr.io/dpembo/backuphub/agent
+          subject-name: ghcr.io/dpembo/orchelium/agent
           subject-digest: ${{ steps.build-and-push-agent.outputs.digest }}
           push-to-registry: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -162,6 +162,6 @@ jobs:
       - name: Create Git Release
         shell: bash
         run: |
-          ./gitRelease.sh ${{ vars.ORG_NAME }} ${{ vars.REPO_NAME }} ${{ vars.BRANCH_NAME }} ${{ secrets.PAT_TOKEN }} "v${{ steps.set_version.outputs.version }}" "v${{ steps.set_version.outputs.version }}" "BackupHub [v${{ steps.set_version.outputs.version }}]"
+          ./gitRelease.sh ${{ vars.ORG_NAME }} ${{ vars.REPO_NAME }} ${{ vars.BRANCH_NAME }} ${{ secrets.PAT_TOKEN }} "v${{ steps.set_version.outputs.version }}" "v${{ steps.set_version.outputs.version }}" "Orchelium [v${{ steps.set_version.outputs.version }}]"
 
 
