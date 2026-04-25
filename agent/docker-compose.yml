@@ -10,8 +10,15 @@ services:
       - WS_SERVER=${WS_SERVER}
       - WS_PORT=${WS_PORT}
       - WORKING_DIR=${WORKING_DIR}
-      - AGENT_EXTRA_ARGS=${AGENT_EXTRA_ARGS}
-    command: ["/bin/sh", "-c", "node agent.js --agent \"$AGENT_NAME\" --workingDir \"$WORKING_DIR\" $AGENT_EXTRA_ARGS"]
+    command:
+      - /bin/sh
+      - -c
+      - |
+        if [ "$MQTT_ENABLED" = "true" ]; then
+          exec node agent.js --agent "$AGENT_NAME" --workingDir "$WORKING_DIR" --mqttServer "$MQTT_SERVER" --mqttPort "$MQTT_PORT"
+        else
+          exec node agent.js --agent "$AGENT_NAME" --workingDir "$WORKING_DIR" --wsServer "$WS_SERVER" --wsPort "$WS_PORT"
+        fi
     ports:
       - "49991:49991"
     privileged: true  # Equivalent to --privileged
