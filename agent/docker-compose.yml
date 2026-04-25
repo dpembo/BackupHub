@@ -2,6 +2,7 @@ services:
   web:
     image: ghcr.io/dpembo/orchelium/agent:latest
     container_name: orchelium-agent
+    entrypoint: []
     environment:
       - AGENT_NAME=${AGENT_NAME}
       - MQTT_ENABLED=${MQTT_ENABLED}
