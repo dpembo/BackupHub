@@ -164,6 +164,7 @@ jobs:
           labels: |
             org.opencontainers.image.title=dpembo/orchelium/hub
             org.opencontainers.image.version=${{ steps.set_version.outputs.version }}
+            org.opencontainers.image.source=https://github.com/dpembo/orchelium
 
       - name: Attest build provenance for Orchelium/hub
         uses: actions/attest-build-provenance@v2
@@ -186,6 +187,7 @@ jobs:
           labels: |
             org.opencontainers.image.title=dpembo/orchelium/agent
             org.opencontainers.image.version=${{ steps.set_version.outputs.version }}
+            org.opencontainers.image.source=https://github.com/dpembo/orchelium
 
       - name: Attest build provenance for orchelium/agent
         uses: actions/attest-build-provenance@v2

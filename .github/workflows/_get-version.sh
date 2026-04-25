@@ -5,7 +5,7 @@
 set -e
 
 gh_token="$1"
-repo="${GITHUB_REPOSITORY:-dpembo/BackupHub}"
+repo="${GITHUB_REPOSITORY:-dpembo/orchelium}"
 today=$(date +'%Y.%m.%d')
 
 echo "DEBUG: Fetching tags from ${repo}..." >&2
