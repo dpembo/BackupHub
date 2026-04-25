@@ -131,7 +131,7 @@ jobs:
 
           headers_file="$(mktemp)"
           status_code="$(curl -sS -D "$headers_file" -o /dev/null -w "%{http_code}" \
-            -H "Authorization: Bearer ${{ secrets.PAT_TOKEN }}" \
+            -H "Authorization: token ${{ secrets.PAT_TOKEN }}" \
             -H "Accept: application/vnd.github+json" \
             https://api.github.com/user)"
 
@@ -143,7 +143,10 @@ jobs:
           scopes="$(tr -d '\r' < "$headers_file" | awk -F': ' 'tolower($1)=="x-oauth-scopes" {print $2}')"
           echo "Detected token scopes: ${scopes:-none}"
 
-          if ! echo "${scopes:-}" | grep -Eq '(^|, )write:packages(,|$)'; then
+          # Fine-grained PATs may not return x-oauth-scopes; skip scope-gate in that case.
+          if [ -z "${scopes:-}" ]; then
+            echo "No x-oauth-scopes header returned (likely fine-grained PAT). Skipping scope check."
+          elif ! echo "${scopes}" | grep -Eq '(^|, )write:packages(,|$)'; then
             echo "Token is missing write:packages scope, which is required to push ghcr.io images."
             exit 1
           fi
