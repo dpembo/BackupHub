@@ -1,4 +1,4 @@
-FROM node:20-slim
+FROM node:22-slim
 
 LABEL org.opencontainers.image.authors="https://github.com/dpembo/orchelium/issues"
 LABEL org.opencontainers.image.url="ghcr.io/dpembo/orchelium/hub:latest"
