@@ -30,6 +30,4 @@ services:
       start_period: 10s
       timeout: 10s
     restart: unless-stopped
-    volumes:
-      - ${INSTALL_DIR}/settings.sh:/usr/src/app/settings.sh:ro
 
