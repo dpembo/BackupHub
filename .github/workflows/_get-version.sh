@@ -25,7 +25,7 @@ echo "DEBUG: HTTP response code: $http_code" >&2
 if [ "$http_code" != "200" ]; then
   echo "ERROR: GitHub API returned HTTP $http_code" >&2
   echo "DEBUG: Response: $api_response" >&2
-  next_counter="01"
+  exit 1
 else
   # Show raw API response (first 500 chars)
   echo "DEBUG: Raw API response (first 500 chars): ${api_response:0:500}" >&2
@@ -37,7 +37,7 @@ else
   if [ $jq_exit -ne 0 ]; then
     echo "ERROR: jq parsing failed (exit code $jq_exit)" >&2
     echo "DEBUG: Response was: $api_response" >&2
-    next_counter="01"
+    exit 1
   else
     echo "DEBUG: All tags returned by API:" >&2
     echo "$all_tag_names" | sed 's/^/  /' >&2
