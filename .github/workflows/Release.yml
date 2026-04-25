@@ -206,7 +206,7 @@ jobs:
         id: build-and-push-agent
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: ./agent
           file: ./agent/Dockerfile
           push: true
           tags: |
