@@ -1,6 +1,6 @@
 services:
   web:
-    image: orchelium-agent
+    image: ghcr.io/dpembo/orchelium/agent:latest
     container_name: orchelium-agent
     ports:
       - "49991:49991"
