@@ -48,6 +48,8 @@ case "$STARTUP_TYPE" in
     echo "Done"
     ;;
   Docker)
+    #echo "Pulling latest Orchelium agent image"
+    #docker pull ghcr.io/dpembo/orchelium/agent:latest
     echo "Stopping container and preserving"
     stop_preserve_container "orchelium-agent"
     bash "$INSTALL_DIR/startup_container.sh"

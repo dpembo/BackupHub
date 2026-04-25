@@ -134,13 +134,8 @@ echo " ------------------------------------ "
 echo " Setting up Container "
 echo " ------------------------------------ "
 
-# Now buliding container
-echo "  * Building orchelium-agent container"
-echo "  * Changing to $INSTALL_DIR"
-cd $INSTALL_DIR
-pwd
-
-docker build -t orchelium-agent .
+echo "  * Pulling ghcr.io/dpembo/orchelium/agent:latest"
+docker pull ghcr.io/dpembo/orchelium/agent:latest
 
 echo " ----------------------- "
 echo " Starting        "

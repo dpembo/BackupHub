@@ -182,7 +182,7 @@ else
       echo "To restart the service, use: systemctl restart OrcheliumAgent"
       ;;
     Docker)
-      echo "To restart the Docker container, stop the currently running container, then  use: ./startup_container.sh to build and start a new version."
+      echo "To update the Docker container, run: docker pull ghcr.io/dpembo/orchelium/agent:latest && ./startup_container.sh"
       ;;
     none)
       echo "No Startup method was configured during install. You need to manually restart the agent."
