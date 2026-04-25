@@ -1229,6 +1229,8 @@ console.log("\x1b[32m-----------------------------------------------------------
 
 parseSettingsFile("settings.sh");
 
+debug(DEBUG_LEVEL.INFO, `Transport: ${useMQTT ? `MQTT → ${MQTT_SERVER}:${MQTT_SERVER_PORT}` : `WebSocket → ${WS_SERVER}:${WS_SERVER_PORT}`}`);
+
 if (process.argv.includes('--debug')) {
   DEBUG_MODE = true;
   debug(DEBUG_LEVEL.WARN, "DEBUG ENABLED");
