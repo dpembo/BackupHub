@@ -42,9 +42,12 @@ async function getExecutionDetails(jobId, executionIndex = 'latest') {
       throw new Error(`Orchestration job [${jobId}] version ${executionVersion} not found`);
     }
 
+    // Detect parallel nodes by looking for overlapping execution windows.
+    const concurrentInfo = detectConcurrentNodes(jobDef.nodes || [], execution);
+
     // Format the response with graph info and node details
-    const formattedNodes = formatNodeDetails(jobDef.nodes, execution);
-    const formattedEdges = formatEdgeDetails(jobDef.edges, execution, execution.visitedNodes || []);
+    const formattedNodes = formatNodeDetails(jobDef.nodes, execution, concurrentInfo);
+    const formattedEdges = formatEdgeDetails(jobDef.edges, execution, execution.visitedNodes || [], concurrentInfo);
 
     return {
       jobId: jobDef.id,
@@ -67,6 +70,8 @@ async function getExecutionDetails(jobId, executionIndex = 'latest') {
       conditionEvaluations: execution.conditionEvaluations || {},
       errors: execution.errors || [],
       visitedNodes: execution.visitedNodes || [],
+      concurrentNodeIds: Array.from(concurrentInfo.nodeIds),
+      concurrentNodePairs: concurrentInfo.pairs,
       executionIndex: executionIndex,
       totalExecutions: executions.length
     };
@@ -121,7 +126,7 @@ async function getNodeOutput(jobId, nodeId, executionIndex = 'latest') {
  * Format edge details to mark which edges were traversed
  * @private
  */
-function formatEdgeDetails(edges, execution, visitedNodes) {
+function formatEdgeDetails(edges, execution, visitedNodes, concurrentInfo = { nodeIds: new Set() }) {
   if (!edges) return [];
   
   return edges.map(edge => ({
@@ -132,7 +137,8 @@ function formatEdgeDetails(edges, execution, visitedNodes) {
     label: edge.label || edge.fromPort,
     color: edge.color,
     // Mark edge as executed if both source and target nodes were visited
-    executed: visitedNodes.includes(edge.from) && visitedNodes.includes(edge.to)
+    executed: visitedNodes.includes(edge.from) && visitedNodes.includes(edge.to),
+    concurrent: concurrentInfo.nodeIds.has(edge.from) || concurrentInfo.nodeIds.has(edge.to)
   }));
 }
 
@@ -141,7 +147,7 @@ function formatEdgeDetails(edges, execution, visitedNodes) {
  * Includes position, execution status, and error info
  * @private
  */
-function formatNodeDetails(nodes, execution) {
+function formatNodeDetails(nodes, execution, concurrentInfo = { nodeIds: new Set(), peers: {} }) {
   return nodes.map(node => ({
     id: node.id,
     type: node.type,
@@ -152,10 +158,90 @@ function formatNodeDetails(nodes, execution) {
     ports: node.ports || [],  // Include port definitions
     data: node.data || {},
     executed: execution.visitedNodes && execution.visitedNodes.includes(node.id),
+    concurrent: concurrentInfo.nodeIds.has(node.id),
+    concurrentWith: concurrentInfo.peers[node.id] || [],
     hasError: execution.errors && execution.errors.some(e => e.node === node.id),
     errorMessage: execution.errors && execution.errors.find(e => e.node === node.id)?.message || null,
     exitCode: execution.scriptOutputs ? (execution.scriptOutputs[node.id]?.exitCode ?? null) : null
   }));
+}
+
+/**
+ * Detect nodes that executed in parallel by checking overlapping node metric windows.
+ * @private
+ */
+function detectConcurrentNodes(nodes, execution) {
+  const nodeMetrics = execution?.nodeMetrics || {};
+  const visitedNodes = new Set(execution?.visitedNodes || []);
+  const nodeById = {};
+  (nodes || []).forEach(n => {
+    nodeById[n.id] = n;
+  });
+
+  const controlTypes = new Set(['start', 'end-success', 'end-failure']);
+  const windows = [];
+
+  Object.entries(nodeMetrics).forEach(([nodeId, metric]) => {
+    if (!visitedNodes.has(nodeId)) {
+      return;
+    }
+
+    const node = nodeById[nodeId];
+    if (!node || controlTypes.has(node.type)) {
+      return;
+    }
+
+    const startMs = Date.parse(metric?.startTime || '');
+    const endMs = Date.parse(metric?.endTime || '');
+    if (Number.isNaN(startMs) || Number.isNaN(endMs)) {
+      return;
+    }
+
+    windows.push({
+      nodeId,
+      startMs,
+      endMs
+    });
+  });
+
+  const nodeIds = new Set();
+  const pairs = [];
+  const peers = {};
+
+  for (let i = 0; i < windows.length; i++) {
+    for (let j = i + 1; j < windows.length; j++) {
+      const a = windows[i];
+      const b = windows[j];
+      const overlaps = a.startMs < b.endMs && b.startMs < a.endMs;
+      if (!overlaps) {
+        continue;
+      }
+
+      nodeIds.add(a.nodeId);
+      nodeIds.add(b.nodeId);
+      pairs.push([a.nodeId, b.nodeId]);
+
+      if (!peers[a.nodeId]) {
+        peers[a.nodeId] = [];
+      }
+      if (!peers[b.nodeId]) {
+        peers[b.nodeId] = [];
+      }
+
+      if (!peers[a.nodeId].includes(b.nodeId)) {
+        peers[a.nodeId].push(b.nodeId);
+      }
+      if (!peers[b.nodeId].includes(a.nodeId)) {
+        peers[b.nodeId].push(a.nodeId);
+      }
+    }
+  }
+
+  return {
+    nodeIds,
+    pairs,
+    peers
+  };
 }
 
 /**

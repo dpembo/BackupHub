@@ -58,9 +58,10 @@ function isSelected(inValue,compareValue){
       gap: 0;
       flex-direction: column;
     }
-    .palette-item[data-node-type="condition"] {
-      width: 32px;
-      height: 32px;
+    .palette-item[data-node-type="condition"],
+    .palette-item[data-node-type="split-join"] {
+      width: 36px;
+      height: 36px;
       padding: 0;
       margin-bottom: 8px;
       border-radius: 0;
@@ -73,19 +74,37 @@ function isSelected(inValue,compareValue){
       transform: rotate(45deg);
       line-height: 1.2;
     }
-    .palette-item[data-node-type="condition"] i {
-      font-size: 12px;
+    .logic-node-content {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      transform: rotate(-45deg);
+      gap: 1px;
+    }
+    .palette-item[data-node-type="condition"] .logic-node-content i,
+    .palette-item[data-node-type="split-join"] .logic-node-content i {
+      font-size: 11px;
       margin: 0;
       line-height: 1;
       display: block;
+      text-align: center;
     }
-    .palette-item[data-node-type="condition"] span {
+    .palette-item[data-node-type="condition"] .logic-node-content span,
+    .palette-item[data-node-type="split-join"] .logic-node-content span {
       font-size: 8px;
       margin: 0;
       text-align: center;
       width: 100%;
       line-height: 1;
       display: block;
+      font-weight: bold;
+    }
+    .palette-item .logic-label-splitjoin {
+      font-size: 6.5px !important;
+      line-height: 1.05 !important;
     }
     .palette-item[data-node-type="start"] i,
     .palette-item[data-node-type="end-success"] i,
@@ -105,6 +124,12 @@ function isSelected(inValue,compareValue){
       display: flex;
       gap: 8px;
       justify-content: flex-start;
+    }
+    .logic-nodes-container {
+      display: flex;
+      gap: 18px;
+      justify-content: flex-start;
+      align-items: flex-start;
     }
     .end-nodes-container .palette-item {
       flex: 0 0 44px;
@@ -308,9 +333,19 @@ function isSelected(inValue,compareValue){
         
         <div class="palette-section">
           <h4>Logic</h4>
-          <div class="palette-item" draggable="true" data-node-type="condition">
-            <i class="material-icons" style="transform: rotate(-45deg); font-size: 12px;margin-right:6px">call_split</i>
-            <span style="transform: rotate(-45deg); font-size: 8px; font-weight: bold; margin-top: -2px;margin-left:10px;">if</span>
+          <div class="logic-nodes-container">
+            <div class="palette-item" draggable="true" data-node-type="condition">
+              <div class="logic-node-content">
+                <i class="material-icons">call_split</i>
+                <span>if</span>
+              </div>
+            </div>
+            <div class="palette-item" draggable="true" data-node-type="split-join">
+              <div class="logic-node-content">
+                <i class="material-icons">account_tree</i>
+                <span class="logic-label-splitjoin">Split<br>Join</span>
+              </div>
+            </div>
           </div>
         </div>
         
@@ -415,6 +450,30 @@ function isSelected(inValue,compareValue){
             <div class="properties-section">
               <label for="prop-condition-value">Value</label>
               <input type="text" id="prop-condition-value" placeholder="Enter value..." title="For regex, enter a valid regex pattern. For numeric, enter a number.">
+            </div>
+          </div>
+
+          <div id="prop-split-join" style="display: none;">
+            <div class="properties-section">
+              <label for="prop-sj-mode">Mode</label>
+              <select id="prop-sj-mode">
+                <option value="split">Split (fan-out)</option>
+                <option value="join">Join (merge paths)</option>
+              </select>
+            </div>
+            <div class="properties-section" id="prop-sj-join-strategy-section">
+              <label for="prop-sj-join-strategy">Join Strategy</label>
+              <select id="prop-sj-join-strategy">
+                <option value="waitAll">Wait For All</option>
+                <option value="waitAny">Wait For First</option>
+              </select>
+            </div>
+            <div class="properties-section" id="prop-sj-error-policy-section">
+              <label for="prop-sj-error-policy">Error Policy</label>
+              <select id="prop-sj-error-policy">
+                <option value="waitForAll">Wait For All Paths</option>
+                <option value="failFast">Fail Fast</option>
+              </select>
             </div>
           </div>
           
@@ -624,7 +683,7 @@ function isSelected(inValue,compareValue){
           e.dataTransfer.setData('nodeType', this.dataset.nodeType);
           
           // Create custom drag image for condition nodes to show diamond shape
-          if (this.dataset.nodeType === 'condition') {
+          if (this.dataset.nodeType === 'condition' || this.dataset.nodeType === 'split-join') {
             const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
             svg.setAttribute('width', '40');
             svg.setAttribute('height', '40');
@@ -645,7 +704,20 @@ function isSelected(inValue,compareValue){
             text.setAttribute('text-anchor', 'middle');
             text.setAttribute('dominant-baseline', 'middle');
             text.setAttribute('fill', '#333');
-            text.textContent = 'if';
+            if (this.dataset.nodeType === 'condition') {
+              text.textContent = 'if';
+            } else {
+              const tspan1 = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
+              tspan1.setAttribute('x', '20');
+              tspan1.setAttribute('dy', '-3');
+              tspan1.textContent = 'Split';
+              const tspan2 = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
+              tspan2.setAttribute('x', '20');
+              tspan2.setAttribute('dy', '10');
+              tspan2.textContent = 'Join';
+              text.appendChild(tspan1);
+              text.appendChild(tspan2);
+            }
             
             svg.appendChild(polygon);
             svg.appendChild(text);
@@ -722,6 +794,8 @@ function isSelected(inValue,compareValue){
       if (!port) return null;
       
       const isCircularNode = node.type === 'start' || node.type === 'end-success' || node.type === 'end-failure';
+      const isConditionNode = node.type === 'condition';
+      const isSplitJoinNode = node.type === 'split-join';
       
       if (isCircularNode && node.type === 'start') {
         // For circular start nodes, port is at bottom center on the circle edge
@@ -748,7 +822,7 @@ function isSelected(inValue,compareValue){
       let portX = port.x;
       if (node.type === 'execute') {
         portX = nodeWidth / 2;
-      } else if (node.type === 'condition') {
+      } else if (isConditionNode || isSplitJoinNode) {
         // For diamond nodes, ports are already positioned relative to center
         return {
           x: node.x + port.x,
@@ -760,6 +834,13 @@ function isSelected(inValue,compareValue){
         x: node.x + portX - nodeWidth / 2,
         y: node.y + port.y - CANVAS.nodeHeight / 2
       };
+    }
+
+    function getSplitJoinPorts(mode) {
+      if (mode === 'join') {
+        return [{ id: 'out', label: 'next', x: 0, y: 32 }];
+      }
+      return [{ id: 'out', label: 'paths', x: 0, y: 32 }];
     }
     
     function createNode(type, x = 100, y = 100) {
@@ -786,6 +867,10 @@ function isSelected(inValue,compareValue){
           { id: 'true', label: 'true', x: -28, y: 0 },
           { id: 'false', label: 'false', x: 28, y: 0 }
         ];
+      } else if (type === 'split-join') {
+        label = 'Split/Join';
+        icon = 'account_tree';
+        ports = getSplitJoinPorts('split');
       } else if (type === 'end-success') {
         label = 'Success';
         icon = 'check_circle';
@@ -804,7 +889,11 @@ function isSelected(inValue,compareValue){
         x: x,
         y: y,
         ports: ports,
-        data: {}
+        data: type === 'split-join' ? {
+          mode: 'split',
+          joinStrategy: 'waitAll',
+          errorPolicy: 'waitForAll'
+        } : {}
       };
       
       renderNode(id);
@@ -838,7 +927,9 @@ function isSelected(inValue,compareValue){
       
       // Check if this is a circular node type (start, success, failure)
       const isCircularNode = node.type === 'start' || node.type === 'end-success' || node.type === 'end-failure';
-      const isDiamondNode = node.type === 'condition';
+      const isConditionNode = node.type === 'condition';
+      const isSplitJoinNode = node.type === 'split-join';
+      const isDiamondNode = isConditionNode || isSplitJoinNode;
       
       // Define nodeWidth for use in ports (for rectangular nodes)
       let nodeWidth = 200;
@@ -877,7 +968,7 @@ function isSelected(inValue,compareValue){
         icon.setAttribute('text-anchor', 'middle');
         icon.setAttribute('dominant-baseline', 'middle');
         icon.setAttribute('fill', getCSSVariable('--text-primary', '#333'));
-        icon.textContent = 'call_split';
+        icon.textContent = isConditionNode ? 'call_split' : 'account_tree';
         grp.appendChild(icon);
         
         // Draw label text (below icon, centered in diamond)
@@ -891,7 +982,11 @@ function isSelected(inValue,compareValue){
         labelText.setAttribute('text-anchor', 'middle');
         labelText.setAttribute('dominant-baseline', 'middle');
         labelText.setAttribute('fill', getCSSVariable('--text-primary', '#333'));
-        labelText.textContent = node.label;
+        if (isConditionNode) {
+          labelText.textContent = node.label;
+        } else {
+          labelText.textContent = node.data?.mode === 'join' ? 'join' : 'split';
+        }
         grp.appendChild(labelText);
         
       } else if (isCircularNode) {
@@ -1022,12 +1117,17 @@ function isSelected(inValue,compareValue){
         let portAbsX, portAbsY;
         let labelOffsetX = 0, labelOffsetY = 20;
         
-        if (isDiamondNode) {
+        if (isConditionNode) {
           // For diamond nodes, ports are already relative to center
           portAbsX = node.x + portX;
           portAbsY = node.y + portY;
           labelOffsetX = portX > 0 ? 20 : -20;  // offset label to outside
           labelOffsetY = 5;
+        } else if (isSplitJoinNode) {
+          portAbsX = node.x + portX;
+          portAbsY = node.y + portY;
+          labelOffsetX = 0;
+          labelOffsetY = 18;
         } else if (isCircularNode && node.type === 'start') {
           // For circular start nodes, port is at bottom center
           portAbsX = node.x;
@@ -1057,7 +1157,7 @@ function isSelected(inValue,compareValue){
         portLabel.setAttribute('x', portAbsX + labelOffsetX);
         portLabel.setAttribute('y', portAbsY + labelOffsetY);
         
-        if (isDiamondNode) {
+        if (isConditionNode) {
           portLabel.setAttribute('text-anchor', labelOffsetX > 0 ? 'start' : 'end');
         } else {
           portLabel.setAttribute('text-anchor', 'middle');
@@ -1260,8 +1360,13 @@ function isSelected(inValue,compareValue){
     }
     
     function createEdge(fromId, toId, fromPort) {
-      // Enforce single connection per port: remove any existing edge from this port
-      edges = edges.filter(e => !(e.from === fromId && e.fromPort === fromPort));
+      const fromNode = nodes[fromId];
+      const allowMultiple = Boolean(fromNode && fromNode.type === 'split-join' && (fromNode.data?.mode || 'split') === 'split');
+
+      // Enforce single connection per port except split mode split-join nodes.
+      if (!allowMultiple) {
+        edges = edges.filter(e => !(e.from === fromId && e.fromPort === fromPort));
+      }
       
       edgeIdCounter++;
       const label = fromPort === 'out' ? 'next' : fromPort;
@@ -1351,6 +1456,7 @@ function isSelected(inValue,compareValue){
       
       document.getElementById('prop-execute').style.display = node.type === 'execute' ? 'block' : 'none';
       document.getElementById('prop-condition').style.display = node.type === 'condition' ? 'block' : 'none';
+      document.getElementById('prop-split-join').style.display = node.type === 'split-join' ? 'block' : 'none';
       document.getElementById('prop-end').style.display = node.type.startsWith('end') ? 'block' : 'none';
       
       if (node.type === 'execute') {
@@ -1444,6 +1550,43 @@ function isSelected(inValue,compareValue){
         document.getElementById('prop-condition-value').oninput = function() {
           node.data.conditionValue = this.value;
         };
+      } else if (node.type === 'split-join') {
+        if (!node.data) node.data = {};
+        if (!node.data.mode) node.data.mode = 'split';
+        if (!node.data.joinStrategy) node.data.joinStrategy = 'waitAll';
+        if (!node.data.errorPolicy) node.data.errorPolicy = 'waitForAll';
+
+        const modeSelect = document.getElementById('prop-sj-mode');
+        const joinStrategySelect = document.getElementById('prop-sj-join-strategy');
+        const errorPolicySelect = document.getElementById('prop-sj-error-policy');
+        const joinStrategySection = document.getElementById('prop-sj-join-strategy-section');
+        const errorPolicySection = document.getElementById('prop-sj-error-policy-section');
+
+        modeSelect.value = node.data.mode;
+        joinStrategySelect.value = node.data.joinStrategy;
+        errorPolicySelect.value = node.data.errorPolicy;
+
+        const updateSplitJoinPropertyVisibility = () => {
+          const isJoin = modeSelect.value === 'join';
+          joinStrategySection.style.display = isJoin ? 'block' : 'none';
+          errorPolicySection.style.display = isJoin ? 'block' : 'none';
+        };
+
+        updateSplitJoinPropertyVisibility();
+
+        const updateSplitJoinNode = () => {
+          node.data.mode = modeSelect.value;
+          node.data.joinStrategy = joinStrategySelect.value;
+          node.data.errorPolicy = errorPolicySelect.value;
+          updateSplitJoinPropertyVisibility();
+          node.ports = getSplitJoinPorts(node.data.mode);
+          renderNode(selectedNode);
+          renderAllEdges();
+        };
+
+        modeSelect.onchange = updateSplitJoinNode;
+        joinStrategySelect.onchange = updateSplitJoinNode;
+        errorPolicySelect.onchange = updateSplitJoinNode;
       } else if (node.type === 'end-success') {
         document.getElementById('prop-end-type-display').textContent = 'Success';
       } else if (node.type === 'end-failure') {
@@ -1543,6 +1686,10 @@ function isSelected(inValue,compareValue){
                   { id: 'true', label: 'true', x: -28, y: 0 },
                   { id: 'false', label: 'false', x: 28, y: 0 }
                 ];
+              } else if (type === 'split-join') {
+                icon = 'account_tree';
+                const mode = (n.data && n.data.mode) ? n.data.mode : 'split';
+                ports = getSplitJoinPorts(mode);
               } else if (type === 'end-success') {
                 icon = 'check_circle';
               } else if (type === 'end-failure') {
@@ -1688,6 +1835,25 @@ function isSelected(inValue,compareValue){
           }
           if (falseEdges.length === 0) {
             errors.push(`Condition node "${node.label}" is missing a False path (right exit).`);
+          }
+        } else if (node.type === 'split-join') {
+          const mode = node.data?.mode || 'split';
+          const outgoing = edges.filter(e => e.from === node.id);
+          const incoming = edges.filter(e => e.to === node.id);
+
+          if (mode === 'split') {
+            if (outgoing.length < 2) {
+              errors.push(`Split/Join node "${node.label}" in split mode must have at least 2 outgoing paths.`);
+            }
+          }
+
+          if (mode === 'join') {
+            if (incoming.length < 2) {
+              errors.push(`Split/Join node "${node.label}" in join mode must have at least 2 incoming paths.`);
+            }
+            if (outgoing.length === 0) {
+              errors.push(`Split/Join node "${node.label}" in join mode must have an outgoing path.`);
+            }
           }
         }
       });

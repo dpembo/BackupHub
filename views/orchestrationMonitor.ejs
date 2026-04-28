@@ -463,6 +463,13 @@
       animation: nodeSpinning 2s linear infinite, nodeBlinking 1s ease-in-out infinite;
     }
 
+    .node-in-progress polygon {
+      stroke: #ff9800 !important;
+      stroke-width: 3 !important;
+      stroke-dasharray: 20, 8;
+      animation: nodeSpinning 2s linear infinite, nodeBlinking 1s ease-in-out infinite;
+    }
+
     @keyframes nodeSpinning {
       0% {
         stroke-dashoffset: 0;
@@ -491,6 +498,13 @@
       opacity: 1 !important;
     }
 
+    .node-completed polygon {
+      stroke: #4caf50 !important;
+      stroke-width: 2 !important;
+      animation: none !important;
+      opacity: 1 !important;
+    }
+
     .node-failed rect {
       stroke: #f44336 !important;
       stroke-width: 2 !important;
@@ -503,6 +517,35 @@
       stroke-width: 2 !important;
       animation: none !important;
       opacity: 1 !important;
+    }
+
+    .node-failed polygon {
+      stroke: #f44336 !important;
+      stroke-width: 2 !important;
+      animation: none !important;
+      opacity: 1 !important;
+    }
+
+    /* Concurrent path highlighting */
+    .node-concurrent rect,
+    .node-concurrent circle,
+    .node-concurrent polygon {
+      filter: drop-shadow(0 0 6px rgba(0, 150, 136, 0.45));
+    }
+
+    .concurrent-pill {
+      fill: #009688;
+      opacity: 0.95;
+    }
+
+    .concurrent-pill-text {
+      fill: #ffffff;
+      font-size: 9px;
+      font-weight: 600;
+      text-anchor: middle;
+      dominant-baseline: middle;
+      letter-spacing: 0.2px;
+      pointer-events: none;
     }
 
     /* Progress bar styling */
@@ -1148,7 +1191,8 @@
 
       const rect = nodeElement.querySelector('rect');
       const circle = nodeElement.querySelector('circle');
-      const shape = rect || circle; // Get whichever shape element exists
+      const polygon = nodeElement.querySelector('polygon');
+      const shape = rect || circle || polygon; // Get whichever shape element exists
       let iconElement = nodeElement.querySelector('.node-status-icon');
       let iconText = '';
       let iconColor = '#9e9e9e';
@@ -1255,7 +1299,7 @@
         };
       }
 
-      if (node.type === 'start' || node.type === 'condition' || node.type === 'end-success') {
+      if (node.type === 'start' || node.type === 'condition' || node.type === 'split-join' || node.type === 'end-success') {
         return {
           state: 'success',
           text: 'Success',
@@ -1503,11 +1547,14 @@
       } else if (statusInfo.state === 'success') {
         nodeClasses.push('node-completed');
       }
+      if (node.concurrent) {
+        nodeClasses.push('node-concurrent');
+      }
       g.setAttribute('class', nodeClasses.join(' '));
 
       // Check if node is a circular node type (start, end-success, end-failure)
       const isCircularNode = node.type === 'start' || node.type === 'end-success' || node.type === 'end-failure';
-      const isDiamondNode = node.type === 'condition';
+      const isDiamondNode = node.type === 'condition' || node.type === 'split-join';
       const circleRadius = 28;
       const diamondSize = 28;
 
@@ -1585,7 +1632,12 @@
         text.setAttribute('fill', 'var(--text-primary)');
         text.setAttribute('text-anchor', 'middle');
         text.setAttribute('dominant-baseline', 'middle');
-        text.textContent = node.label;
+        if (node.type === 'split-join') {
+          const mode = node.data?.mode === 'join' ? 'join' : 'split';
+          text.textContent = mode;
+        } else {
+          text.textContent = node.label;
+        }
         g.appendChild(text);
       } else {
         // Rectangle background for execute nodes
@@ -1640,6 +1692,29 @@
         }
       }
 
+      if (node.concurrent) {
+        const pillWidth = 58;
+        const pillHeight = 16;
+        const nodeTopY = (isCircularNode || isDiamondNode) ? (node.y - 32) : (node.y - CANVAS.nodeHeight / 2);
+        const pillY = nodeTopY - 20;
+
+        const pill = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        pill.setAttribute('x', node.x - pillWidth / 2);
+        pill.setAttribute('y', pillY);
+        pill.setAttribute('width', pillWidth);
+        pill.setAttribute('height', pillHeight);
+        pill.setAttribute('rx', '8');
+        pill.setAttribute('class', 'concurrent-pill');
+        g.appendChild(pill);
+
+        const pillText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        pillText.setAttribute('x', node.x);
+        pillText.setAttribute('y', pillY + pillHeight / 2 + 0.5);
+        pillText.setAttribute('class', 'concurrent-pill-text');
+        pillText.textContent = 'PARALLEL';
+        g.appendChild(pillText);
+      }
+
       layer.appendChild(g);
     }
 
@@ -1659,11 +1734,15 @@
         arrowMarker = 'url(#arrowhead-blue)';
       }
 
+      if (edge.executed && edge.concurrent) {
+        edgeColor = '#009688';
+      }
+
       // Determine node types to calculate proper port positions
       const fromIsCircular = fromNode.type === 'start' || fromNode.type === 'end-success' || fromNode.type === 'end-failure';
       const toIsCircular = toNode.type === 'start' || toNode.type === 'end-success' || toNode.type === 'end-failure';
-      const fromIsDiamond = fromNode.type === 'condition';
-      const toIsDiamond = toNode.type === 'condition';
+      const fromIsDiamond = fromNode.type === 'condition' || fromNode.type === 'split-join';
+      const toIsDiamond = toNode.type === 'condition' || toNode.type === 'split-join';
       const circleRadius = 28;
       const diamondSize = 28;
 
@@ -1673,6 +1752,17 @@
       if (fromIsCircular) {
         fromX = fromNode.x;
         fromY = fromNode.y + circleRadius + 4; // Account for circle radius + small buffer
+      } else if (fromNode.type === 'condition') {
+        if (edge.fromPort === 'true') {
+          fromX = fromNode.x - diamondSize - 4;
+          fromY = fromNode.y;
+        } else if (edge.fromPort === 'false') {
+          fromX = fromNode.x + diamondSize + 4;
+          fromY = fromNode.y;
+        } else {
+          fromX = fromNode.x;
+          fromY = fromNode.y + diamondSize + 4;
+        }
       } else if (fromIsDiamond) {
         fromX = fromNode.x;
         fromY = fromNode.y + diamondSize + 4; // Account for diamond size + small buffer
@@ -1702,6 +1792,9 @@
       path.setAttribute('stroke-width', '2');
       path.setAttribute('fill', 'none');
       path.setAttribute('marker-end', arrowMarker);
+      if (edge.executed && edge.concurrent) {
+        path.setAttribute('stroke-dasharray', '6,4');
+      }
       layer.appendChild(path);
 
       // Add edge label
@@ -2002,6 +2095,19 @@
         }
       }
 
+      let concurrentHtml = '';
+      if (node.concurrent) {
+        const peerLabels = (node.concurrentWith || [])
+          .map(peerId => executionData.nodes.find(n => n.id === peerId)?.label || peerId)
+          .map(label => escapeHtml(label))
+          .join(', ');
+
+        concurrentHtml = `<div class="detail-item">
+          <div class="detail-label">Parallel</div>
+          <div class="detail-value">Yes${peerLabels ? ` (with ${peerLabels})` : ''}</div>
+        </div>`;
+      }
+
       // Exit code
       let exitCodeHtml = '';
       let displayExitCode = 'N/A';
@@ -2045,8 +2151,9 @@
           </div>
           <div class="detail-item">
             <div class="detail-label">Node Type</div>
-            <div class="detail-value">${escapeHtml(node.type)}</div>
+            <div class="detail-value">${escapeHtml(node.type === 'split-join' ? `split-join (${node.data?.mode || 'split'})` : node.type)}</div>
           </div>
+          ${concurrentHtml}
           ${conditionHtml}
           <div class="detail-item">
             <div class="detail-label">Start Time</div>
