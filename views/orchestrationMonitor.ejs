@@ -1234,14 +1234,20 @@
         }
         
         // Position icon based on shape type
+        const nodeType = nodeElement.getAttribute('data-node-type');
+        const isEndNodeType = nodeType === 'end-success' || nodeType === 'end-failure';
         if (circle) {
-          // For circles, center the icon
+          // For circles (start node), center the icon
           const cx = Number(circle.getAttribute('cx'));
           const cy = Number(circle.getAttribute('cy'));
           iconElement.setAttribute('x', cx);
           iconElement.setAttribute('y', cy - 4);
+        } else if (rect && isEndNodeType) {
+          // For end node squares, center the icon
+          iconElement.setAttribute('x', Number(rect.getAttribute('x')) + Number(rect.getAttribute('width')) / 2);
+          iconElement.setAttribute('y', Number(rect.getAttribute('y')) + Number(rect.getAttribute('height')) / 2 - 4);
         } else if (rect) {
-          // For rectangles, position icon on the left
+          // For execute rectangles, position icon on the left
           iconElement.setAttribute('x', Number(rect.getAttribute('x')) + 12);
           iconElement.setAttribute('y', Number(rect.getAttribute('y')) + (Number(rect.getAttribute('height')) / 2));
         }
@@ -1446,51 +1452,59 @@
       const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
       const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
       marker.setAttribute('id', 'arrowhead-green');
-      marker.setAttribute('markerWidth', '10');
-      marker.setAttribute('markerHeight', '10');
-      marker.setAttribute('refX', '9');
-      marker.setAttribute('refY', '3');
+      marker.setAttribute('markerWidth', '8');
+      marker.setAttribute('markerHeight', '8');
+      marker.setAttribute('refX', '8');
+      marker.setAttribute('refY', '4');
+      marker.setAttribute('viewBox', '0 0 8 8');
+      marker.setAttribute('markerUnits', 'userSpaceOnUse');
       marker.setAttribute('orient', 'auto');
       const polyGreen = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
-      polyGreen.setAttribute('points', '0 0, 10 3, 0 6');
+      polyGreen.setAttribute('points', '0 0, 8 4, 0 8');
       polyGreen.setAttribute('fill', getCSSVariable('--success-color', '#4caf50'));
       marker.appendChild(polyGreen);
       defs.appendChild(marker);
 
       const markerRed = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
       markerRed.setAttribute('id', 'arrowhead-red');
-      markerRed.setAttribute('markerWidth', '10');
-      markerRed.setAttribute('markerHeight', '10');
-      markerRed.setAttribute('refX', '9');
-      markerRed.setAttribute('refY', '3');
+      markerRed.setAttribute('markerWidth', '8');
+      markerRed.setAttribute('markerHeight', '8');
+      markerRed.setAttribute('refX', '8');
+      markerRed.setAttribute('refY', '4');
+      markerRed.setAttribute('viewBox', '0 0 8 8');
+      markerRed.setAttribute('markerUnits', 'userSpaceOnUse');
       markerRed.setAttribute('orient', 'auto');
       const polyRed = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
-      polyRed.setAttribute('points', '0 0, 10 3, 0 6');
+      polyRed.setAttribute('points', '0 0, 8 4, 0 8');
       polyRed.setAttribute('fill', getCSSVariable('--error-color', '#f44336'));
       markerRed.appendChild(polyRed);
       defs.appendChild(markerRed);
 
       const markerGrey = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
       markerGrey.setAttribute('id', 'arrowhead-grey');
-      markerGrey.setAttribute('markerWidth', '10');
-      markerGrey.setAttribute('markerHeight', '10');
-      markerGrey.setAttribute('refX', '9');
-      markerGrey.setAttribute('refY', '3');
+      markerGrey.setAttribute('markerWidth', '8');
+      markerGrey.setAttribute('markerHeight', '8');
+      markerGrey.setAttribute('refX', '8');
+      markerGrey.setAttribute('refY', '4');
+      markerGrey.setAttribute('viewBox', '0 0 8 8');
+      markerGrey.setAttribute('markerUnits', 'userSpaceOnUse');
       markerGrey.setAttribute('orient', 'auto');
       const polyGrey = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
-      polyGrey.setAttribute('points', '0 0, 10 3, 0 6');
+      polyGrey.setAttribute('points', '0 0, 8 4, 0 8');
       polyGrey.setAttribute('fill', getCSSVariable('--text-muted', '#999999'));
       markerGrey.appendChild(polyGrey);
       defs.appendChild(markerGrey);
       const markerBlue = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
       markerBlue.setAttribute('id', 'arrowhead-blue');
-      markerBlue.setAttribute('markerWidth', '10');
-      markerBlue.setAttribute('markerHeight', '10');
-      markerBlue.setAttribute('refX', '9');
-      markerBlue.setAttribute('refY', '3');
+      markerBlue.setAttribute('markerWidth', '8');
+      markerBlue.setAttribute('markerHeight', '8');
+      markerBlue.setAttribute('refX', '8');
+      markerBlue.setAttribute('refY', '4');
+      markerBlue.setAttribute('viewBox', '0 0 8 8');
+      markerBlue.setAttribute('markerUnits', 'userSpaceOnUse');
       markerBlue.setAttribute('orient', 'auto');
       const polyBlue = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
-      polyBlue.setAttribute('points', '0 0, 10 3, 0 6');
+      polyBlue.setAttribute('points', '0 0, 8 4, 0 8');
       polyBlue.setAttribute('fill', getCSSVariable('--primary-color', '#2196f3'));
       markerBlue.appendChild(polyBlue);
       defs.appendChild(markerBlue);
@@ -1539,6 +1553,7 @@
       // Create node group
       const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
       g.setAttribute('data-node-id', node.id);
+      g.setAttribute('data-node-type', node.type);
       const nodeClasses = ['workflow-node'];
       if (statusInfo.state === 'in-progress') {
         nodeClasses.push('node-in-progress');
@@ -1552,14 +1567,19 @@
       }
       g.setAttribute('class', nodeClasses.join(' '));
 
-      // Check if node is a circular node type (start, end-success, end-failure)
-      const isCircularNode = node.type === 'start' || node.type === 'end-success' || node.type === 'end-failure';
+      // Check if node is a circular node type (start only), end nodes, or diamond
+      const isStartNode = node.type === 'start';
+      const isEndNode = node.type === 'end-success' || node.type === 'end-failure';
       const isDiamondNode = node.type === 'condition' || node.type === 'split-join';
       const circleRadius = 28;
       const diamondSize = 28;
+      const squareHalf = 28;
+      const squareSize = squareHalf * 2;
 
-      if (isCircularNode) {
-        // Circular background for start, success, failure nodes
+      const nodeIconMap = { 'play_arrow': 'play_arrow', 'check_circle': 'check_circle', 'error': 'error', 'settings': 'settings', 'device_hub': 'device_hub', 'account_tree': 'account_tree' };
+
+      if (isStartNode) {
+        // Circle — matches builder layout (icon + label inside)
         const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
         circle.setAttribute('cx', node.x);
         circle.setAttribute('cy', node.y);
@@ -1569,7 +1589,20 @@
         circle.setAttribute('stroke-width', '2');
         g.appendChild(circle);
 
-        // Status icon centered in circle
+        // Material icon inside circle
+        const matIcon = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        matIcon.setAttribute('x', node.x);
+        matIcon.setAttribute('y', node.y - 2);
+        matIcon.setAttribute('font-family', 'Material Icons');
+        matIcon.setAttribute('font-size', '20');
+        matIcon.setAttribute('pointer-events', 'none');
+        matIcon.setAttribute('text-anchor', 'middle');
+        matIcon.setAttribute('dominant-baseline', 'middle');
+        matIcon.setAttribute('fill', getCSSVariable('--success-color', '#4caf50'));
+        matIcon.textContent = nodeIconMap[node.icon] || 'play_arrow';
+        g.appendChild(matIcon);
+
+        // Status icon overlaid when executing
         if (statusIcon) {
           const iconText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
           iconText.setAttribute('class', 'node-status-icon');
@@ -1583,15 +1616,67 @@
           g.appendChild(iconText);
         }
 
-        // Node label below circle
+        // Label inside circle (below icon)
         const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         text.setAttribute('x', node.x);
-        text.setAttribute('y', node.y + circleRadius + 16);
-        text.setAttribute('font-size', '11');
+        text.setAttribute('y', node.y + 10);
+        text.setAttribute('font-size', '9');
         text.setAttribute('font-weight', '500');
         text.setAttribute('fill', 'var(--text-primary)');
         text.setAttribute('text-anchor', 'middle');
         text.setAttribute('dominant-baseline', 'middle');
+        text.setAttribute('pointer-events', 'none');
+        text.textContent = node.label;
+        g.appendChild(text);
+      } else if (isEndNode) {
+        // Square — matches builder layout (icon + label inside)
+        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        rect.setAttribute('x', node.x - squareHalf);
+        rect.setAttribute('y', node.y - squareHalf);
+        rect.setAttribute('width', squareSize);
+        rect.setAttribute('height', squareSize);
+        rect.setAttribute('fill', getCSSVariable('--surface-color', '#ffffff'));
+        rect.setAttribute('stroke', borderColor);
+        rect.setAttribute('stroke-width', '2');
+        g.appendChild(rect);
+
+        // Material icon inside square
+        const matIcon = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        matIcon.setAttribute('x', node.x);
+        matIcon.setAttribute('y', node.y - 2);
+        matIcon.setAttribute('font-family', 'Material Icons');
+        matIcon.setAttribute('font-size', '20');
+        matIcon.setAttribute('pointer-events', 'none');
+        matIcon.setAttribute('text-anchor', 'middle');
+        matIcon.setAttribute('dominant-baseline', 'middle');
+        matIcon.setAttribute('fill', node.type === 'end-success' ? getCSSVariable('--success-color', '#4caf50') : getCSSVariable('--error-color', '#f44336'));
+        matIcon.textContent = nodeIconMap[node.icon] || (node.type === 'end-success' ? 'check_circle' : 'error');
+        g.appendChild(matIcon);
+
+        // Status icon overlaid when executing
+        if (statusIcon) {
+          const iconText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          iconText.setAttribute('class', 'node-status-icon');
+          iconText.setAttribute('x', node.x);
+          iconText.setAttribute('y', node.y - 4);
+          iconText.setAttribute('font-size', '18');
+          iconText.setAttribute('fill', borderColor);
+          iconText.setAttribute('dominant-baseline', 'middle');
+          iconText.setAttribute('text-anchor', 'middle');
+          iconText.textContent = statusIcon;
+          g.appendChild(iconText);
+        }
+
+        // Label inside square (below icon)
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('x', node.x);
+        text.setAttribute('y', node.y + 10);
+        text.setAttribute('font-size', '9');
+        text.setAttribute('font-weight', '500');
+        text.setAttribute('fill', 'var(--text-primary)');
+        text.setAttribute('text-anchor', 'middle');
+        text.setAttribute('dominant-baseline', 'middle');
+        text.setAttribute('pointer-events', 'none');
         text.textContent = node.label;
         g.appendChild(text);
       } else if (isDiamondNode) {
@@ -1695,7 +1780,7 @@
       if (node.concurrent) {
         const pillWidth = 58;
         const pillHeight = 16;
-        const nodeTopY = (isCircularNode || isDiamondNode) ? (node.y - 32) : (node.y - CANVAS.nodeHeight / 2);
+        const nodeTopY = (isStartNode || isEndNode || isDiamondNode) ? (node.y - 32) : (node.y - CANVAS.nodeHeight / 2);
         const pillY = nodeTopY - 20;
 
         const pill = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
@@ -1739,8 +1824,12 @@
       }
 
       // Determine node types to calculate proper port positions
-      const fromIsCircular = fromNode.type === 'start' || fromNode.type === 'end-success' || fromNode.type === 'end-failure';
-      const toIsCircular = toNode.type === 'start' || toNode.type === 'end-success' || toNode.type === 'end-failure';
+      const fromIsStart = fromNode.type === 'start';
+      const fromIsEnd = fromNode.type === 'end-success' || fromNode.type === 'end-failure';
+      const fromIsCircular = fromIsStart || fromIsEnd;
+      const toIsStart = toNode.type === 'start';
+      const toIsEnd = toNode.type === 'end-success' || toNode.type === 'end-failure';
+      const toIsCircular = toIsStart || toIsEnd;
       const fromIsDiamond = fromNode.type === 'condition' || fromNode.type === 'split-join';
       const toIsDiamond = toNode.type === 'condition' || toNode.type === 'split-join';
       const circleRadius = 28;
