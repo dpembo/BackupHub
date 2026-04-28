@@ -38,7 +38,7 @@ function isSelected(inValue,compareValue){
     #orchestration-main { display: flex; flex: 1; overflow: hidden; }
     #orchestration-palette { width: 250px; background: white; border-right: 1px solid #ddd; overflow-y: auto; padding: 15px; flex-shrink: 0; }
     #orchestration-canvas { flex: 1; background: #fafafa; position: relative; overflow: auto; }
-    #orchestration-canvas svg { display: block; width: 100%; height: auto; min-height: 100%; background: #fafafa; }
+    #orchestration-canvas svg { display: block; min-width: 100%; min-height: 100%; background: #fafafa; }
     #orchestration-properties { width: 300px; background: white; border-left: 1px solid #ddd; overflow-y: auto; padding: 15px; flex-shrink: 0; position: fixed; right: 0; top: 142px; bottom: 55px; transform: translateX(100%); transition: transform 0.3s ease-in-out; z-index: 50; }
     #orchestration-properties.show { transform: translateX(0); }
     #zoom-controls { right: 20px; }
@@ -377,8 +377,8 @@ function isSelected(inValue,compareValue){
       <div id="orchestration-canvas">
         <svg id="orchestration-svg">
           <defs>
-            <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
-              <polygon points="0 0, 10 3, 0 6" fill="#333" />
+            <marker id="arrowhead" markerWidth="8" markerHeight="8" refX="8" refY="4" viewBox="0 0 8 8" orient="auto" markerUnits="userSpaceOnUse">
+              <polygon points="0 0, 8 4, 0 8" fill="#333" />
             </marker>
           </defs>
         </svg>
@@ -389,6 +389,7 @@ function isSelected(inValue,compareValue){
         <div id="zoom-level" style="min-width: 50px; text-align: center; line-height: 32px; font-size: 12px; color: #666; font-weight: 500;">100%</div>
         <button id="zoom-in" style="width: 32px; height: 32px; border: 1px solid #ddd; background: white; border-radius: 3px; cursor: pointer; font-size: 14px; font-weight: bold; color: #333;" title="Zoom In">+</button>
         <button id="zoom-reset" style="width: 32px; height: 32px; border: 1px solid #ddd; background: white; border-radius: 3px; cursor: pointer; font-size: 11px; font-weight: bold; color: #333;" title="Reset Zoom">↻</button>
+        <button id="zoom-auto-layout" style="width: 32px; height: 32px; border: 1px solid #ddd; background: white; border-radius: 3px; cursor: pointer; font-size: 17px; font-weight: bold; color: #333; line-height: 1;" title="Auto Layout">⤧</button>
       </div>
       
       <!-- Properties -->
@@ -569,10 +570,14 @@ function isSelected(inValue,compareValue){
     const CANVAS = {
       width: 1200,
       height: 800,
+      minWidth: 1200,
+      minHeight: 800,
       nodeWidth: 200,
       nodeHeight: 60,
       portRadius: 6,
-      verticalSpacing: 150
+      verticalSpacing: 150,
+      expandPadding: 200,
+      expandStep: 400
     };
     
     // Helper function to get CSS variable values with fallback
@@ -672,6 +677,100 @@ function isSelected(inValue,compareValue){
       svg.addEventListener('click', onSVGClick);
       svg.addEventListener('mousemove', onSVGMouseMove);
       svg.addEventListener('mouseup', onSVGMouseUp);
+    }
+
+    function roundUpToStep(value, step) {
+      return Math.ceil(value / step) * step;
+    }
+
+    function updateCanvasSizeIfNeeded(targetWidth, targetHeight) {
+      const nextWidth = Math.max(CANVAS.minWidth, targetWidth);
+      const nextHeight = Math.max(CANVAS.minHeight, targetHeight);
+      if (nextWidth <= CANVAS.width && nextHeight <= CANVAS.height) return;
+
+      CANVAS.width = Math.max(CANVAS.width, nextWidth);
+      CANVAS.height = Math.max(CANVAS.height, nextHeight);
+      svg.setAttribute('width', CANVAS.width);
+      svg.setAttribute('height', CANVAS.height);
+      svg.setAttribute('viewBox', `0 0 ${CANVAS.width} ${CANVAS.height}`);
+    }
+
+    function shrinkCanvasToFitNodes() {
+      let maxRight = 0;
+      let maxBottom = 0;
+
+      nodeLayer.querySelectorAll('[data-node-id]').forEach(nodeGroup => {
+        const bounds = nodeGroup.getBBox();
+        maxRight = Math.max(maxRight, bounds.x + bounds.width);
+        maxBottom = Math.max(maxBottom, bounds.y + bounds.height);
+      });
+
+      if (maxRight === 0 && maxBottom === 0) {
+        CANVAS.width = CANVAS.minWidth;
+        CANVAS.height = CANVAS.minHeight;
+        svg.setAttribute('width', CANVAS.width);
+        svg.setAttribute('height', CANVAS.height);
+        svg.setAttribute('viewBox', `0 0 ${CANVAS.width} ${CANVAS.height}`);
+        return;
+      }
+
+      const horizontalDropRoom = CANVAS.nodeWidth + 120;
+      const verticalDropRoom = CANVAS.nodeHeight + CANVAS.verticalSpacing;
+      const rightPadding = Math.max(CANVAS.expandPadding, horizontalDropRoom);
+      const bottomPadding = Math.max(CANVAS.expandPadding, verticalDropRoom);
+
+      const targetWidth = Math.max(
+        CANVAS.minWidth,
+        roundUpToStep(maxRight + rightPadding, CANVAS.expandStep)
+      );
+      const targetHeight = Math.max(
+        CANVAS.minHeight,
+        roundUpToStep(maxBottom + bottomPadding, CANVAS.expandStep)
+      );
+
+      if (targetWidth >= CANVAS.width && targetHeight >= CANVAS.height) return;
+
+      CANVAS.width = Math.min(CANVAS.width, targetWidth);
+      CANVAS.height = Math.min(CANVAS.height, targetHeight);
+      svg.setAttribute('width', CANVAS.width);
+      svg.setAttribute('height', CANVAS.height);
+      svg.setAttribute('viewBox', `0 0 ${CANVAS.width} ${CANVAS.height}`);
+    }
+
+    function expandCanvasForNode(nodeId) {
+      if (!nodeLayer) return;
+      const nodeGroup = nodeLayer.querySelector(`[data-node-id="${nodeId}"]`);
+      if (!nodeGroup) return;
+
+      const bounds = nodeGroup.getBBox();
+      const requiredWidth = bounds.x + bounds.width + CANVAS.expandPadding;
+      const requiredHeight = bounds.y + bounds.height + CANVAS.expandPadding;
+
+      const targetWidth = requiredWidth > CANVAS.width
+        ? roundUpToStep(requiredWidth, CANVAS.expandStep)
+        : CANVAS.width;
+      const targetHeight = requiredHeight > CANVAS.height
+        ? roundUpToStep(requiredHeight, CANVAS.expandStep)
+        : CANVAS.height;
+
+      updateCanvasSizeIfNeeded(targetWidth, targetHeight);
+    }
+
+    function expandCanvasForAllNodes() {
+      let maxRight = 0;
+      let maxBottom = 0;
+
+      nodeLayer.querySelectorAll('[data-node-id]').forEach(nodeGroup => {
+        const bounds = nodeGroup.getBBox();
+        maxRight = Math.max(maxRight, bounds.x + bounds.width);
+        maxBottom = Math.max(maxBottom, bounds.y + bounds.height);
+      });
+
+      if (maxRight === 0 && maxBottom === 0) return;
+
+      const targetWidth = roundUpToStep(maxRight + CANVAS.expandPadding, CANVAS.expandStep);
+      const targetHeight = roundUpToStep(maxBottom + CANVAS.expandPadding, CANVAS.expandStep);
+      updateCanvasSizeIfNeeded(targetWidth, targetHeight);
     }
     
     function setupDragAndDrop() {
@@ -780,12 +879,209 @@ function isSelected(inValue,compareValue){
         zoomLevel = 1;
         applyZoom();
       });
+
+      document.getElementById('zoom-auto-layout').addEventListener('click', function() {
+        autoLayoutOrchestration();
+      });
     }
     
     function applyZoom() {
       svg.style.transform = `scale(${zoomLevel})`;
       svg.style.transformOrigin = '0 0';
       document.getElementById('zoom-level').textContent = Math.round(zoomLevel * 100) + '%';
+    }
+
+    function getNodeDimensions(node) {
+      const isCircularNode = node.type === 'start' || node.type === 'end-success' || node.type === 'end-failure';
+      const isDiamondNode = node.type === 'condition' || node.type === 'split-join';
+
+      if (isCircularNode || isDiamondNode) {
+        return { width: 56, height: 56 };
+      }
+
+      const tempText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      tempText.setAttribute('font-family', 'Arial, sans-serif');
+      tempText.setAttribute('font-size', '14');
+      tempText.setAttribute('font-weight', '500');
+      tempText.textContent = node.label || 'Node';
+      nodeLayer.appendChild(tempText);
+      const textWidth = tempText.getComputedTextLength();
+      nodeLayer.removeChild(tempText);
+
+      return {
+        width: Math.max(200, 18 + 8 + textWidth + 16),
+        height: CANVAS.nodeHeight
+      };
+    }
+
+    function autoLayoutOrchestration() {
+      const nodeIds = Object.keys(nodes);
+      if (!nodeIds.length) return;
+
+      const incoming = {};
+      const incomingEdgeMeta = {};
+      const outgoing = {};
+      const indegree = {};
+      const depth = {};
+      const nodeDims = {};
+
+      nodeIds.forEach(id => {
+        incoming[id] = [];
+        incomingEdgeMeta[id] = [];
+        outgoing[id] = [];
+        indegree[id] = 0;
+        depth[id] = 0;
+        nodeDims[id] = getNodeDimensions(nodes[id]);
+      });
+
+      edges.forEach(edge => {
+        if (!nodes[edge.from] || !nodes[edge.to]) return;
+        outgoing[edge.from].push(edge.to);
+        incoming[edge.to].push(edge.from);
+        incomingEdgeMeta[edge.to].push({
+          parentId: edge.from,
+          fromPort: edge.fromPort
+        });
+        indegree[edge.to] += 1;
+      });
+
+      const queue = nodeIds.filter(id => indegree[id] === 0);
+      const indegreeWork = { ...indegree };
+      const topo = [];
+
+      while (queue.length) {
+        const current = queue.shift();
+        topo.push(current);
+        outgoing[current].forEach(next => {
+          depth[next] = Math.max(depth[next], depth[current] + 1);
+          indegreeWork[next] -= 1;
+          if (indegreeWork[next] === 0) queue.push(next);
+        });
+      }
+
+      // Handle cyclic subgraphs by appending remaining nodes and placing them after their deepest parent.
+      const remaining = nodeIds.filter(id => !topo.includes(id));
+      remaining.forEach(id => {
+        const parentDepths = incoming[id].map(parentId => depth[parentId] || 0);
+        depth[id] = parentDepths.length ? Math.max(...parentDepths) + 1 : 0;
+        topo.push(id);
+      });
+
+      const layers = {};
+      topo.forEach(id => {
+        const layerId = depth[id] || 0;
+        if (!layers[layerId]) layers[layerId] = [];
+        layers[layerId].push(id);
+      });
+
+      const layerIds = Object.keys(layers).map(v => parseInt(v, 10)).sort((a, b) => a - b);
+      const rankByLayer = {};
+
+      function getConditionBranchBias(parentId, fromPort) {
+        const parentNode = nodes[parentId];
+        if (!parentNode || parentNode.type !== 'condition') return 0;
+        if (fromPort === 'true') return -0.35;
+        if (fromPort === 'false') return 0.35;
+        return 0;
+      }
+
+      function getNodeOrderScore(nodeId, prevRank) {
+        const parentEdges = incomingEdgeMeta[nodeId] || [];
+        if (!parentEdges.length) return Number.MAX_SAFE_INTEGER;
+
+        const weightedScore = parentEdges.reduce((sum, edgeMeta) => {
+          const parentRank = prevRank[edgeMeta.parentId] ?? 0;
+          return sum + parentRank + getConditionBranchBias(edgeMeta.parentId, edgeMeta.fromPort);
+        }, 0);
+
+        return weightedScore / parentEdges.length;
+      }
+
+      // One forward barycenter pass for better readability and fewer edge crossings.
+      layerIds.forEach((layerId, idx) => {
+        if (idx === 0) {
+          rankByLayer[layerId] = {};
+          layers[layerId].forEach((id, rank) => {
+            rankByLayer[layerId][id] = rank;
+          });
+          return;
+        }
+
+        const prevLayerId = layerIds[idx - 1];
+        const prevRank = rankByLayer[prevLayerId] || {};
+
+        layers[layerId].sort((a, b) => {
+          const aScore = getNodeOrderScore(a, prevRank);
+          const bScore = getNodeOrderScore(b, prevRank);
+          if (aScore !== bScore) return aScore - bScore;
+
+          // Keep relative stability between reruns when scores are equal.
+          return (nodes[a].x || 0) - (nodes[b].x || 0);
+        });
+
+        rankByLayer[layerId] = {};
+        layers[layerId].forEach((id, rank) => {
+          rankByLayer[layerId][id] = rank;
+        });
+      });
+
+      const horizontalGap = 70;
+      const verticalGap = 120;
+      const topPadding = 120;
+      const sidePadding = 120;
+
+      const maxLayerWidth = Math.max(...layerIds.map(layerId => {
+        const ids = layers[layerId];
+        const widthSum = ids.reduce((sum, id) => sum + nodeDims[id].width, 0);
+        return widthSum + Math.max(0, ids.length - 1) * horizontalGap;
+      }));
+
+      layerIds.forEach(layerId => {
+        const ids = layers[layerId];
+        const widthSum = ids.reduce((sum, id) => sum + nodeDims[id].width, 0);
+        const layerWidth = widthSum + Math.max(0, ids.length - 1) * horizontalGap;
+        let cursorX = sidePadding + (maxLayerWidth - layerWidth) / 2;
+
+        ids.forEach(id => {
+          const dim = nodeDims[id];
+          nodes[id].x = cursorX + dim.width / 2;
+          nodes[id].y = topPadding + (layerId * verticalGap);
+          cursorX += dim.width + horizontalGap;
+        });
+      });
+
+      // Ensure condition branch semantics: true branch node should sit left of false branch when peers share a layer.
+      const nextNodeByPort = {};
+      edges.forEach(edge => {
+        if (!nextNodeByPort[edge.from]) nextNodeByPort[edge.from] = {};
+        nextNodeByPort[edge.from][edge.fromPort] = edge.to;
+      });
+
+      Object.keys(nodes).forEach(nodeId => {
+        const node = nodes[nodeId];
+        if (node.type !== 'condition') return;
+
+        const trueTargetId = nextNodeByPort[nodeId]?.true;
+        const falseTargetId = nextNodeByPort[nodeId]?.false;
+        if (!trueTargetId || !falseTargetId) return;
+        if (!nodes[trueTargetId] || !nodes[falseTargetId]) return;
+
+        const trueDepth = depth[trueTargetId] || 0;
+        const falseDepth = depth[falseTargetId] || 0;
+        if (trueDepth !== falseDepth) return;
+
+        if (nodes[trueTargetId].x > nodes[falseTargetId].x) {
+          const swapX = nodes[trueTargetId].x;
+          nodes[trueTargetId].x = nodes[falseTargetId].x;
+          nodes[falseTargetId].x = swapX;
+        }
+      });
+
+      renderAllNodes();
+      shrinkCanvasToFitNodes();
+      expandCanvasForAllNodes();
+      renderAllEdges();
+      M.toast({ html: 'Auto layout applied' });
     }
     
     // Helper function to get dynamic port position accounting for variable node width and circular nodes
@@ -897,6 +1193,7 @@ function isSelected(inValue,compareValue){
       };
       
       renderNode(id);
+      expandCanvasForNode(id);
       updateStats();
     }
     
@@ -969,6 +1266,9 @@ function isSelected(inValue,compareValue){
         icon.setAttribute('dominant-baseline', 'middle');
         icon.setAttribute('fill', getCSSVariable('--text-primary', '#333'));
         icon.textContent = isConditionNode ? 'call_split' : 'account_tree';
+        if (isSplitJoinNode && (node.data?.mode || 'split') === 'join') {
+          icon.setAttribute('transform', `translate(${node.x * 2} 0) scale(-1 1)`);
+        }
         grp.appendChild(icon);
         
         // Draw label text (below icon, centered in diamond)
@@ -1195,6 +1495,7 @@ function isSelected(inValue,compareValue){
     function renderAllNodes() {
       nodeLayer.querySelectorAll('[data-node-id]').forEach(el => el.remove());
       Object.keys(nodes).forEach(nodeId => renderNode(nodeId));
+      expandCanvasForAllNodes();
       renderAllEdges();
     }
     
@@ -1213,9 +1514,12 @@ function isSelected(inValue,compareValue){
       const startPos = getPortPosition(fromNode, edge.fromPort);
       const startX = startPos.x;
       const startY = startPos.y;
-      
+
+      const targetIsCircular = toNode.type === 'start' || toNode.type === 'end-success' || toNode.type === 'end-failure';
+      const targetIsDiamond = toNode.type === 'condition' || toNode.type === 'split-join';
+      const targetTopOffset = (targetIsCircular || targetIsDiamond) ? 28 : (CANVAS.nodeHeight / 2);
       const endX = toNode.x;
-      const endY = toNode.y - CANVAS.nodeHeight / 2;
+      const endY = toNode.y - targetTopOffset;
       
       // Draw cubic bezier curve
       const midY = (startY + endY) / 2;
@@ -1342,6 +1646,7 @@ function isSelected(inValue,compareValue){
         nodes[isDraggingNode].x = x;
         nodes[isDraggingNode].y = y;
         renderAllNodes();
+        expandCanvasForNode(isDraggingNode);
       }
     }
     
@@ -1422,6 +1727,7 @@ function isSelected(inValue,compareValue){
       selectedNode = null;
       updatePropertiesPanel();
       renderAllNodes();
+      shrinkCanvasToFitNodes();
       updateStats();
       
       // Close the modal
