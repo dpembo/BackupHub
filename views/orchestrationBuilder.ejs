@@ -53,10 +53,16 @@ function isSelected(inValue,compareValue){
       height: 44px;
       padding: 0;
       margin-bottom: 8px;
-      border-radius: 50%;
       justify-content: center;
       gap: 0;
       flex-direction: column;
+    }
+    .palette-item[data-node-type="start"] {
+      border-radius: 50%;
+    }
+    .palette-item[data-node-type="end-success"],
+    .palette-item[data-node-type="end-failure"] {
+      border-radius: 0;
     }
     .palette-item[data-node-type="condition"],
     .palette-item[data-node-type="split-join"] {
@@ -892,10 +898,11 @@ function isSelected(inValue,compareValue){
     }
 
     function getNodeDimensions(node) {
-      const isCircularNode = node.type === 'start' || node.type === 'end-success' || node.type === 'end-failure';
+      const isStartNode = node.type === 'start';
+      const isEndNode = node.type === 'end-success' || node.type === 'end-failure';
       const isDiamondNode = node.type === 'condition' || node.type === 'split-join';
 
-      if (isCircularNode || isDiamondNode) {
+      if (isStartNode || isEndNode || isDiamondNode) {
         return { width: 56, height: 56 };
       }
 
@@ -1222,15 +1229,16 @@ function isSelected(inValue,compareValue){
       const textWidth = tempText.getComputedTextLength();
       nodeLayer.removeChild(tempText);
       
-      // Check if this is a circular node type (start, success, failure)
-      const isCircularNode = node.type === 'start' || node.type === 'end-success' || node.type === 'end-failure';
+      // Check node geometry type
+      const isStartNode = node.type === 'start';
+      const isEndNode = node.type === 'end-success' || node.type === 'end-failure';
       const isConditionNode = node.type === 'condition';
       const isSplitJoinNode = node.type === 'split-join';
       const isDiamondNode = isConditionNode || isSplitJoinNode;
       
       // Define nodeWidth for use in ports (for rectangular nodes)
       let nodeWidth = 200;
-      if (!isCircularNode) {
+      if (!isStartNode && !isEndNode) {
         // Calculate node width: icon(18) + left pad(8) + text width + right pad(16)
         const minWidth = 200; // Minimum width
         const calculatedWidth = Math.max(minWidth, 18 + 8 + textWidth + 16);
@@ -1289,8 +1297,8 @@ function isSelected(inValue,compareValue){
         }
         grp.appendChild(labelText);
         
-      } else if (isCircularNode) {
-        // Circular node rendering
+      } else if (isStartNode) {
+        // Circular start node rendering
         const circleRadius = 28;
         
         // Draw circle
@@ -1333,6 +1341,57 @@ function isSelected(inValue,compareValue){
         grp.appendChild(icon);
         
         // Draw label (below icon, inside/below circle)
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('x', node.x);
+        text.setAttribute('y', node.y + 10);
+        text.setAttribute('text-anchor', 'middle');
+        text.setAttribute('dominant-baseline', 'middle');
+        text.setAttribute('fill', getCSSVariable('--text-primary', '#333'));
+        text.setAttribute('font-size', '9');
+        text.setAttribute('font-weight', '500');
+        text.setAttribute('pointer-events', 'none');
+        text.textContent = node.label;
+        grp.appendChild(text);
+
+      } else if (isEndNode) {
+        // Square end node rendering (same footprint as previous circular node diameter)
+        const squareSize = 56;
+
+        const square = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        square.setAttribute('x', node.x - squareSize / 2);
+        square.setAttribute('y', node.y - squareSize / 2);
+        square.setAttribute('width', squareSize);
+        square.setAttribute('height', squareSize);
+        square.setAttribute('fill', getCSSVariable('--surface-secondary', '#f9f9f9'));
+        square.setAttribute('stroke', selectedNode === nodeId ? getCSSVariable('--warning-color', '#ff9800') : getCSSVariable('--border-color', '#e0e0e0'));
+        square.setAttribute('stroke-width', selectedNode === nodeId ? '2' : '1');
+        grp.appendChild(square);
+
+        const icon = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        icon.setAttribute('x', node.x);
+        icon.setAttribute('y', node.y - 2);
+        icon.setAttribute('font-family', 'Material Icons');
+        icon.setAttribute('font-size', '20');
+        icon.setAttribute('pointer-events', 'none');
+        icon.setAttribute('text-anchor', 'middle');
+        icon.setAttribute('dominant-baseline', 'middle');
+
+        if (node.type === 'end-success') {
+          icon.setAttribute('fill', getCSSVariable('--success-color', '#4caf50'));
+        } else if (node.type === 'end-failure') {
+          icon.setAttribute('fill', getCSSVariable('--error-color', '#f44336'));
+        }
+
+        const iconMap = {
+          'play_arrow': 'play_arrow',
+          'settings': 'settings',
+          'device_hub': 'device_hub',
+          'check_circle': 'check_circle',
+          'error': 'error'
+        };
+        icon.textContent = iconMap[node.icon] || 'device_hub';
+        grp.appendChild(icon);
+
         const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         text.setAttribute('x', node.x);
         text.setAttribute('y', node.y + 10);
@@ -1428,7 +1487,7 @@ function isSelected(inValue,compareValue){
           portAbsY = node.y + portY;
           labelOffsetX = 0;
           labelOffsetY = 18;
-        } else if (isCircularNode && node.type === 'start') {
+        } else if (isStartNode) {
           // For circular start nodes, port is at bottom center
           portAbsX = node.x;
           portAbsY = node.y + 28; // circle radius
@@ -1515,9 +1574,10 @@ function isSelected(inValue,compareValue){
       const startX = startPos.x;
       const startY = startPos.y;
 
-      const targetIsCircular = toNode.type === 'start' || toNode.type === 'end-success' || toNode.type === 'end-failure';
+      const targetIsStart = toNode.type === 'start';
+      const targetIsEnd = toNode.type === 'end-success' || toNode.type === 'end-failure';
       const targetIsDiamond = toNode.type === 'condition' || toNode.type === 'split-join';
-      const targetTopOffset = (targetIsCircular || targetIsDiamond) ? 28 : (CANVAS.nodeHeight / 2);
+      const targetTopOffset = (targetIsStart || targetIsEnd || targetIsDiamond) ? 28 : (CANVAS.nodeHeight / 2);
       const endX = toNode.x;
       const endY = toNode.y - targetTopOffset;
       
