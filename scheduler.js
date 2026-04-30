@@ -565,6 +565,7 @@ async function runJob(jobName, isManual, inData, triggerContextParam = null, rer
           errors: [],
           finalStatus: null,
           manual: isManual,
+          triggerContext: triggerContextParam || null,
           isStub: true,  // Mark as temporary stub execution
           rerunFrom: rerunFrom || null  // Track if this is a rerun
         };

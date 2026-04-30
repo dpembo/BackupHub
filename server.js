@@ -4453,10 +4453,14 @@ app.get('/orchestration/execution/details', User.isAuthenticated, asyncHandler(a
           description: jobDef.description || '',
           orchestrationVersion: jobDef.version || 1,
           execution: {
+            executionId: cachedExecution.executionId,
             startTime: cachedExecution.startTime,
             endTime: cachedExecution.endTime,
             status: cachedExecution.status,
             finalStatus: cachedExecution.finalStatus || 'unknown',
+            mode: orchestrationMonitor.getExecutionMode(cachedExecution),
+            triggerContext: cachedExecution.triggerContext || null,
+            triggerSummary: orchestrationMonitor.buildExecutionTriggerSummary(cachedExecution),
             duration: cachedExecution.endTime ? 
               new Date(cachedExecution.endTime) - new Date(cachedExecution.startTime) : null,
             nodeMetrics: cachedExecution.nodeMetrics || {}

@@ -6,6 +6,8 @@
 const db = require('./db.js');
 const fs = require('fs').promises;
 const EventEmitter = require('events');
+const axios = require('axios');
+const notifier = require('./notify.js');
 const wsBrowser = require('./communications/wsBrowserTransport.js');
 const triggerContext = require('./triggerContext.js');
 
@@ -128,6 +130,16 @@ function evaluateNumericCondition(actual, operator, expected) {
   }
   
   return result;
+}
+
+function serializeHttpData(data) {
+  if (data === undefined || data === null) return '';
+  if (typeof data === 'string') return data;
+  try {
+    return JSON.stringify(data, null, 2);
+  } catch (_err) {
+    return String(data);
+  }
 }
 
 
@@ -345,6 +357,165 @@ async function executeJob(jobId, isManual = false, executionId = null, onNodeCom
       }
 
       if (currentNode.type === 'execute') {
+        const executeType = (currentNode.data?.executeType || 'script').toLowerCase();
+
+        if (executeType === 'http') {
+          const method = String(currentNode.data?.httpMethod || 'GET').toUpperCase();
+          const rawUrl = String(currentNode.data?.httpUrl || '').trim();
+          const timeoutMsRaw = parseInt(currentNode.data?.httpTimeoutMs, 10);
+          const timeoutMs = Number.isFinite(timeoutMsRaw) && timeoutMsRaw > 0 ? timeoutMsRaw : 30000;
+
+          if (!rawUrl) {
+            throw new Error(`HTTP execute node [${currentNode.id}] has no URL configured`);
+          }
+
+          let templateContext = null;
+          const getTemplateContext = () => {
+            if (templateContext) return templateContext;
+            templateContext = executionLog.triggerContext;
+            if (!templateContext) {
+              templateContext = {
+                type: 'manual',
+                timestamp: new Date().toISOString(),
+                executionId: executionLog.executionId,
+                webhook: {
+                  payload: { data: 'test' }
+                },
+                metric: { value: 0 },
+                condition: { threshold: 0 }
+              };
+              logger.debug('[ORCHESTRATION] No trigger context - using default test context for template substitution');
+            }
+            return templateContext;
+          };
+
+          const applyTemplate = (value) => {
+            if (typeof value !== 'string') return value;
+            if (!value.includes('#{')) return value;
+            return triggerContext.substituteTemplate(value, getTemplateContext());
+          };
+
+          const url = applyTemplate(rawUrl);
+          const headers = {};
+          const configuredHeaders = Array.isArray(currentNode.data?.httpHeaders) ? currentNode.data.httpHeaders : [];
+
+          configuredHeaders.forEach(header => {
+            const key = String(header?.key || '').trim();
+            if (!key) return;
+            const value = applyTemplate(String(header?.value || ''));
+            headers[key] = value;
+          });
+
+          const authType = (currentNode.data?.httpAuthType || 'none').toLowerCase();
+          const axiosConfig = {
+            method,
+            url,
+            timeout: timeoutMs,
+            headers,
+            validateStatus: () => true
+          };
+
+          if (authType === 'bearer') {
+            const token = applyTemplate(String(currentNode.data?.httpAuthBearerToken || ''));
+            if (!token.trim()) {
+              throw new Error(`HTTP execute node [${currentNode.id}] uses bearer auth but token is empty`);
+            }
+            axiosConfig.headers.Authorization = `Bearer ${token}`;
+          } else if (authType === 'basic') {
+            const username = applyTemplate(String(currentNode.data?.httpAuthUsername || ''));
+            const password = applyTemplate(String(currentNode.data?.httpAuthPassword || ''));
+            if (!username.trim() || !password.trim()) {
+              throw new Error(`HTTP execute node [${currentNode.id}] uses basic auth but username/password are incomplete`);
+            }
+            axiosConfig.auth = { username, password };
+          } else if (authType === 'apikey') {
+            const headerName = String(currentNode.data?.httpAuthApiKeyHeader || 'X-API-Key').trim();
+            const headerValue = applyTemplate(String(currentNode.data?.httpAuthApiKeyValue || ''));
+            if (!headerName || !headerValue.trim()) {
+              throw new Error(`HTTP execute node [${currentNode.id}] uses API key auth but header/value are incomplete`);
+            }
+            axiosConfig.headers[headerName] = headerValue;
+          }
+
+          const rawBody = String(currentNode.data?.httpBody || '');
+          const body = applyTemplate(rawBody);
+          if (body.trim().length > 0 && !['GET', 'HEAD'].includes(method)) {
+            try {
+              axiosConfig.data = JSON.parse(body);
+            } catch (_parseErr) {
+              axiosConfig.data = body;
+            }
+          }
+
+          let response;
+          try {
+            response = await axios(axiosConfig);
+          } catch (httpErr) {
+            const failureTime = new Date().toISOString();
+            const errorMessage = httpErr?.message || 'Unknown HTTP request error';
+            const responseBody = serializeHttpData(httpErr?.response?.data);
+            const responseStatus = httpErr?.response?.status;
+
+            executionLog.scriptOutputs[currentNode.id] = {
+              script: `HTTP ${method} ${url}`,
+              parameters: '',
+              agent: 'http',
+              status: 'failed',
+              exitCode: 1,
+              stdout: responseBody || '',
+              stderr: responseStatus ? `HTTP ${method} ${url} failed with status ${responseStatus}: ${errorMessage}` : `HTTP ${method} ${url} failed: ${errorMessage}`,
+              startTime: failureTime,
+              endTime: failureTime,
+              httpMethod: method,
+              httpUrl: url,
+              httpStatus: responseStatus || null
+            };
+
+            markNodeCompleted(currentNode, nodeStartTime, 'failed', { exitCode: 1 });
+            const outgoing = getOutgoingEdges(currentNode.id, 'out');
+            if (outgoing.length === 0) {
+              return 'failure';
+            }
+            if (outgoing.length > 1) {
+              throw new Error(`Execute node [${currentNode.id}] has multiple outgoing connections. Use split-join node in split mode.`);
+            }
+            return executePath(outgoing[0].to, { ...pathContext, lastScriptNodeId: currentNode.id }, outgoing[0]);
+          }
+
+          const responseBody = serializeHttpData(response?.data);
+          const responseStatus = Number(response?.status || 0);
+          const exitCode = responseStatus >= 200 && responseStatus < 300 ? 0 : 1;
+          const completedAt = new Date().toISOString();
+
+          executionLog.scriptOutputs[currentNode.id] = {
+            script: `HTTP ${method} ${url}`,
+            parameters: '',
+            agent: 'http',
+            status: 'completed',
+            exitCode,
+            stdout: responseBody,
+            stderr: exitCode === 0 ? '' : `HTTP ${method} ${url} returned status ${responseStatus}`,
+            startTime: completedAt,
+            endTime: completedAt,
+            httpMethod: method,
+            httpUrl: url,
+            httpStatus: responseStatus
+          };
+
+          const status = exitCode === 0 ? 'success' : 'failed';
+          markNodeCompleted(currentNode, nodeStartTime, status, { exitCode });
+
+          const outgoing = getOutgoingEdges(currentNode.id, 'out');
+          if (outgoing.length === 0) {
+            return exitCode === 0 ? 'success' : 'failure';
+          }
+          if (outgoing.length > 1) {
+            throw new Error(`Execute node [${currentNode.id}] has multiple outgoing connections. Use split-join node in split mode.`);
+          }
+
+          return executePath(outgoing[0].to, { ...pathContext, lastScriptNodeId: currentNode.id }, outgoing[0]);
+        }
+
         let scriptPath = currentNode.data.script;
         let parameters = currentNode.data.parameters || '';
         const agentId = currentNode.data.agent;
@@ -597,6 +768,123 @@ async function executeJob(jobId, isManual = false, executionId = null, onNodeCom
         }
       }
 
+      if (currentNode.type === 'wait') {
+        const rawWaitSeconds = parseFloat(currentNode.data?.waitSeconds);
+        const waitSeconds = Number.isFinite(rawWaitSeconds) && rawWaitSeconds > 0 ? rawWaitSeconds : 5;
+        const waitMs = Math.round(waitSeconds * 1000);
+        const startedAt = new Date().toISOString();
+
+        logger.info(`Wait node [${currentNode.id}] delaying for ${waitSeconds} seconds`);
+        await new Promise(resolve => setTimeout(resolve, waitMs));
+        const completedAt = new Date().toISOString();
+
+        executionLog.scriptOutputs[currentNode.id] = {
+          script: `WAIT ${waitSeconds}s`,
+          parameters: '',
+          agent: 'wait',
+          status: 'completed',
+          exitCode: 0,
+          stdout: `Waited ${waitSeconds} seconds`,
+          stderr: '',
+          startTime: startedAt,
+          endTime: completedAt,
+          waitSeconds
+        };
+
+        markNodeCompleted(currentNode, nodeStartTime, 'success', { exitCode: 0 });
+
+        const outgoing = getOutgoingEdges(currentNode.id, 'out');
+        if (outgoing.length === 0) {
+          return 'success';
+        }
+        if (outgoing.length > 1) {
+          throw new Error(`Wait node [${currentNode.id}] has multiple outgoing connections. Use split-join node in split mode.`);
+        }
+
+        return executePath(outgoing[0].to, pathContext, outgoing[0]);
+      }
+
+      if (currentNode.type === 'notify') {
+        let templateContext = null;
+        const getTemplateContext = () => {
+          if (templateContext) return templateContext;
+          templateContext = executionLog.triggerContext;
+          if (!templateContext) {
+            templateContext = {
+              type: 'manual',
+              timestamp: new Date().toISOString(),
+              executionId: executionLog.executionId,
+              webhook: {
+                payload: { data: 'test' }
+              },
+              metric: { value: 0 },
+              condition: { threshold: 0 }
+            };
+            logger.debug('[ORCHESTRATION] No trigger context - using default test context for template substitution');
+          }
+          return templateContext;
+        };
+
+        const applyTemplate = (value) => {
+          if (typeof value !== 'string') return value;
+          if (!value.includes('#{')) return value;
+          return triggerContext.substituteTemplate(value, getTemplateContext());
+        };
+
+        const notifyType = String(currentNode.data?.notifyType || 'INFORMATION').toUpperCase();
+        const notifyTitle = applyTemplate(String(currentNode.data?.notifyTitle || '')).trim();
+        const notifyBody = applyTemplate(String(currentNode.data?.notifyBody || '')).trim();
+        const notifyUrlRaw = applyTemplate(String(currentNode.data?.notifyUrl || '')).trim();
+        const notifyUrl = notifyUrlRaw || undefined;
+        const startedAt = new Date().toISOString();
+
+        if (!notifyTitle) {
+          throw new Error(`Notification node [${currentNode.id}] is missing a title`);
+        }
+        if (!notifyBody) {
+          throw new Error(`Notification node [${currentNode.id}] is missing a message`);
+        }
+
+        let exitCode = 0;
+        let stderr = '';
+        try {
+          await notifier.sendNotification(notifyTitle, notifyBody, notifyType, notifyUrl);
+        } catch (notifyErr) {
+          exitCode = 1;
+          stderr = notifyErr?.message || 'Notification send failed';
+          logger.warn(`Notification node [${currentNode.id}] failed to send: ${stderr}`);
+        }
+
+        const completedAt = new Date().toISOString();
+        executionLog.scriptOutputs[currentNode.id] = {
+          script: `NOTIFY ${notifyType} ${notifyTitle}`,
+          parameters: '',
+          agent: 'notify',
+          status: exitCode === 0 ? 'completed' : 'failed',
+          exitCode,
+          stdout: exitCode === 0 ? `Notification sent: ${notifyType} - ${notifyTitle}` : '',
+          stderr,
+          startTime: startedAt,
+          endTime: completedAt,
+          notifyType,
+          notifyTitle,
+          notifyBody,
+          notifyUrl: notifyUrl || ''
+        };
+
+        markNodeCompleted(currentNode, nodeStartTime, exitCode === 0 ? 'success' : 'failed', { exitCode });
+
+        const outgoing = getOutgoingEdges(currentNode.id, 'out');
+        if (outgoing.length === 0) {
+          return exitCode === 0 ? 'success' : 'failure';
+        }
+        if (outgoing.length > 1) {
+          throw new Error(`Notification node [${currentNode.id}] has multiple outgoing connections. Use split-join node in split mode.`);
+        }
+
+        return executePath(outgoing[0].to, { ...pathContext, lastScriptNodeId: currentNode.id }, outgoing[0]);
+      }
+
       if (currentNode.type === 'split-join') {
         const mode = (currentNode.data?.mode || 'split').toLowerCase();
 
@@ -656,7 +944,7 @@ async function executeJob(jobId, isManual = false, executionId = null, onNodeCom
       // Find the last execute node that was executed
       const lastExecuteNode = [...executionLog.visitedNodes]
         .reverse()
-        .find(id => nodeMap[id].type === 'execute' && executionLog.scriptOutputs[id]);
+        .find(id => (nodeMap[id].type === 'execute' || nodeMap[id].type === 'wait' || nodeMap[id].type === 'notify') && executionLog.scriptOutputs[id]);
 
       if (lastExecuteNode && executionLog.scriptOutputs[lastExecuteNode]) {
         const exitCode = executionLog.scriptOutputs[lastExecuteNode].exitCode || 0;
@@ -793,7 +1081,6 @@ async function _doSaveExecutionResult(executionLog) {
       try {
         const serverConfig = global.serverConfig || require('./configuration.js').getConfig();
         if (serverConfig && serverConfig.server && serverConfig.server.jobFailEnabled === 'true') {
-          const notifier = require('./notify.js');
           const orchestrationMonitor = require('./orchestrationMonitor.js');
           
           // Get orchestration job name

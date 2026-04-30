@@ -31,10 +31,6 @@ function isSelected(inValue,compareValue){
       align-items: center;
     }
     
-    #orchestration-counts{
-      font-size: 13px;
-    }
-
     #orchestration-main { display: flex; flex: 1; overflow: hidden; }
     #orchestration-palette { width: 250px; background: white; border-right: 1px solid #ddd; overflow-y: auto; padding: 15px; flex-shrink: 0; }
     #orchestration-canvas { flex: 1; background: #fafafa; position: relative; overflow: auto; }
@@ -322,10 +318,20 @@ function isSelected(inValue,compareValue){
       <!-- Palette -->
       <div id="orchestration-palette">
         <div class="palette-section">
-          <h4>Start</h4>
-          <div class="palette-item" draggable="true" data-node-type="start">
-            <i class="material-icons" style="color: #4caf50;">play_arrow</i>
-            <span>Start</span>
+          <h4>Start / End</h4>
+          <div class="end-nodes-container">
+            <div class="palette-item" draggable="true" data-node-type="start">
+              <i class="material-icons" style="color: #4caf50;">play_arrow</i>
+              <span>Start</span>
+            </div>
+            <div class="palette-item" draggable="true" data-node-type="end-success">
+              <i class="material-icons" style="color: #4caf50;">check_circle</i>
+              <span>Success</span>
+            </div>
+            <div class="palette-item" draggable="true" data-node-type="end-failure">
+              <i class="material-icons" style="color: #f44336;">error</i>
+              <span>Failure</span>
+            </div>
           </div>
         </div>
         
@@ -334,6 +340,18 @@ function isSelected(inValue,compareValue){
           <div class="palette-item" draggable="true" data-node-type="execute">
             <i class="material-icons">settings</i>
             <span>Execute Script</span>
+          </div>
+          <div class="palette-item" draggable="true" data-node-type="execute-http">
+            <i class="material-icons">http</i>
+            <span>HTTP Request</span>
+          </div>
+          <div class="palette-item" draggable="true" data-node-type="wait">
+            <i class="material-icons">schedule</i>
+            <span>Wait</span>
+          </div>
+          <div class="palette-item" draggable="true" data-node-type="notify">
+            <i class="material-icons">notifications</i>
+            <span>Notify</span>
           </div>
         </div>
         
@@ -355,22 +373,8 @@ function isSelected(inValue,compareValue){
           </div>
         </div>
         
-        <div class="palette-section">
-          <h4>End Nodes</h4>
-          <div class="end-nodes-container">
-            <div class="palette-item" draggable="true" data-node-type="end-success">
-              <i class="material-icons" style="color: #4caf50;">check_circle</i>
-              <span>Success</span>
-            </div>
-            <div class="palette-item" draggable="true" data-node-type="end-failure">
-              <i class="material-icons" style="color: #f44336;">error</i>
-              <span>Failure</span>
-            </div>
-          </div>
-        </div>
-        <div id="orchestration-counts"><hr>
-          <span><strong id="node-count">0</strong> nodes</span> | <span><strong id="edge-count">0</strong> connections</span>
-        </div>
+
+
 <!--        
         <hr />
         <p style="font-size: 12px; color: #999; margin-top: 20px;">
@@ -413,6 +417,15 @@ function isSelected(inValue,compareValue){
           
           <div id="prop-execute" style="display: none;">
             <div class="properties-section">
+              <label for="prop-execute-type">Execute Type</label>
+              <select id="prop-execute-type">
+                <option value="script">Script</option>
+                <option value="http">HTTP Request</option>
+              </select>
+            </div>
+
+            <div id="prop-execute-script-fields">
+            <div class="properties-section">
               <label for="prop-script">Script</label>
               <select id="prop-script"></select>
             </div>
@@ -426,6 +439,71 @@ function isSelected(inValue,compareValue){
             <div class="properties-section">
               <label for="prop-params">Parameters</label>
               <textarea id="prop-params" placeholder="Enter command parameters or custom command"></textarea>
+            </div>
+            </div>
+
+            <div id="prop-execute-http-fields" style="display: none;">
+              <div class="properties-section">
+                <label for="prop-http-method">Method</label>
+                <select id="prop-http-method">
+                  <option value="GET">GET</option>
+                  <option value="POST">POST</option>
+                  <option value="PUT">PUT</option>
+                  <option value="PATCH">PATCH</option>
+                  <option value="DELETE">DELETE</option>
+                  <option value="HEAD">HEAD</option>
+                  <option value="OPTIONS">OPTIONS</option>
+                </select>
+              </div>
+              <div class="properties-section">
+                <label for="prop-http-url">URL</label>
+                <input type="text" id="prop-http-url" placeholder="https://api.example.com/v1/resource">
+              </div>
+              <div class="properties-section">
+                <label for="prop-http-timeout">Timeout (ms)</label>
+                <input type="number" id="prop-http-timeout" min="1000" step="1000" placeholder="30000">
+              </div>
+              <div class="properties-section">
+                <label for="prop-http-auth-type">Authentication</label>
+                <select id="prop-http-auth-type">
+                  <option value="none">None</option>
+                  <option value="bearer">Bearer Token</option>
+                  <option value="basic">Basic Auth</option>
+                  <option value="apiKey">API Key Header</option>
+                </select>
+              </div>
+              <div class="properties-section" id="prop-http-auth-bearer-section" style="display: none;">
+                <label for="prop-http-auth-bearer">Bearer Token</label>
+                <input type="text" id="prop-http-auth-bearer" placeholder="#{webhook.payload.token}">
+              </div>
+              <div id="prop-http-auth-basic-section" style="display: none;">
+                <div class="properties-section">
+                  <label for="prop-http-auth-user">Basic Username</label>
+                  <input type="text" id="prop-http-auth-user" placeholder="api-user">
+                </div>
+                <div class="properties-section">
+                  <label for="prop-http-auth-pass">Basic Password</label>
+                  <input type="password" id="prop-http-auth-pass" placeholder="password or #{...}">
+                </div>
+              </div>
+              <div id="prop-http-auth-apikey-section" style="display: none;">
+                <div class="properties-section">
+                  <label for="prop-http-auth-apikey-header">API Key Header Name</label>
+                  <input type="text" id="prop-http-auth-apikey-header" placeholder="X-API-Key">
+                </div>
+                <div class="properties-section">
+                  <label for="prop-http-auth-apikey-value">API Key Value</label>
+                  <input type="password" id="prop-http-auth-apikey-value" placeholder="#{webhook.payload.apiKey}">
+                </div>
+              </div>
+              <div class="properties-section">
+                <label for="prop-http-headers">Headers (one per line: Header: Value)</label>
+                <textarea id="prop-http-headers" placeholder="Accept: application/json&#10;Content-Type: application/json"></textarea>
+              </div>
+              <div class="properties-section">
+                <label for="prop-http-body">Body (optional)</label>
+                <textarea id="prop-http-body" placeholder='{"example": "value"}'></textarea>
+              </div>
             </div>
           </div>
           
@@ -481,6 +559,36 @@ function isSelected(inValue,compareValue){
                 <option value="waitForAll">Wait For All Paths</option>
                 <option value="failFast">Fail Fast</option>
               </select>
+            </div>
+          </div>
+
+          <div id="prop-wait" style="display: none;">
+            <div class="properties-section">
+              <label for="prop-wait-seconds">Delay (seconds)</label>
+              <input type="number" id="prop-wait-seconds" min="0.1" step="0.1" placeholder="5">
+            </div>
+          </div>
+
+          <div id="prop-notify" style="display: none;">
+            <div class="properties-section">
+              <label for="prop-notify-type">Notification Type</label>
+              <select id="prop-notify-type">
+                <option value="INFORMATION">Information</option>
+                <option value="WARNING">Warning</option>
+                <option value="ERROR">Error</option>
+              </select>
+            </div>
+            <div class="properties-section">
+              <label for="prop-notify-title">Title</label>
+              <input type="text" id="prop-notify-title" placeholder="Orchestration Step Complete">
+            </div>
+            <div class="properties-section">
+              <label for="prop-notify-body">Message</label>
+              <textarea id="prop-notify-body" placeholder="Notification message (supports #{...} templates)"></textarea>
+            </div>
+            <div class="properties-section">
+              <label for="prop-notify-url">Link (optional)</label>
+              <input type="text" id="prop-notify-url" placeholder="/orchestration/monitor.html?...">
             </div>
           </div>
           
@@ -596,6 +704,7 @@ function isSelected(inValue,compareValue){
     let edgeLayer = null;
     let nodeLayer = null;
     let selectedNode = null;
+    let selectedEdge = null;
     let orchestrationId = '<%= jobId %>'.trim();
     if (!orchestrationId) orchestrationId = null;
     let availableScripts = [];
@@ -1032,8 +1141,8 @@ function isSelected(inValue,compareValue){
         });
       });
 
-      const horizontalGap = 70;
-      const verticalGap = 120;
+      const horizontalGap = 110;
+      const verticalGap = 160;
       const topPadding = 120;
       const sidePadding = 120;
 
@@ -1055,6 +1164,53 @@ function isSelected(inValue,compareValue){
           nodes[id].y = topPadding + (layerId * verticalGap);
           cursorX += dim.width + horizontalGap;
         });
+      });
+
+      // Second pass: move each node toward the average X position of its parents,
+      // while preserving non-overlap within the layer.
+      layerIds.forEach((layerId, idx) => {
+        if (idx === 0) return;
+
+        const ids = layers[layerId];
+        if (!ids || ids.length === 0) return;
+
+        ids.sort((a, b) => (nodes[a].x || 0) - (nodes[b].x || 0));
+
+        const desiredCenters = {};
+        ids.forEach(id => {
+          const parentIds = incoming[id] || [];
+          if (!parentIds.length) {
+            desiredCenters[id] = nodes[id].x;
+            return;
+          }
+
+          const parentCenter = parentIds.reduce((sum, parentId) => sum + (nodes[parentId]?.x || 0), 0) / parentIds.length;
+          desiredCenters[id] = parentCenter;
+        });
+
+        for (let i = 0; i < ids.length; i++) {
+          const id = ids[i];
+          const dim = nodeDims[id];
+          let targetX = desiredCenters[id];
+
+          if (i > 0) {
+            const prevId = ids[i - 1];
+            const prevDim = nodeDims[prevId];
+            const minX = nodes[prevId].x + (prevDim.width / 2) + (dim.width / 2) + horizontalGap;
+            targetX = Math.max(targetX, minX);
+          }
+
+          nodes[id].x = targetX;
+        }
+
+        for (let i = ids.length - 2; i >= 0; i--) {
+          const id = ids[i];
+          const nextId = ids[i + 1];
+          const dim = nodeDims[id];
+          const nextDim = nodeDims[nextId];
+          const maxX = nodes[nextId].x - (nextDim.width / 2) - (dim.width / 2) - horizontalGap;
+          nodes[id].x = Math.min(nodes[id].x, maxX);
+        }
       });
 
       // Ensure condition branch semantics: true branch node should sit left of false branch when peers share a layer.
@@ -1123,7 +1279,7 @@ function isSelected(inValue,compareValue){
       
       // Calculate dynamic port x position
       let portX = port.x;
-      if (node.type === 'execute') {
+      if (node.type === 'execute' || node.type === 'wait' || node.type === 'notify') {
         portX = nodeWidth / 2;
       } else if (isConditionNode || isSplitJoinNode) {
         // For diamond nodes, ports are already positioned relative to center
@@ -1145,24 +1301,127 @@ function isSelected(inValue,compareValue){
       }
       return [{ id: 'out', label: 'paths', x: 0, y: 32 }];
     }
+
+    function headersToMultiline(headers) {
+      if (!Array.isArray(headers)) return '';
+      return headers
+        .filter(h => h && h.key)
+        .map(h => `${h.key}: ${h.value || ''}`)
+        .join('\n');
+    }
+
+    function parseHeadersMultiline(rawHeaders) {
+      if (!rawHeaders || typeof rawHeaders !== 'string') return [];
+      return rawHeaders
+        .split('\n')
+        .map(line => line.trim())
+        .filter(Boolean)
+        .map(line => {
+          const sep = line.indexOf(':');
+          if (sep === -1) return { key: line, value: '' };
+          return {
+            key: line.slice(0, sep).trim(),
+            value: line.slice(sep + 1).trim()
+          };
+        })
+        .filter(h => h.key);
+    }
+
+    function ensureExecuteDefaults(node) {
+      if (!node || node.type !== 'execute') return;
+      if (!node.data) node.data = {};
+      if (!node.data.executeType) node.data.executeType = 'script';
+
+      if (node.data.executeType === 'http') {
+        if (!node.data.httpMethod) node.data.httpMethod = 'GET';
+        if (!node.data.httpTimeoutMs) node.data.httpTimeoutMs = 30000;
+        if (!node.data.httpAuthType) node.data.httpAuthType = 'none';
+        if (!Array.isArray(node.data.httpHeaders)) node.data.httpHeaders = [];
+        if (typeof node.data.httpBody !== 'string') node.data.httpBody = '';
+        if (!node.icon || node.icon === 'settings') node.icon = 'http';
+        if (!node.label || node.label === 'Execute' || node.label.startsWith('Execute:')) {
+          node.label = `HTTP ${node.data.httpMethod}`;
+        }
+      } else {
+        if (!node.icon || node.icon === 'http') node.icon = 'settings';
+        if (!node.label || node.label === 'Execute' || node.label.startsWith('HTTP ')) {
+          node.label = node.data.script ? `Execute: ${node.data.script.split('/').pop()}` : 'Execute Script';
+        }
+      }
+    }
+
+    function ensureWaitDefaults(node) {
+      if (!node || node.type !== 'wait') return;
+      if (!node.data) node.data = {};
+      const waitSeconds = parseFloat(node.data.waitSeconds);
+      node.data.waitSeconds = Number.isFinite(waitSeconds) && waitSeconds > 0 ? waitSeconds : 5;
+      if (!node.icon || node.icon === 'device_hub') node.icon = 'schedule';
+      if (!node.label || node.label === 'Wait') {
+        node.label = `Wait ${node.data.waitSeconds}s`;
+      }
+    }
+
+    function ensureNotifyDefaults(node) {
+      if (!node || node.type !== 'notify') return;
+      if (!node.data) node.data = {};
+      if (!node.data.notifyType) node.data.notifyType = 'INFORMATION';
+      if (typeof node.data.notifyTitle !== 'string') node.data.notifyTitle = '';
+      if (typeof node.data.notifyBody !== 'string') node.data.notifyBody = '';
+      if (typeof node.data.notifyUrl !== 'string') node.data.notifyUrl = '';
+      if (!node.icon || node.icon === 'device_hub') node.icon = 'notifications';
+      if (!node.label || node.label === 'Notify') {
+        node.label = node.data.notifyTitle ? `Notify: ${node.data.notifyTitle}` : 'Notify';
+      }
+    }
     
     function createNode(type, x = 100, y = 100) {
       nodeIdCounter++;
       const id = 'node_' + nodeIdCounter;
+      const resolvedType = type === 'execute-http' ? 'execute' : type;
       
       let label = 'Node';
       let icon = 'device_hub';
       let ports = [];
+      let data = {};
       
-      if (type === 'start') {
+      if (resolvedType === 'start') {
         label = 'Start';
         icon = 'play_arrow';
         ports = [{ id: 'out', label: 'next', x: CANVAS.nodeWidth / 2, y: CANVAS.nodeHeight }];
-      } else if (type === 'execute') {
-        label = 'Execute';
-        icon = 'settings';
+      } else if (resolvedType === 'execute') {
+        const isHttpNode = type === 'execute-http';
+        label = isHttpNode ? 'HTTP GET' : 'Execute Script';
+        icon = isHttpNode ? 'http' : 'settings';
         ports = [{ id: 'out', label: 'next', x: CANVAS.nodeWidth / 2, y: CANVAS.nodeHeight }];
-      } else if (type === 'condition') {
+        data = isHttpNode ? {
+          executeType: 'http',
+          httpMethod: 'GET',
+          httpUrl: '',
+          httpTimeoutMs: 30000,
+          httpHeaders: [],
+          httpAuthType: 'none',
+          httpBody: ''
+        } : {
+          executeType: 'script'
+        };
+      } else if (resolvedType === 'wait') {
+        label = 'Wait 5s';
+        icon = 'schedule';
+        ports = [{ id: 'out', label: 'next', x: CANVAS.nodeWidth / 2, y: CANVAS.nodeHeight }];
+        data = {
+          waitSeconds: 5
+        };
+      } else if (resolvedType === 'notify') {
+        label = 'Notify';
+        icon = 'notifications';
+        ports = [{ id: 'out', label: 'next', x: CANVAS.nodeWidth / 2, y: CANVAS.nodeHeight }];
+        data = {
+          notifyType: 'INFORMATION',
+          notifyTitle: '',
+          notifyBody: '',
+          notifyUrl: ''
+        };
+      } else if (resolvedType === 'condition') {
         label = 'if';
         icon = 'device_hub';
         // Condition nodes have labeled exit ports on left/right of diamond
@@ -1170,15 +1429,20 @@ function isSelected(inValue,compareValue){
           { id: 'true', label: 'true', x: -28, y: 0 },
           { id: 'false', label: 'false', x: 28, y: 0 }
         ];
-      } else if (type === 'split-join') {
+      } else if (resolvedType === 'split-join') {
         label = 'Split/Join';
         icon = 'account_tree';
         ports = getSplitJoinPorts('split');
-      } else if (type === 'end-success') {
+        data = {
+          mode: 'split',
+          joinStrategy: 'waitAll',
+          errorPolicy: 'waitForAll'
+        };
+      } else if (resolvedType === 'end-success') {
         label = 'Success';
         icon = 'check_circle';
         ports = [];
-      } else if (type === 'end-failure') {
+      } else if (resolvedType === 'end-failure') {
         label = 'Failure';
         icon = 'error';
         ports = [];
@@ -1186,18 +1450,18 @@ function isSelected(inValue,compareValue){
       
       nodes[id] = {
         id: id,
-        type: type,
+        type: resolvedType,
         label: label,
         icon: icon,
         x: x,
         y: y,
         ports: ports,
-        data: type === 'split-join' ? {
-          mode: 'split',
-          joinStrategy: 'waitAll',
-          errorPolicy: 'waitForAll'
-        } : {}
+        data: data
       };
+
+      ensureExecuteDefaults(nodes[id]);
+  ensureWaitDefaults(nodes[id]);
+  ensureNotifyDefaults(nodes[id]);
       
       renderNode(id);
       expandCanvasForNode(id);
@@ -1333,6 +1597,9 @@ function isSelected(inValue,compareValue){
         const iconMap = {
           'play_arrow': 'play_arrow',
           'settings': 'settings',
+          'http': 'http',
+          'schedule': 'schedule',
+          'notifications': 'notifications',
           'device_hub': 'device_hub',
           'check_circle': 'check_circle',
           'error': 'error'
@@ -1385,6 +1652,9 @@ function isSelected(inValue,compareValue){
         const iconMap = {
           'play_arrow': 'play_arrow',
           'settings': 'settings',
+          'http': 'http',
+          'schedule': 'schedule',
+          'notifications': 'notifications',
           'device_hub': 'device_hub',
           'check_circle': 'check_circle',
           'error': 'error'
@@ -1443,6 +1713,9 @@ function isSelected(inValue,compareValue){
         const iconMap = {
           'play_arrow': 'play_arrow',
           'settings': 'settings',
+          'http': 'http',
+          'schedule': 'schedule',
+          'notifications': 'notifications',
           'device_hub': 'device_hub',
           'check_circle': 'check_circle',
           'error': 'error'
@@ -1491,7 +1764,7 @@ function isSelected(inValue,compareValue){
           // For circular start nodes, port is at bottom center
           portAbsX = node.x;
           portAbsY = node.y + 28; // circle radius
-        } else if (node.type === 'execute') {
+        } else if (node.type === 'execute' || node.type === 'wait' || node.type === 'notify') {
           // Center port at bottom-center
           portAbsX = node.x;
           portAbsY = node.y + CANVAS.nodeHeight / 2;
@@ -1537,6 +1810,7 @@ function isSelected(inValue,compareValue){
         if (e.target.tagName === 'circle' && e.target.parentElement.hasAttribute('data-port')) return;
         isDraggingNode = nodeId;
         selectedNode = nodeId;
+        selectedEdge = null;
         updatePropertiesPanel();
         renderAllNodes();
       });
@@ -1544,6 +1818,7 @@ function isSelected(inValue,compareValue){
       grp.addEventListener('click', (e) => {
         e.stopPropagation();
         selectedNode = nodeId;
+        selectedEdge = null;
         updatePropertiesPanel();
         renderAllNodes();
       });
@@ -1592,13 +1867,32 @@ function isSelected(inValue,compareValue){
       } else if (edge.fromPort === 'false') {
         edgeColor = getCSSVariable('--error-color', '#f44336');
       }
+
+      const isSelected = selectedEdge === edge.id;
+      const displayColor = isSelected ? getCSSVariable('--warning-color', '#ff9800') : edgeColor;
+
+      const hitArea = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      hitArea.setAttribute('d', pathData);
+      hitArea.setAttribute('stroke', 'transparent');
+      hitArea.setAttribute('stroke-width', '14');
+      hitArea.setAttribute('fill', 'none');
+      hitArea.style.cursor = 'pointer';
+      hitArea.addEventListener('click', (e) => {
+        e.stopPropagation();
+        selectedEdge = edge.id;
+        selectedNode = null;
+        updatePropertiesPanel();
+        renderAllNodes();
+      });
+      edgeLayer.appendChild(hitArea);
       
       const line = document.createElementNS('http://www.w3.org/2000/svg', 'path');
       line.setAttribute('d', pathData);
-      line.setAttribute('stroke', edgeColor);
-      line.setAttribute('stroke-width', '2');
+      line.setAttribute('stroke', displayColor);
+      line.setAttribute('stroke-width', isSelected ? '4' : '2');
       line.setAttribute('fill', 'none');
       line.setAttribute('marker-end', 'url(#arrowhead)');
+      line.style.pointerEvents = 'none';
       edgeLayer.appendChild(line);
       
       // Draw label
@@ -1718,6 +2012,7 @@ function isSelected(inValue,compareValue){
 
     function closeDetailsPanel(){
       selectedNode = null;
+      selectedEdge = null;
       document.getElementById('orchestration-properties').classList.remove('show');
       document.getElementById('zoom-controls').classList.remove('shift-left');
       updatePropertiesPanel();
@@ -1744,9 +2039,28 @@ function isSelected(inValue,compareValue){
         label: label,
         color: fromPort === 'true' ? '#4caf50' : (fromPort === 'false' ? '#f44336' : '#2196f3')
       });
+
+      selectedEdge = null;
       
       updateStats();
       renderAllEdges();
+    }
+
+    function deleteSelectedEdge() {
+      if (!selectedEdge) return false;
+
+      const originalLength = edges.length;
+      edges = edges.filter(edge => edge.id !== selectedEdge);
+      const deleted = edges.length !== originalLength;
+      selectedEdge = null;
+
+      if (deleted) {
+        renderAllEdges();
+        updateStats();
+        M.toast({html: 'Connection deleted successfully'});
+      }
+
+      return deleted;
     }
     
     function deleteSelectedNode() {
@@ -1762,8 +2076,16 @@ function isSelected(inValue,compareValue){
       
       // Show extra info for specific node types
       let extraInfo = '';
-      if (node.type === 'execute' && node.data.script) {
-        extraInfo = `<div><span style="font-size: 0.85em; color: #666; text-transform: uppercase;">Script:</span><strong style="display: block; margin-top: 2px; font-family: monospace; font-size: 0.9em;">${node.data.script}</strong></div>`;
+      if (node.type === 'execute') {
+        if ((node.data?.executeType || 'script') === 'http') {
+          extraInfo = `<div><span style="font-size: 0.85em; color: #666; text-transform: uppercase;">HTTP:</span><strong style="display: block; margin-top: 2px; font-family: monospace; font-size: 0.9em;">${(node.data.httpMethod || 'GET')} ${node.data.httpUrl || '(URL not set)'}</strong></div>`;
+        } else if (node.data?.script) {
+          extraInfo = `<div><span style="font-size: 0.85em; color: #666; text-transform: uppercase;">Script:</span><strong style="display: block; margin-top: 2px; font-family: monospace; font-size: 0.9em;">${node.data.script}</strong></div>`;
+        }
+      } else if (node.type === 'wait') {
+        extraInfo = `<div><span style="font-size: 0.85em; color: #666; text-transform: uppercase;">Delay:</span><strong style="display: block; margin-top: 2px; font-family: monospace; font-size: 0.9em;">${node.data?.waitSeconds || 5}s</strong></div>`;
+      } else if (node.type === 'notify') {
+        extraInfo = `<div><span style="font-size: 0.85em; color: #666; text-transform: uppercase;">Notification:</span><strong style="display: block; margin-top: 2px; font-family: monospace; font-size: 0.9em;">${node.data?.notifyType || 'INFORMATION'} - ${node.data?.notifyTitle || '(Title not set)'}</strong></div>`;
       } else if (node.type === 'condition') {
         extraInfo = `<div><span style="font-size: 0.85em; color: #666; text-transform: uppercase;">Condition:</span><strong style="display: block; margin-top: 2px; font-family: monospace; font-size: 0.9em;">${node.data.conditionType || 'N/A'}</strong></div>`;
       }
@@ -1785,6 +2107,7 @@ function isSelected(inValue,compareValue){
       edges = edges.filter(e => e.from !== selectedNode && e.to !== selectedNode);
       delete nodes[selectedNode];
       selectedNode = null;
+      selectedEdge = null;
       updatePropertiesPanel();
       renderAllNodes();
       shrinkCanvasToFitNodes();
@@ -1818,16 +2141,79 @@ function isSelected(inValue,compareValue){
       propsPanel.classList.add('show');
       document.getElementById('zoom-controls').classList.add('shift-left');
       
-      document.getElementById('prop-type').textContent = node.type.charAt(0).toUpperCase() + node.type.slice(1);
+      const executeTypeLabel = node.type === 'execute' && (node.data?.executeType || 'script') === 'http'
+        ? 'Execute (HTTP Request)'
+        : (node.type === 'execute' ? 'Execute (Script)' : node.type === 'wait' ? 'Wait' : node.type === 'notify' ? 'Notification' : node.type.charAt(0).toUpperCase() + node.type.slice(1));
+      document.getElementById('prop-type').textContent = executeTypeLabel;
       
       document.getElementById('prop-execute').style.display = node.type === 'execute' ? 'block' : 'none';
       document.getElementById('prop-condition').style.display = node.type === 'condition' ? 'block' : 'none';
       document.getElementById('prop-split-join').style.display = node.type === 'split-join' ? 'block' : 'none';
+      document.getElementById('prop-wait').style.display = node.type === 'wait' ? 'block' : 'none';
+      document.getElementById('prop-notify').style.display = node.type === 'notify' ? 'block' : 'none';
       document.getElementById('prop-end').style.display = node.type.startsWith('end') ? 'block' : 'none';
       
       if (node.type === 'execute') {
+        ensureExecuteDefaults(node);
+
+        const executeTypeSelect = document.getElementById('prop-execute-type');
+        const scriptFieldWrap = document.getElementById('prop-execute-script-fields');
+        const httpFieldWrap = document.getElementById('prop-execute-http-fields');
+
         const scriptSelect = document.getElementById('prop-script');
         const paramsField = document.getElementById('prop-params');
+        const scriptInfo = document.getElementById('prop-script-info-detail');
+
+        const httpMethod = document.getElementById('prop-http-method');
+        const httpUrl = document.getElementById('prop-http-url');
+        const httpTimeout = document.getElementById('prop-http-timeout');
+        const httpHeaders = document.getElementById('prop-http-headers');
+        const httpBody = document.getElementById('prop-http-body');
+        const httpAuthType = document.getElementById('prop-http-auth-type');
+        const httpAuthBearer = document.getElementById('prop-http-auth-bearer');
+        const httpAuthUser = document.getElementById('prop-http-auth-user');
+        const httpAuthPass = document.getElementById('prop-http-auth-pass');
+        const httpAuthApiKeyHeader = document.getElementById('prop-http-auth-apikey-header');
+        const httpAuthApiKeyValue = document.getElementById('prop-http-auth-apikey-value');
+
+        const authBearerSection = document.getElementById('prop-http-auth-bearer-section');
+        const authBasicSection = document.getElementById('prop-http-auth-basic-section');
+        const authApiKeySection = document.getElementById('prop-http-auth-apikey-section');
+
+        const updateExecuteNodeLabelIcon = () => {
+          if ((node.data.executeType || 'script') === 'http') {
+            node.icon = 'http';
+            const method = (node.data.httpMethod || 'GET').toUpperCase();
+            const shortUrl = (node.data.httpUrl || '').trim();
+            node.label = shortUrl ? `HTTP ${method}: ${shortUrl}` : `HTTP ${method}`;
+          } else {
+            node.icon = 'settings';
+            node.label = 'Execute: ' + (node.data.script ? node.data.script.split('/').pop() : 'Script');
+          }
+          renderNode(selectedNode);
+        };
+
+        const updateExecuteTypeVisibility = () => {
+          const executeType = executeTypeSelect.value || 'script';
+          node.data.executeType = executeType;
+          const isHttp = executeType === 'http';
+          scriptFieldWrap.style.display = isHttp ? 'none' : 'block';
+          httpFieldWrap.style.display = isHttp ? 'block' : 'none';
+          if (isHttp) {
+            scriptInfo.innerHTML = '';
+          }
+          updateExecuteNodeLabelIcon();
+          document.getElementById('prop-type').textContent = isHttp ? 'Execute (HTTP Request)' : 'Execute (Script)';
+        };
+
+        const updateHttpAuthVisibility = () => {
+          const authType = httpAuthType.value || 'none';
+          authBearerSection.style.display = authType === 'bearer' ? 'block' : 'none';
+          authBasicSection.style.display = authType === 'basic' ? 'block' : 'none';
+          authApiKeySection.style.display = authType === 'apiKey' ? 'block' : 'none';
+        };
+
+        executeTypeSelect.value = node.data.executeType || 'script';
         
         // Build script select options
         scriptSelect.innerHTML = '<option value="">Select a script...</option>';
@@ -1852,6 +2238,20 @@ function isSelected(inValue,compareValue){
         
         // Set parameters value
         paramsField.value = node.data.parameters || '';
+
+        // Populate HTTP fields
+        httpMethod.value = (node.data.httpMethod || 'GET').toUpperCase();
+        httpUrl.value = node.data.httpUrl || '';
+        httpTimeout.value = node.data.httpTimeoutMs || 30000;
+        httpHeaders.value = headersToMultiline(node.data.httpHeaders || []);
+        httpBody.value = node.data.httpBody || '';
+        httpAuthType.value = node.data.httpAuthType || 'none';
+        httpAuthBearer.value = node.data.httpAuthBearerToken || '';
+        httpAuthUser.value = node.data.httpAuthUsername || '';
+        httpAuthPass.value = node.data.httpAuthPassword || '';
+        httpAuthApiKeyHeader.value = node.data.httpAuthApiKeyHeader || 'X-API-Key';
+        httpAuthApiKeyValue.value = node.data.httpAuthApiKeyValue || '';
+        updateHttpAuthVisibility();
         
         // Show current script info on focus
         scriptSelect.addEventListener('focus', function() {
@@ -1862,17 +2262,16 @@ function isSelected(inValue,compareValue){
         
         scriptSelect.onchange = function() {
           node.data.script = this.value;
-          node.label = 'Execute: ' + (this.value ? this.value.split('/').pop() : 'Script');
+          updateExecuteNodeLabelIcon();
           if (this.value) {
             fetchScriptInfo(this.value);
           } else {
             document.getElementById('prop-script-info-detail').innerHTML = '';
           }
-          renderNode(selectedNode);
         };
         
         // Fetch and display info for currently selected script
-        if (node.data.script) {
+        if ((node.data.executeType || 'script') === 'script' && node.data.script) {
           fetchScriptInfo(node.data.script);
         }
         
@@ -1882,6 +2281,70 @@ function isSelected(inValue,compareValue){
         
         paramsField.oninput = function() {
           node.data.parameters = this.value;
+        };
+
+        executeTypeSelect.onchange = updateExecuteTypeVisibility;
+
+        httpMethod.onchange = function() {
+          node.data.httpMethod = this.value;
+          updateExecuteNodeLabelIcon();
+        };
+        httpUrl.onchange = function() {
+          node.data.httpUrl = this.value;
+          updateExecuteNodeLabelIcon();
+        };
+        httpUrl.oninput = function() {
+          node.data.httpUrl = this.value;
+        };
+        httpTimeout.onchange = function() {
+          const timeoutValue = parseInt(this.value, 10);
+          node.data.httpTimeoutMs = Number.isFinite(timeoutValue) && timeoutValue > 0 ? timeoutValue : 30000;
+        };
+        httpHeaders.onchange = function() {
+          node.data.httpHeaders = parseHeadersMultiline(this.value);
+        };
+        httpHeaders.oninput = function() {
+          node.data.httpHeaders = parseHeadersMultiline(this.value);
+        };
+        httpBody.onchange = function() {
+          node.data.httpBody = this.value;
+        };
+        httpBody.oninput = function() {
+          node.data.httpBody = this.value;
+        };
+        httpAuthType.onchange = function() {
+          node.data.httpAuthType = this.value;
+          updateHttpAuthVisibility();
+        };
+        httpAuthBearer.onchange = function() {
+          node.data.httpAuthBearerToken = this.value;
+        };
+        httpAuthBearer.oninput = function() {
+          node.data.httpAuthBearerToken = this.value;
+        };
+        httpAuthUser.onchange = function() {
+          node.data.httpAuthUsername = this.value;
+        };
+        httpAuthUser.oninput = function() {
+          node.data.httpAuthUsername = this.value;
+        };
+        httpAuthPass.onchange = function() {
+          node.data.httpAuthPassword = this.value;
+        };
+        httpAuthPass.oninput = function() {
+          node.data.httpAuthPassword = this.value;
+        };
+        httpAuthApiKeyHeader.onchange = function() {
+          node.data.httpAuthApiKeyHeader = this.value;
+        };
+        httpAuthApiKeyHeader.oninput = function() {
+          node.data.httpAuthApiKeyHeader = this.value;
+        };
+        httpAuthApiKeyValue.onchange = function() {
+          node.data.httpAuthApiKeyValue = this.value;
+        };
+        httpAuthApiKeyValue.oninput = function() {
+          node.data.httpAuthApiKeyValue = this.value;
         };
         
         // Setup agent selection
@@ -1898,6 +2361,73 @@ function isSelected(inValue,compareValue){
         
         agentSelect.onchange = function() {
           node.data.agent = this.value;
+        };
+
+        updateExecuteTypeVisibility();
+      } else if (node.type === 'wait') {
+        ensureWaitDefaults(node);
+
+        const waitSecondsField = document.getElementById('prop-wait-seconds');
+        const updateWaitLabel = () => {
+          const seconds = parseFloat(node.data.waitSeconds);
+          const safeSeconds = Number.isFinite(seconds) && seconds > 0 ? seconds : 5;
+          node.data.waitSeconds = safeSeconds;
+          node.icon = 'schedule';
+          node.label = `Wait ${safeSeconds}s`;
+          renderNode(selectedNode);
+        };
+
+        waitSecondsField.value = node.data.waitSeconds || 5;
+        waitSecondsField.onchange = function() {
+          node.data.waitSeconds = this.value;
+          updateWaitLabel();
+        };
+        waitSecondsField.oninput = function() {
+          node.data.waitSeconds = this.value;
+          updateWaitLabel();
+        };
+      } else if (node.type === 'notify') {
+        ensureNotifyDefaults(node);
+
+        const notifyTypeField = document.getElementById('prop-notify-type');
+        const notifyTitleField = document.getElementById('prop-notify-title');
+        const notifyBodyField = document.getElementById('prop-notify-body');
+        const notifyUrlField = document.getElementById('prop-notify-url');
+
+        const updateNotifyLabel = () => {
+          node.icon = 'notifications';
+          const title = (node.data.notifyTitle || '').trim();
+          node.label = title ? `Notify: ${title}` : 'Notify';
+          renderNode(selectedNode);
+        };
+
+        notifyTypeField.value = node.data.notifyType || 'INFORMATION';
+        notifyTitleField.value = node.data.notifyTitle || '';
+        notifyBodyField.value = node.data.notifyBody || '';
+        notifyUrlField.value = node.data.notifyUrl || '';
+
+        notifyTypeField.onchange = function() {
+          node.data.notifyType = this.value;
+        };
+        notifyTitleField.onchange = function() {
+          node.data.notifyTitle = this.value;
+          updateNotifyLabel();
+        };
+        notifyTitleField.oninput = function() {
+          node.data.notifyTitle = this.value;
+          updateNotifyLabel();
+        };
+        notifyBodyField.onchange = function() {
+          node.data.notifyBody = this.value;
+        };
+        notifyBodyField.oninput = function() {
+          node.data.notifyBody = this.value;
+        };
+        notifyUrlField.onchange = function() {
+          node.data.notifyUrl = this.value;
+        };
+        notifyUrlField.oninput = function() {
+          node.data.notifyUrl = this.value;
         };
       } else if (node.type === 'condition') {
         document.getElementById('prop-condition-type').value = node.data.conditionType || 'return_code';
@@ -2044,7 +2574,14 @@ function isSelected(inValue,compareValue){
                 icon = 'play_arrow';
                 ports = [{ id: 'out', label: 'next', x: CANVAS.nodeWidth / 2, y: CANVAS.nodeHeight }];
               } else if (type === 'execute') {
-                icon = 'settings';
+                const executeType = n.data?.executeType || 'script';
+                icon = executeType === 'http' ? 'http' : 'settings';
+                ports = [{ id: 'out', label: 'next', x: CANVAS.nodeWidth / 2, y: CANVAS.nodeHeight }];
+              } else if (type === 'wait') {
+                icon = 'schedule';
+                ports = [{ id: 'out', label: 'next', x: CANVAS.nodeWidth / 2, y: CANVAS.nodeHeight }];
+              } else if (type === 'notify') {
+                icon = 'notifications';
                 ports = [{ id: 'out', label: 'next', x: CANVAS.nodeWidth / 2, y: CANVAS.nodeHeight }];
               } else if (type === 'condition') {
                 icon = 'device_hub';
@@ -2072,6 +2609,10 @@ function isSelected(inValue,compareValue){
                 ports: ports,
                 data: n.data || {}
               };
+
+              ensureExecuteDefaults(nodes[n.id]);
+              ensureWaitDefaults(nodes[n.id]);
+              ensureNotifyDefaults(nodes[n.id]);
             });
           }
           
@@ -2184,12 +2725,47 @@ function isSelected(inValue,compareValue){
       // 2. Check all nodes for required fields
       Object.values(nodes).forEach(node => {
         if (node.type === 'execute') {
-          // Check if execute node has script and agent selected
-          if (!node.data.script || !node.data.script.trim()) {
-            errors.push(`Execute node "${node.label}" is missing a Script selection.`);
+          const executeType = node.data?.executeType || 'script';
+
+          if (executeType === 'http') {
+            if (!node.data.httpUrl || !String(node.data.httpUrl).trim()) {
+              errors.push(`HTTP node "${node.label}" is missing a URL.`);
+            }
+
+            const authType = node.data.httpAuthType || 'none';
+            if (authType === 'bearer' && !String(node.data.httpAuthBearerToken || '').trim()) {
+              errors.push(`HTTP node "${node.label}" is using Bearer auth but has no token.`);
+            }
+            if (authType === 'basic') {
+              if (!String(node.data.httpAuthUsername || '').trim() || !String(node.data.httpAuthPassword || '').trim()) {
+                errors.push(`HTTP node "${node.label}" is using Basic auth but username/password are incomplete.`);
+              }
+            }
+            if (authType === 'apiKey') {
+              if (!String(node.data.httpAuthApiKeyHeader || '').trim() || !String(node.data.httpAuthApiKeyValue || '').trim()) {
+                errors.push(`HTTP node "${node.label}" is using API key auth but header/value are incomplete.`);
+              }
+            }
+          } else {
+            // Script mode requirements
+            if (!node.data.script || !node.data.script.trim()) {
+              errors.push(`Execute node "${node.label}" is missing a Script selection.`);
+            }
+            if (!node.data.agent || !node.data.agent.trim()) {
+              errors.push(`Execute node "${node.label}" is missing a Target Agent selection.`);
+            }
           }
-          if (!node.data.agent || !node.data.agent.trim()) {
-            errors.push(`Execute node "${node.label}" is missing a Target Agent selection.`);
+        } else if (node.type === 'wait') {
+          const waitSeconds = parseFloat(node.data?.waitSeconds);
+          if (!Number.isFinite(waitSeconds) || waitSeconds <= 0) {
+            errors.push(`Wait node "${node.label}" must have a delay greater than 0 seconds.`);
+          }
+        } else if (node.type === 'notify') {
+          if (!String(node.data?.notifyTitle || '').trim()) {
+            errors.push(`Notification node "${node.label}" is missing a title.`);
+          }
+          if (!String(node.data?.notifyBody || '').trim()) {
+            errors.push(`Notification node "${node.label}" is missing a message.`);
           }
         } else if (node.type === 'condition') {
           // Check if condition node has both true and false paths
@@ -2227,10 +2803,10 @@ function isSelected(inValue,compareValue){
       // 3. Check for dangling node exits
       Object.values(nodes).forEach(node => {
         if (node.type !== 'start' && node.type !== 'end-success' && node.type !== 'end-failure' && node.type !== 'condition') {
-          // Regular execute nodes should have outgoing edges
+          // Action nodes should have outgoing edges
           const outgoing = edges.filter(e => e.from === node.id);
           if (outgoing.length === 0) {
-            errors.push(`Execute node "${node.label}" has no exit path. It must connect to another node or an end node.`);
+            errors.push(`Node "${node.label}" has no exit path. It must connect to another node or an end node.`);
           }
         }
         
@@ -2327,9 +2903,11 @@ function isSelected(inValue,compareValue){
         success: function(result) {
           orchestrationId = result.job.id;
           M.toast({html: 'Orchestration saved successfully!'});
-          setTimeout(function() {
-            window.location.href = '/orchestrationList.html';
-          }, 1000);
+          // Stay in the editor after save and reflect the persisted id in the URL.
+          const editorUrl = '/orchestrationBuilder.html?id=' + encodeURIComponent(orchestrationId);
+          if (window.location.pathname + window.location.search !== editorUrl) {
+            window.history.replaceState({}, '', editorUrl);
+          }
         },
         error: function(err) {
           M.toast({html: 'Error saving orchestration: ' + err.statusText});
@@ -2609,8 +3187,12 @@ function isSelected(inValue,compareValue){
     }
     
     function updateStats() {
-      document.getElementById('node-count').textContent = Object.keys(nodes).length;
-      document.getElementById('edge-count').textContent = edges.length;
+      const nodeCount = Object.keys(nodes).length;
+      const edgeCount = edges.length;
+      var infoBar = document.getElementById('infobar');
+      if (infoBar) {
+        infoBar.textContent = 'Nodes: ' + nodeCount + ' | Connections: ' + edgeCount;
+      }
       updatePaletteState();
     }
     
@@ -2639,9 +3221,24 @@ function isSelected(inValue,compareValue){
     
     // Add keyboard listener for delete key
     document.addEventListener('keydown', function(event) {
+      const activeEl = document.activeElement;
+      const isTyping = activeEl && (
+        activeEl.tagName === 'INPUT' ||
+        activeEl.tagName === 'TEXTAREA' ||
+        activeEl.tagName === 'SELECT' ||
+        activeEl.isContentEditable
+      );
+
+      if (isTyping) return;
+
       if (event.key === 'Delete' || event.key === 'del') {
-        if (selectedNode) {
+        if (selectedEdge || selectedNode) {
           event.preventDefault();
+        }
+
+        if (selectedEdge) {
+          deleteSelectedEdge();
+        } else if (selectedNode) {
           deleteSelectedNode();
         }
       }

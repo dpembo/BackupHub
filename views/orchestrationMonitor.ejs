@@ -548,6 +548,37 @@
       pointer-events: none;
     }
 
+    .trigger-badge-shell {
+      fill: #ffffff;
+      stroke: #e3e7ef;
+      stroke-width: 1.2;
+      filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+    }
+
+    .trigger-badge-accent {
+      stroke: rgba(255, 255, 255, 0.65);
+      stroke-width: 1;
+    }
+
+    .trigger-badge-icon {
+      fill: #ffffff;
+      font-family: Material Icons;
+      font-size: 11px;
+      text-anchor: middle;
+      dominant-baseline: middle;
+      pointer-events: none;
+    }
+
+    .trigger-badge-text {
+      fill: #263238;
+      font-size: 7px;
+      font-weight: 700;
+      text-anchor: start;
+      dominant-baseline: middle;
+      letter-spacing: 0.35px;
+      pointer-events: none;
+    }
+
     /* Progress bar styling */
     .execution-progress-section {
       background: var(--surface-color);
@@ -941,6 +972,88 @@
       } else {
         return `${secs}s`;
       }
+    }
+
+    function getTriggerSummary() {
+      const exec = executionData && executionData.execution;
+      if (!exec) {
+        return { type: 'manual', label: 'MANUAL', source: 'Manual', detail: 'Started manually' };
+      }
+
+      if (exec.triggerSummary) {
+        const label = (exec.triggerSummary.label || exec.triggerSummary.type || 'manual').toString().toUpperCase();
+        return {
+          type: exec.triggerSummary.type || 'manual',
+          label,
+          source: exec.triggerSummary.source || exec.triggerSummary.label || 'Manual',
+          detail: exec.triggerSummary.detail || 'Started manually'
+        };
+      }
+
+      const triggerType = exec.triggerContext?.type || (exec.mode ? exec.mode.toLowerCase() : 'manual');
+      const label = triggerType.toUpperCase();
+      return {
+        type: triggerType,
+        label,
+        source: exec.triggerContext?.webhookName || exec.triggerContext?.metric?.type || exec.mode || 'Manual',
+        detail: `Triggered by ${triggerType}`
+      };
+    }
+
+    function drawStartNodeTriggerBadge(group, node) {
+      const trigger = getTriggerSummary();
+      const badgeText = (trigger.label || 'MANUAL').toUpperCase();
+
+      const triggerVisualMap = {
+        manual: { icon: 'touch_app', color: '#455a64' },
+        webhook: { icon: 'cloud_queue', color: '#00838f' },
+        rule: { icon: 'monitor_heart', color: '#6a1b9a' },
+        schedule: { icon: 'schedule', color: '#1565c0' }
+      };
+
+      const visual = triggerVisualMap[trigger.type] || { icon: 'play_arrow', color: '#455a64' };
+
+      // Centre the badge above the start circle (r=28) with a small gap.
+      const badgeHeight = 18;
+      const badgeWidth = Math.max(64, (badgeText.length * 6) + 30);
+      const accentSize = 16;
+      const cx = node.x;
+      const cy = node.y - 28 - badgeHeight / 2 - 6; // 28=circleRadius, 6px gap
+      const left = cx - badgeWidth / 2;
+      const top = cy - badgeHeight / 2;
+
+      const shell = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      shell.setAttribute('x', left);
+      shell.setAttribute('y', top);
+      shell.setAttribute('width', badgeWidth);
+      shell.setAttribute('height', badgeHeight);
+      shell.setAttribute('rx', 8);
+      shell.setAttribute('class', 'trigger-badge-shell');
+      group.appendChild(shell);
+
+      const accent = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      accent.setAttribute('x', left + 1);
+      accent.setAttribute('y', top + 1);
+      accent.setAttribute('width', accentSize);
+      accent.setAttribute('height', badgeHeight - 2);
+      accent.setAttribute('rx', 7);
+      accent.setAttribute('fill', visual.color);
+      accent.setAttribute('class', 'trigger-badge-accent');
+      group.appendChild(accent);
+
+      const icon = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      icon.setAttribute('x', left + (accentSize / 2) + 1);
+      icon.setAttribute('y', cy);
+      icon.setAttribute('class', 'trigger-badge-icon');
+      icon.textContent = visual.icon;
+      group.appendChild(icon);
+
+      const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      label.setAttribute('x', left + accentSize + 6);
+      label.setAttribute('y', cy);
+      label.setAttribute('class', 'trigger-badge-text');
+      label.textContent = badgeText;
+      group.appendChild(label);
     }
 
     // Calculate and update progress bar
@@ -1535,6 +1648,7 @@
     }
 
     function renderMonitorNode(layer, node, CANVAS) {
+      const shouldShowConcurrent = shouldShowConcurrentIndicator(node);
       const statusInfo = getNodeStatusInfo(node.id);
       let borderColor = '#e0e0e0';
       let statusIcon = '';
@@ -1562,7 +1676,7 @@
       } else if (statusInfo.state === 'success') {
         nodeClasses.push('node-completed');
       }
-      if (node.concurrent) {
+      if (shouldShowConcurrent) {
         nodeClasses.push('node-concurrent');
       }
       g.setAttribute('class', nodeClasses.join(' '));
@@ -1576,7 +1690,7 @@
       const squareHalf = 28;
       const squareSize = squareHalf * 2;
 
-      const nodeIconMap = { 'play_arrow': 'play_arrow', 'check_circle': 'check_circle', 'error': 'error', 'settings': 'settings', 'device_hub': 'device_hub', 'account_tree': 'account_tree' };
+      const nodeIconMap = { 'play_arrow': 'play_arrow', 'check_circle': 'check_circle', 'error': 'error', 'settings': 'settings', 'http': 'http', 'schedule': 'schedule', 'notifications': 'notifications', 'device_hub': 'device_hub', 'account_tree': 'account_tree' };
 
       if (isStartNode) {
         // Circle — matches builder layout (icon + label inside)
@@ -1628,6 +1742,8 @@
         text.setAttribute('pointer-events', 'none');
         text.textContent = node.label;
         g.appendChild(text);
+
+        drawStartNodeTriggerBadge(g, node);
       } else if (isEndNode) {
         // Square — matches builder layout (icon + label inside)
         const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
@@ -1777,7 +1893,7 @@
         }
       }
 
-      if (node.concurrent) {
+      if (shouldShowConcurrent) {
         const pillWidth = 58;
         const pillHeight = 16;
         const nodeTopY = (isStartNode || isEndNode || isDiamondNode) ? (node.y - 32) : (node.y - CANVAS.nodeHeight / 2);
@@ -1801,6 +1917,25 @@
       }
 
       layer.appendChild(g);
+    }
+
+    function shouldShowConcurrentIndicator(node) {
+      if (!node || !node.concurrent) return false;
+
+      const peers = Array.isArray(node.concurrentWith) ? node.concurrentWith : [];
+      if (peers.length === 0) return false;
+
+      // Parallel markers should not appear after a join node.
+      const edges = executionData?.edges || [];
+      const nodes = executionData?.nodes || [];
+      const incomingEdges = edges.filter(e => e.to === node.id);
+
+      const hasJoinParent = incomingEdges.some(edge => {
+        const parent = nodes.find(n => n.id === edge.from);
+        return parent && parent.type === 'split-join' && (parent.data?.mode || 'split') === 'join';
+      });
+
+      return !hasJoinParent;
     }
 
     function renderMonitorEdge(layer, edge, nodes, CANVAS, executionData) {
@@ -1904,6 +2039,7 @@
       const startDate = new Date(exec.startTime);
       const endDate = exec.endTime ? new Date(exec.endTime) : null;
       const duration = exec.duration ? Math.round(exec.duration / 1000) : 0;
+      const trigger = getTriggerSummary();
 
       let statusText = 'UNKNOWN';
       let badgeClass = 'not-executed';
@@ -1944,6 +2080,10 @@
           <div class="info-row">
             <span class="info-label">Duration:</span>
             <span class="info-value">${duration}s</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Triggered By:</span>
+            <span class="info-value">${escapeHtml(trigger.label)}${trigger.source ? ` - ${escapeHtml(trigger.source)}` : ''}</span>
           </div>
           <div class="info-row">
             <span class="info-label">Nodes Executed:</span>
@@ -2058,6 +2198,9 @@
       let statusColor = '#9e9e9e';
 
       const nodeOutput = executionData.nodeScriptOutputs[nodeId];
+      const isHttpNode = node.type === 'execute' && node.data?.executeType === 'http';
+      const isWaitNode = node.type === 'wait';
+      const isNotifyNode = node.type === 'notify';
       const nodeExecution = executionData.execution;
       const statusInfo = getNodeStatusInfo(nodeId);
 
@@ -2140,7 +2283,67 @@
       }
 
       // Agent info - check nodeOutput first (has real agent ID), then node.data
-      const agentHtml = nodeOutput?.agent || node.data?.agent || 'N/A';
+      const agentHtml = isHttpNode ? 'HTTP Request' : (isWaitNode ? 'Wait Timer' : (isNotifyNode ? 'Notification Framework' : (nodeOutput?.agent || node.data?.agent || 'N/A')));
+
+      let waitDetailsHtml = '';
+      if (isWaitNode) {
+        const waitSeconds = nodeOutput?.waitSeconds ?? node.data?.waitSeconds ?? 5;
+        waitDetailsHtml = `
+          <div class="detail-item">
+            <div class="detail-label">Delay</div>
+            <div class="detail-value" style="font-family: 'Courier New', monospace; font-weight: bold;">${escapeHtml(String(waitSeconds))}s</div>
+          </div>`;
+      }
+
+      let notifyDetailsHtml = '';
+      if (isNotifyNode) {
+        const notifyType = nodeOutput?.notifyType || node.data?.notifyType || 'INFORMATION';
+        const notifyTitle = nodeOutput?.notifyTitle || node.data?.notifyTitle || 'N/A';
+        const notifyUrl = nodeOutput?.notifyUrl || node.data?.notifyUrl || '';
+        notifyDetailsHtml = `
+          <div class="detail-item">
+            <div class="detail-label">Type</div>
+            <div class="detail-value">${escapeHtml(String(notifyType))}</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Title</div>
+            <div class="detail-value" style="word-break: break-word;">${escapeHtml(String(notifyTitle))}</div>
+          </div>
+          ${notifyUrl ? `<div class="detail-item"><div class="detail-label">Link</div><div class="detail-value" style="word-break: break-all;">${escapeHtml(String(notifyUrl))}</div></div>` : ''}`;
+      }
+
+      // HTTP-specific details
+      let httpDetailsHtml = '';
+      if (isHttpNode) {
+        const httpMethod = nodeOutput?.httpMethod || node.data?.httpMethod || 'GET';
+        const httpUrl = nodeOutput?.httpUrl || node.data?.httpUrl || 'N/A';
+        const httpStatus = nodeOutput?.httpStatus;
+        const httpAuthType = node.data?.httpAuthType || 'none';
+        const authLabels = { none: 'None', bearer: 'Bearer Token', basic: 'Basic Auth', apiKey: 'API Key' };
+        const authLabel = authLabels[httpAuthType] || escapeHtml(httpAuthType);
+        let httpStatusHtml = 'N/A';
+        if (httpStatus !== undefined) {
+          const statusColor = httpStatus >= 200 && httpStatus < 300 ? '#2e7d32' : '#d32f2f';
+          httpStatusHtml = `<span style="font-weight: bold; color: ${statusColor};">${httpStatus}</span>`;
+        }
+        httpDetailsHtml = `
+          <div class="detail-item">
+            <div class="detail-label">Method</div>
+            <div class="detail-value" style="font-family: 'Courier New', monospace; font-weight: bold;">${escapeHtml(httpMethod)}</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">URL</div>
+            <div class="detail-value" style="font-family: 'Courier New', monospace; word-break: break-all;">${escapeHtml(httpUrl)}</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">HTTP Status</div>
+            <div class="detail-value">${httpStatusHtml}</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Auth Type</div>
+            <div class="detail-value">${authLabel}</div>
+          </div>`;
+      }
 
       // Condition evaluation details (for condition nodes)
       let conditionHtml = '';
@@ -2184,8 +2387,9 @@
         }
       }
 
+      const shouldShowConcurrent = shouldShowConcurrentIndicator(node);
       let concurrentHtml = '';
-      if (node.concurrent) {
+      if (shouldShowConcurrent) {
         const peerLabels = (node.concurrentWith || [])
           .map(peerId => executionData.nodes.find(n => n.id === peerId)?.label || peerId)
           .map(label => escapeHtml(label))
@@ -2195,6 +2399,20 @@
           <div class="detail-label">Parallel</div>
           <div class="detail-value">Yes${peerLabels ? ` (with ${peerLabels})` : ''}</div>
         </div>`;
+      }
+
+      let triggerDetailsHtml = '';
+      if (node.type === 'start') {
+        const trigger = getTriggerSummary();
+        triggerDetailsHtml = `
+          <div class="detail-item">
+            <div class="detail-label">Triggered By</div>
+            <div class="detail-value">${escapeHtml(trigger.label)}${trigger.source ? ` - ${escapeHtml(trigger.source)}` : ''}</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Trigger Detail</div>
+            <div class="detail-value">${escapeHtml(trigger.detail || 'N/A')}</div>
+          </div>`;
       }
 
       // Exit code
@@ -2242,6 +2460,7 @@
             <div class="detail-label">Node Type</div>
             <div class="detail-value">${escapeHtml(node.type === 'split-join' ? `split-join (${node.data?.mode || 'split'})` : node.type)}</div>
           </div>
+          ${triggerDetailsHtml}
           ${concurrentHtml}
           ${conditionHtml}
           <div class="detail-item">
@@ -2253,17 +2472,20 @@
             <div class="detail-value">${timeTakenHtml}</div>
           </div>
           <div class="detail-item">
-            <div class="detail-label">Agent</div>
+            <div class="detail-label">${isHttpNode || isWaitNode || isNotifyNode ? 'Service' : 'Agent'}</div>
             <div class="detail-value">${escapeHtml(agentHtml)}</div>
           </div>
           ${exitCodeHtml}
-          <div class="detail-item">
+          ${httpDetailsHtml}
+          ${waitDetailsHtml}
+          ${notifyDetailsHtml}
+          ${isHttpNode || isWaitNode || isNotifyNode ? '' : `<div class="detail-item">
             <div class="detail-label">Parameters</div>
             <div class="detail-value">${parametersHtml}</div>
-          </div>
+          </div>`}
           <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 8px;">
             <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 0;">
-              <div class="detail-label" style="margin-bottom: 0;">Output Log</div>
+              <div class="detail-label" style="margin-bottom: 0;">${isHttpNode ? 'Response Body' : (isWaitNode ? 'Wait Output' : (isNotifyNode ? 'Notification Output' : 'Output Log'))}</div>
               <span id="logRefreshIndicator" class="refreshindicator refreshloader" style="display: ${statusInfo.state === 'in-progress' ? 'inline-block' : 'none'};"></span>
             </div>
             ${logHtml}

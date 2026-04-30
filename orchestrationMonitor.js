@@ -43,7 +43,7 @@ async function getExecutionDetails(jobId, executionIndex = 'latest') {
     }
 
     // Detect parallel nodes by looking for overlapping execution windows.
-    const concurrentInfo = detectConcurrentNodes(jobDef.nodes || [], execution);
+    const concurrentInfo = detectConcurrentNodes(jobDef.nodes || [], execution, jobDef.edges || []);
 
     // Format the response with graph info and node details
     const formattedNodes = formatNodeDetails(jobDef.nodes, execution, concurrentInfo);
@@ -60,6 +60,9 @@ async function getExecutionDetails(jobId, executionIndex = 'latest') {
         endTime: execution.endTime,
         status: execution.status,
         finalStatus: execution.finalStatus || 'unknown',
+        mode: getExecutionMode(execution),
+        triggerContext: execution.triggerContext || null,
+        triggerSummary: buildExecutionTriggerSummary(execution),
         duration: execution.endTime ? 
           new Date(execution.endTime) - new Date(execution.startTime) : null,
         nodeMetrics: execution.nodeMetrics || {}
@@ -79,6 +82,84 @@ async function getExecutionDetails(jobId, executionIndex = 'latest') {
     logger.error(`Error getting execution details for job [${jobId}]: ${err.message}`);
     throw err;
   }
+}
+
+function getExecutionMode(execution) {
+  const source = execution && execution.manual;
+
+  if (source === true || source === 'manual') {
+    return 'Manual';
+  }
+  if (source === 'webhook') {
+    return 'Webhook';
+  }
+  if (source === 'schedule') {
+    return 'Schedule';
+  }
+  if (source === 'rule') {
+    return 'Rule';
+  }
+
+  const triggerType = execution && execution.triggerContext && execution.triggerContext.type;
+  if (triggerType === 'webhook') {
+    return 'Webhook';
+  }
+  if (triggerType === 'rule') {
+    return 'Rule';
+  }
+
+  return 'Manual';
+}
+
+function buildExecutionTriggerSummary(execution) {
+  const triggerContext = execution && execution.triggerContext;
+  const mode = getExecutionMode(execution);
+  const triggerType = triggerContext && triggerContext.type
+    ? triggerContext.type
+    : mode.toLowerCase();
+
+  const summary = {
+    type: triggerType,
+    label: mode,
+    source: null,
+    detail: null
+  };
+
+  if (triggerType === 'webhook') {
+    summary.source =
+      (triggerContext && triggerContext.webhookName) ||
+      (triggerContext && triggerContext.webhook && triggerContext.webhook.name) ||
+      (triggerContext && triggerContext.webhookId) ||
+      'Webhook';
+    summary.detail = summary.source;
+    return summary;
+  }
+
+  if (triggerType === 'rule') {
+    const metricType = triggerContext && triggerContext.metric && triggerContext.metric.type;
+    const metricValue = triggerContext && triggerContext.metric && triggerContext.metric.value;
+    const metricUnit = triggerContext && triggerContext.metric && triggerContext.metric.unit;
+    const operator = triggerContext && triggerContext.condition && triggerContext.condition.operator;
+    const threshold = triggerContext && triggerContext.condition && triggerContext.condition.threshold;
+
+    summary.source = metricType || 'Rule';
+    if (metricType && metricValue !== undefined && operator && threshold !== undefined) {
+      summary.detail = `${metricType} ${metricValue}${metricUnit || ''} (${operator} ${threshold})`;
+    } else {
+      summary.detail = metricType || 'Rule-based trigger';
+    }
+    return summary;
+  }
+
+  if (triggerType === 'schedule') {
+    summary.source = 'Schedule';
+    summary.detail = 'Clock schedule trigger';
+    return summary;
+  }
+
+  summary.source = 'Manual';
+  summary.detail = 'Started manually';
+  return summary;
 }
 
 /**
@@ -170,7 +251,37 @@ function formatNodeDetails(nodes, execution, concurrentInfo = { nodeIds: new Set
  * Detect nodes that executed in parallel by checking overlapping node metric windows.
  * @private
  */
-function detectConcurrentNodes(nodes, execution) {
+/**
+ * Build a forward reachability map: for each node, which nodes can it reach?
+ * @private
+ */
+function buildReachability(nodes, edges) {
+  const adj = {};
+  (nodes || []).forEach(n => { adj[n.id] = []; });
+  (edges || []).forEach(e => {
+    if (!adj[e.from]) adj[e.from] = [];
+    adj[e.from].push(e.to);
+  });
+
+  const reachable = {};
+  (nodes || []).forEach(n => {
+    const visited = new Set();
+    const queue = [n.id];
+    while (queue.length > 0) {
+      const curr = queue.shift();
+      for (const next of (adj[curr] || [])) {
+        if (!visited.has(next)) {
+          visited.add(next);
+          queue.push(next);
+        }
+      }
+    }
+    reachable[n.id] = visited;
+  });
+  return reachable;
+}
+
+function detectConcurrentNodes(nodes, execution, edges) {
   const nodeMetrics = execution?.nodeMetrics || {};
   const visitedNodes = new Set(execution?.visitedNodes || []);
   const nodeById = {};
@@ -235,6 +346,39 @@ function detectConcurrentNodes(nodes, execution) {
         peers[b.nodeId].push(a.nodeId);
       }
     }
+  }
+
+  // Filter peers to only direct siblings.
+  // Exclude peers in ancestor/descendant relationship with the node itself,
+  // and exclude peers that are downstream of other peers in the same list.
+  const reachability = buildReachability(nodes, edges);
+  for (const nodeId of Object.keys(peers)) {
+    const peerList = peers[nodeId];
+    peers[nodeId] = peerList.filter(peerId =>
+      !(reachability[peerId]?.has(nodeId) || reachability[nodeId]?.has(peerId))
+      && !peerList.some(otherId => otherId !== peerId && reachability[otherId]?.has(peerId))
+    );
+
+    // If all peers were filtered out, remove the node from concurrent set too.
+    if (peers[nodeId].length === 0) {
+      delete peers[nodeId];
+    }
+  }
+
+  // Rebuild concurrent node IDs and pairs from filtered peers for consistency.
+  nodeIds.clear();
+  pairs.length = 0;
+  const seenPairs = new Set();
+  for (const [nodeId, peerList] of Object.entries(peers)) {
+    nodeIds.add(nodeId);
+    peerList.forEach(peerId => {
+      nodeIds.add(peerId);
+      const key = nodeId < peerId ? `${nodeId}::${peerId}` : `${peerId}::${nodeId}`;
+      if (!seenPairs.has(key)) {
+        seenPairs.add(key);
+        pairs.push(nodeId < peerId ? [nodeId, peerId] : [peerId, nodeId]);
+      }
+    });
   }
 
   return {
@@ -393,6 +537,8 @@ module.exports = {
   getNodeOutput,
   listJobsWithStatus,
   getJobDefinitionVersion,
+  getExecutionMode,
+  buildExecutionTriggerSummary,
   formatNodeDetails,
   formatEdgeDetails
 };
