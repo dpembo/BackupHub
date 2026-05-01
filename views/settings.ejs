@@ -1,4 +1,25 @@
 <% 
+const hasPerm = (p) => {
+  if (!locals.currentUser) return false;
+  if (locals.currentUser.isSuperAdmin) return true;
+  if (!Array.isArray(locals.currentUser.permissions)) return false;
+  if (p === 'settings.access') {
+    const legacySettingsPerms = [
+      'settings.server',
+      'settings.websocket',
+      'settings.mqtt',
+      'settings.alerts',
+      'settings.icons',
+      'settings.templates',
+      'settings.webhooks',
+      'settings.backup',
+    ];
+    return locals.currentUser.permissions.includes('settings.access')
+      || locals.currentUser.permissions.some((perm) => legacySettingsPerms.includes(perm));
+  }
+  return locals.currentUser.permissions.includes(p);
+};
+
 function isChecked(inValue,compareValue){
   if(compareValue===undefined||compareValue==null)return"";
   if(inValue==compareValue){
@@ -264,18 +285,29 @@ function noValue(inValue){
             <input type="hidden" name="_csrf" value="<%= csrf %>">
             <div class="row">
               <div class="col s12">
+                <%
+                  const settingsTabs = [
+                    { id: 'server', label: 'Server', perm: 'settings.access', itemClass: 'tab col s1' },
+                    { id: 'websocket', label: 'WebSocket', perm: 'settings.access', itemClass: 'tab orange-text col s1' },
+                    { id: 'mqtt', label: 'MQTT', perm: 'settings.access', itemClass: 'tab orange-text col s1' },
+                    { id: 'notifications', label: 'Alerts', perm: 'settings.access', itemClass: 'tab col s1' },
+                    { id: 'icons', label: 'Icons', perm: 'settings.access', itemClass: 'tab col s1' },
+                    { id: 'templates', label: 'Templates', perm: 'settings.access', itemClass: 'tab col s1' },
+                    { id: 'webhooks', label: 'Webhooks', perm: 'settings.access', itemClass: 'tab col s1' },
+                    { id: 'backup', label: 'Backup', perm: 'settings.access', itemClass: 'tab col s1' }
+                  ];
+                  const visibleSettingsTabs = settingsTabs.filter((tab) => hasPerm(tab.perm));
+                %>
                 <ul class="tabs" style="min-width: 120px;;">
-                  <li class="tab col s1"><a class="active" href="#server">Server</a></li>
-                  <li class="tab orange-text col s1"><a href="#websocket">WebSocket</a></li>
-                  <li class="tab orange-text col s1"><a href="#mqtt">MQTT</a></li>
-                  <li class="tab col s1"><a href="#notifications">Alerts</a></li>
-                  <li class="tab col s1"><a href="#icons">Icons</a></li>
-                  <li class="tab col s1"><a href="#templates">Templates</a></li>
-                  <li class="tab col s1"><a href="#webhooks">Webhooks</a></li>
-                  <li class="tab col s1"><a href="#backup">Backup</a></li>
+                  <% visibleSettingsTabs.forEach((tab, idx) => { %>
+                    <li class="<%= tab.itemClass %>">
+                      <a class="<%= idx === 0 ? 'active' : '' %>" href="#<%= tab.id %>"><%= tab.label %></a>
+                    </li>
+                  <% }); %>
                   <!--<li class="tab col s3 disabled"><a href="#test3">Disabled Tab</a></li>-->
                 </ul>
               </div>
+              <% if (hasPerm('settings.access')) { %>
               <div id="server" class="col s12">
                 <br>
                 <div class="row">
@@ -326,7 +358,9 @@ function noValue(inValue){
                 </div>
 
               </div>
+              <% } %>
 
+              <% if (hasPerm('settings.access')) { %>
               <div id="websocket" class="col s12">
                 <br>
                 <div class="row">
@@ -356,7 +390,9 @@ function noValue(inValue){
                   </div>
                 </div>
               </div>
+              <% } %>
 
+              <% if (hasPerm('settings.access')) { %>
               <div id="mqtt" class="col s12">
                 <br>
                 <div class="row">
@@ -394,6 +430,9 @@ function noValue(inValue){
                   </div>
 
               </div>
+              <% } %>
+
+              <% if (hasPerm('settings.access')) { %>
               <div id="notifications" class="col s12">
                 <h6 class="header blue-text">Alerting</h6>
                 
@@ -525,7 +564,9 @@ function noValue(inValue){
                 </div>-->
                 </div>
               </div>
+              <% } %>
 
+              <% if (hasPerm('settings.access')) { %>
               <div id="icons" class="col s12">
                 <div class="container">
                   <h6 class="header blue-text">Job Icons</h6>
@@ -554,7 +595,9 @@ function noValue(inValue){
               </div>  
 
               </div>
+              <% } %>
 
+              <% if (hasPerm('settings.access')) { %>
               <div id="templates" class="col s12">
                 <div class="container">
                   <h6 class="header blue-text">Templates</h6>
@@ -585,7 +628,9 @@ function noValue(inValue){
                   </div>
                 </div>
               </div>
+              <% } %>
               
+              <% if (hasPerm('settings.access')) { %>
               <div id="webhooks" class="col s12">
                 <div class="container">
                   <h6 class="header blue-text" style="margin-bottom: 16px;">Webhook Management</h6>
@@ -650,7 +695,9 @@ function noValue(inValue){
                   </button>
                 </div>
               </div>
+              <% } %>
               
+              <% if (hasPerm('settings.access')) { %>
               <div id="backup" class="col s12">
                 <div class="container">
                   <h6 class="header blue-text" style="margin-bottom: 16px;">Backup &amp; Restore</h6>
@@ -697,6 +744,7 @@ function noValue(inValue){
                   </ul>
                 </div>
               </div>
+              <% } %>
 
               <!--<div id="test4" class="col s12">Test 4</div>-->
             </div>
@@ -832,72 +880,83 @@ function noValue(inValue){
 
         $(document).ready(function(){
 
-            // Initialize backup accordion
-            M.Collapsible.init(document.getElementById('backupAccordion'));
+            if (document.getElementById('backupAccordion')) {
+              // Initialize backup accordion
+              M.Collapsible.init(document.getElementById('backupAccordion'));
 
-            // Initialize backup items
-            loadBackupItems();
+              // Initialize backup items
+              loadBackupItems();
 
-            $('#createBackupBtn').on('click', function(e) {
-              e.preventDefault();
-              createBackup();
-            });
+              $('#createBackupBtn').on('click', function(e) {
+                e.preventDefault();
+                createBackup();
+              });
 
-            $('#restoreBackupBtn').on('click', function(e) {
-              e.preventDefault();
-              const fileInput = document.getElementById('backupFile');
-              const file = fileInput.files[0];
-              
-              if (!file) {
-                M.toast({html: 'Please select a backup file', displayLength: 5000});
-                return;
-              }
-              
-              if (!file.name.endsWith('.zip')) {
-                M.toast({html: 'Please select a valid backup zip file', displayLength: 5000});
-                return;
-              }
-              
-              restoreBackup(file);
-            });
+              $('#restoreBackupBtn').on('click', function(e) {
+                e.preventDefault();
+                const fileInput = document.getElementById('backupFile');
+                const file = fileInput.files[0];
+
+                if (!file) {
+                  M.toast({html: 'Please select a backup file', displayLength: 5000});
+                  return;
+                }
+
+                if (!file.name.endsWith('.zip')) {
+                  M.toast({html: 'Please select a valid backup zip file', displayLength: 5000});
+                  return;
+                }
+
+                restoreBackup(file);
+              });
+            }
 
             $('#saveChanges').on('click', function(e) {
               e.preventDefault();
-              var items = getItems();
-              
-              // Validate that at least some icons exist
-              if (!items || items.length === 0) {
-                M.toast({html: 'Please add at least one icon to the list', displayLength: 5000});
-                return;
+
+              if (document.getElementById('icons')) {
+                var items = getItems();
+
+                // Validate that at least some icons exist
+                if (!items || items.length === 0) {
+                  M.toast({html: 'Please add at least one icon to the list', displayLength: 5000});
+                  return;
+                }
+
+                document.getElementById('iconslist').value = items;
               }
-              
-              document.getElementById("iconslist").value=items;
+
               document.forms[0].submit();
             });
-          
-            $('#add-button').on('click', function(e) {
-                e.preventDefault();
-                const itemValue = $('#item-input').val().trim();
-                if (itemValue) {
-                    addItemToList(itemValue);
-                }
-            });
 
-            $('#item-list').on('click', '.delete-btn', function() {
-                $(this).closest('li').remove();
-            });
+            if (document.getElementById('icons')) {
+              $('#add-button').on('click', function(e) {
+                  e.preventDefault();
+                  const itemValue = $('#item-input').val().trim();
+                  if (itemValue) {
+                      addItemToList(itemValue);
+                  }
+              });
+
+              $('#item-list').on('click', '.delete-btn', function() {
+                  $(this).closest('li').remove();
+              });
+            }
 
             <%
             if(serverConfig.job_icons && Array.isArray(serverConfig.job_icons)){
               for(var ic=0;ic<serverConfig.job_icons.length;ic++) {
                 var icon = serverConfig.job_icons[ic];
                 if(icon && icon.trim() !== '') {%>
-                  addItemToList("<%=icon%>");
+                  if (document.getElementById('icons')) {
+                    addItemToList("<%=icon%>");
+                  }
             <%  }
               }
             } %>
 
             function makeSortable() {
+              if (!document.getElementById('item-list')) return;
                 $('#item-list').sortable({
                     placeholder: "ui-sortable-placeholder",
                     helper: function(event, ui) {
@@ -960,6 +1019,7 @@ function noValue(inValue){
 
             // Initialize webhook modals
             function initializeWebhookModals() {
+              if (!document.getElementById('webhookModal')) return;
               webhookModals.webhook = M.Modal.getInstance(document.getElementById('webhookModal')) || 
                 M.Modal.init(document.getElementById('webhookModal'));
               webhookModals.viewKey = M.Modal.getInstance(document.getElementById('viewKeyModal')) || 
@@ -984,12 +1044,14 @@ function noValue(inValue){
             // Load available jobs into the webhook job selector
             async function loadJobsIntoSelector() {
               try {
+                const selector = document.getElementById('webhookJobSelector');
+                if (!selector) return;
+
                 const response = await fetch('/rest/schedules');
                 if (!response.ok) {
                   throw new Error('Failed to load jobs');
                 }
                 const schedules = await response.json();
-                const selector = document.getElementById('webhookJobSelector');
                 
                 // Clear existing options (keep the placeholder)
                 const options = selector.querySelectorAll('option');
@@ -1050,6 +1112,7 @@ function noValue(inValue){
             // Update webhooks table display
             function updateWebooksTable(webhooks) {
               const tbody = document.getElementById('webhooksTableBody');
+              if (!tbody) return;
               
               if (webhooks.length === 0) {
                 tbody.innerHTML = '<tr id="webhooksEmptyRow"><td colspan="7" style="text-align: center; padding: 30px;">No webhooks created. Click "Create Webhook" to get started.</td></tr>';
@@ -1310,6 +1373,8 @@ function noValue(inValue){
 
             // Event listeners
             $(document).ready(function() {
+              if (!document.getElementById('webhookJobSelector')) return;
+
               initializeWebhookModals();
               loadJobsIntoSelector();
               

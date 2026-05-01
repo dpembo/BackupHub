@@ -1,3 +1,10 @@
+<% 
+const hasPerm = (p) => {
+  if (!locals.currentUser) return false;
+  if (locals.currentUser.isSuperAdmin) return true;
+  return Array.isArray(locals.currentUser.permissions) && locals.currentUser.permissions.includes(p);
+};
+%>
 <!DOCTYPE html>
 <%
 
@@ -345,7 +352,9 @@ if (Array.isArray(schedules)) {
           <h5 class="header orange-text">Jobs</h5>
         </div>
         <div class="col s6" style="text-align: right;padding-top:20px;">
+          <% if (hasPerm('jobs.create')) { %>
           <a class="tableIconButton" style="position:relative;left:-10px;" title="add" href="scheduler.html"><span class="material-icons vertTop">add</span></a>
+          <% } %>
           <a class="tableIconButton" title="list" href="scheduleList.html"><span class="material-icons vertTop">view_list</span></a>
           <a class="tableIconButton" title="day" href="scheduleListCalendar.html?viewType=daily"><span class="material-icons vertTop">today</span></a>
           <a class="tableIconButton" title="week" href="scheduleListCalendar.html?viewType=weekly"><span class="material-icons vertTop">date_range</span></a>
@@ -356,9 +365,11 @@ if (Array.isArray(schedules)) {
         <div style="text-align: center; padding: 60px 20px; color: #999;">
             <i class="material-icons" style="font-size: 64px; color: #ddd; display: block; margin-bottom: 20px;" title="Schedule">assignment</i>
             <p>No Jobs Yet</p>
+            <% if (hasPerm('jobs.create')) { %>
             <a href="/scheduler.html" class="btn waves-effect waves-light orange">
               <i class="material-icons left">add</i>Create Job
             </a>
+            <% } %>
           </div>
       <% } else { %>
       <div class="scheduleTable">
@@ -486,9 +497,15 @@ if (Array.isArray(schedules)) {
                     if(schedules[i].returnCode!=0){btnClass="errorIcons"}
                   %>
                   <a title="info" href="/ScheduleInfo.html?index=<%= i %>"><i class="material-icons <%=btnClass%> vertMid">info</i></a>
+                  <% if (hasPerm('jobs.edit')) { %>
                   <a title="edit" href="/scheduler.html?index=<%= i %>"><i class="material-icons <%=btnClass%> vertMid">edit</i></a>
+                  <% } %>
+                  <% if (hasPerm('jobs.create')) { %>
                   <a title="clone" href="/scheduler.html?copyIndex=<%= i %>"><i class="material-icons <%=btnClass%> vertMid">content_copy</i></a>
+                  <% } %>
+                  <% if (hasPerm('jobs.delete')) { %>
                   <a id="openModalButton<%=i%>" onclick="openModal('<%=schedules[i].jobName%>',<%=i%>);" title="delete" href="#<%=schedules[i].jobName%>"><i class="<%=btnClass%> material-icons vertMid">delete</i></a>
+                  <% } %>
                   <% if(schedules[i].scheduleMode === 'orchestration') { %>
                     <a title="Run now" onclick="runOrchestrationSchedule('<%= schedules[i].orchestrationId %>', <%= i %>)" style="cursor: pointer;"><i class="material-icons <%=btnClass%> vertMid">play_circle</i></a>
                   <% } else { %>
