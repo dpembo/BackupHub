@@ -24,10 +24,10 @@ async function sendNotification(subject,body,type,url){
 
 }
 
-async function sendEmail(subject,body,recipient) {
+async function sendEmail(subject, body, to) {
     try {
-      const toAddress = (typeof recipient === 'string' && recipient.trim().length > 0)
-        ? recipient.trim()
+      const toAddress = (typeof to === 'string' && to.trim().length > 0)
+        ? to.trim()
         : serverConfig.smtp.emailTo;
 
       // Create a transporter object using the default SMTP transport

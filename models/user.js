@@ -471,6 +471,7 @@ class Users {
       `Your password for account [${username}] has been updated.\n\n` +
       `If this was not you, please reset your password immediately:\n` +
       `${this.emailer.getHostName()}/forgot.html`;
+    // user may be null if not found; fall back to global emailTo in that case
     this.emailer.sendEmail('Orchelium - Password Changed', body, user ? user.email : undefined);
   }
 
