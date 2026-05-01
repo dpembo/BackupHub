@@ -206,6 +206,68 @@ div.modal-footer a{
   border-bottom: 1px solid #455a64 !important;
 }
 
+#orchestration-header .header-toolbar {
+  background: #263238 !important;
+  border: 1px solid #455a64 !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3) !important;
+}
+
+#orchestration-header .toolbar-group {
+  background: #263238 !important;
+  border: 1px solid #455a64 !important;
+}
+
+#orchestration-header .toolbar-divider {
+  background: #455a64 !important;
+}
+
+#orchestration-header .header-action-btn {
+  background: #37474f !important;
+  color: #ffffff !important;
+  border-right: 1px solid #455a64 !important;
+  box-shadow: none !important;
+}
+
+#orchestration-header .header-action-btn:hover {
+  background: #455a64 !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+#orchestration-header .header-action-btn:active {
+  background: #2f3f46 !important;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35) !important;
+}
+
+#orchestration-header .header-action-btn:disabled,
+#orchestration-header .header-action-btn:disabled:hover {
+  color: #90a4ae !important;
+  background: #2f3f46 !important;
+  box-shadow: none !important;
+  opacity: 0.65 !important;
+}
+
+#orchestration-header .header-action-btn.toolbar-primary {
+  background: #3f5661 !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+#orchestration-header .header-action-btn.toolbar-primary:hover {
+  background: #4a616b !important;
+}
+
+#orchestration-header .header-action-btn.toolbar-primary:active {
+  background: #324750 !important;
+}
+
+#orchestration-header h3,
+#orchestration-header #orch-name-text,
+#orchestration-header #orch-desc-text,
+#orchestration-header .material-icons {
+  color: #e3edf4 !important;
+}
+
 #orchestration-palette {
   background: #263238 !important;
   border-right: 1px solid #455a64 !important;
@@ -262,7 +324,7 @@ div.modal-footer a{
   border: 1px solid #455a64 !important;
 }
 
-#zoom-out, #zoom-in, #zoom-reset {
+#zoom-out, #zoom-in, #zoom-reset, #zoom-auto-layout {
   background: #37474f !important;
   border: 1px solid #455a64 !important;
   color: #ffffff !important;

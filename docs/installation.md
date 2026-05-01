@@ -41,6 +41,7 @@ docker run \
 |---|---|--|
 | TZ | Time zone to ensure the container operates in your correct time zone for display of date/times.  Time zone names follow the standard IANA database, of which you can find a list via [wikipedia](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones)| Europe/London |
 | ORCHELIUM_ENCRYPTION_KEY | This variable is used to provide the encryption key used between the Hub and Agents to ensure the data/commmands cannot be compromised, or the link from agent to server be misued.  This has a default value, but its recommended to change this.  Note that the environment variable has to be set the same on the server and any environment where an agent is deployed for the communication to work correctly|MySecretKey|
+| ORCHELIUM_KEY_ENFORCE | Controls server behaviour when `ORCHELIUM_ENCRYPTION_KEY` is not set (i.e. the default key `CHANGEIT` is in use). Accepted values: `strict` — server refuses to start; `warn` (default) — server starts but logs a prominent warning; `silent` — server starts with no warning (not recommended outside development). This variable must be set consistently on both the server and all agents. | `warn` |
 | | | |
 | **Volume** | **Description** | **Example** |
 | /usr/src/app/data | This volume is used to hold all the various data that Orchelium uses including job history, user setup, configuration and statistics |-v custom/data:/usr/src/app/data

@@ -6,6 +6,8 @@
 const db = require('./db.js');
 const fs = require('fs').promises;
 const EventEmitter = require('events');
+const axios = require('axios');
+const notifier = require('./notify.js');
 const wsBrowser = require('./communications/wsBrowserTransport.js');
 const triggerContext = require('./triggerContext.js');
 
@@ -130,6 +132,16 @@ function evaluateNumericCondition(actual, operator, expected) {
   return result;
 }
 
+function serializeHttpData(data) {
+  if (data === undefined || data === null) return '';
+  if (typeof data === 'string') return data;
+  try {
+    return JSON.stringify(data, null, 2);
+  } catch (_err) {
+    return String(data);
+  }
+}
+
 
 /**
  * Execute an orchestration job
@@ -197,80 +209,313 @@ async function executeJob(jobId, isManual = false, executionId = null, onNodeCom
       throw new Error('No start node found in orchestration');
     }
 
-    // Build a map of nodes and edges for easy traversal
+    // Build maps for node and edge traversal.
     const nodeMap = {};
     job.nodes.forEach(n => {
       nodeMap[n.id] = n;
     });
 
     const edgeMap = {};
+    const incomingEdgeMap = {};
     job.edges.forEach(e => {
       const key = `${e.from}#${e.fromPort}`;
-      edgeMap[key] = e;
+      if (!edgeMap[key]) {
+        edgeMap[key] = [];
+      }
+      edgeMap[key].push(e);
+
+      if (!incomingEdgeMap[e.to]) {
+        incomingEdgeMap[e.to] = [];
+      }
+      incomingEdgeMap[e.to].push(e);
     });
 
-    // Start execution from start node
-    let currentNodeId = startNode.id;
+    // Join coordination state for split-join nodes in join mode.
+    const joinState = {};
+
+    const getOutgoingEdges = (nodeId, portName = 'out') => edgeMap[`${nodeId}#${portName}`] || [];
+
+    const markNodeStarted = (node) => {
+      executionLog.currentNode = node.id;
+      executionLog.visitedNodes.push(node.id);
+      logger.info(`Executing node [${node.id}] type: ${node.type}`);
+      wsBrowser.emitOrchestrationEvent(jobId, executionLog.executionId, 'orchestrationNodeStarted', {
+        nodeId: node.id,
+        nodeType: node.type,
+        nodeName: node.data?.name || node.id
+      });
+      return new Date().toISOString();
+    };
+
+    const markNodeCompleted = (node, nodeStartTime, status, extra = {}) => {
+      const nodeEndTime = new Date().toISOString();
+      executionLog.nodeMetrics[node.id] = {
+        startTime: nodeStartTime,
+        endTime: nodeEndTime,
+        duration: (new Date(nodeEndTime).getTime() - new Date(nodeStartTime).getTime()) / 1000
+      };
+
+      wsBrowser.emitOrchestrationEvent(jobId, executionLog.executionId, 'orchestrationNodeCompleted', {
+        nodeId: node.id,
+        nodeType: node.type,
+        status,
+        ...extra
+      });
+
+      if (onNodeComplete) {
+        onNodeComplete(executionLog);
+      }
+    };
+
+    const mergeBranchResults = (results, errorPolicy = 'waitForAll') => {
+      const normalized = (results || []).filter(Boolean);
+      if (normalized.length === 0) {
+        return 'success';
+      }
+
+      if (normalized.includes('error')) {
+        return 'error';
+      }
+
+      if (normalized.includes('failure')) {
+        return 'failure';
+      }
+
+      if (errorPolicy === 'failFast' && normalized.some(r => r !== 'success')) {
+        return 'failure';
+      }
+
+      return 'success';
+    };
+
     let maxIterations = 1000; // Prevent infinite loops
     let iterations = 0;
 
-    // Traverse the graph
-    while (iterations < maxIterations) {
+    async function executePath(nodeId, pathContext = {}, incomingEdge = null) {
       iterations++;
-      const currentNode = nodeMap[currentNodeId];
-
-      if (!currentNode) {
-        throw new Error(`Node [${currentNodeId}] not found in orchestration`);
+      if (iterations >= maxIterations) {
+        throw new Error('Execution exceeded maximum iterations (infinite loop detected)');
       }
 
-      executionLog.currentNode = currentNodeId;
-      executionLog.visitedNodes.push(currentNodeId);
+      const currentNode = nodeMap[nodeId];
+      if (!currentNode) {
+        throw new Error(`Node [${nodeId}] not found in orchestration`);
+      }
 
-      logger.info(`Executing node [${currentNodeId}] type: ${currentNode.type}`);
+      if (currentNode.type === 'split-join') {
+        const mode = (currentNode.data?.mode || 'split').toLowerCase();
+        if (mode === 'join') {
+          const incomingEdges = incomingEdgeMap[currentNode.id] || [];
+          if (!joinState[currentNode.id]) {
+            joinState[currentNode.id] = {
+              arrivedEdgeIds: new Set(),
+              released: false
+            };
+          }
 
-      const nodeStartTime = new Date().toISOString();
+          const state = joinState[currentNode.id];
+          if (incomingEdge && incomingEdge.id) {
+            state.arrivedEdgeIds.add(incomingEdge.id);
+          }
 
-      // Emit nodeStarted event for all nodes (including start)
-      logger.debug(`[executeJob] Start node - emitting orchestrationNodeStarted for ${currentNodeId}`);
-      wsBrowser.emitOrchestrationEvent(jobId, executionLog.executionId, 'orchestrationNodeStarted', {
-        nodeId: currentNodeId,
-        nodeType: currentNode.type,
-        nodeName: currentNode.data?.name || currentNodeId
-      });
+          const joinStrategy = (currentNode.data?.joinStrategy || 'waitAll').toLowerCase();
+          let continueFromJoin = false;
 
-      // Handle different node types
+          if (!state.released) {
+            if (joinStrategy === 'waitany') {
+              state.released = true;
+              continueFromJoin = true;
+            } else {
+              const requiredCount = Math.max(incomingEdges.length, 1);
+              if (state.arrivedEdgeIds.size >= requiredCount) {
+                state.released = true;
+                continueFromJoin = true;
+              }
+            }
+          }
+
+          // This branch reached the join but is not the releasing branch.
+          if (!continueFromJoin) {
+            return null;
+          }
+        }
+      }
+
+      const nodeStartTime = markNodeStarted(currentNode);
+
       if (currentNode.type === 'start') {
-        // Start node: just move to next
-        const nextEdgeKey = `${currentNodeId}#out`;
-        const nextEdge = edgeMap[nextEdgeKey];
-
-        if (!nextEdge) {
-          throw new Error(`Start node [${currentNodeId}] has no outgoing connection`);
+        const outgoing = getOutgoingEdges(currentNode.id, 'out');
+        if (outgoing.length === 0) {
+          throw new Error(`Start node [${currentNode.id}] has no outgoing connection`);
+        }
+        if (outgoing.length > 1) {
+          throw new Error(`Start node [${currentNode.id}] has multiple outgoing connections. Use a split-join node for fan-out.`);
         }
 
-        const nodeEndTime = new Date().toISOString();
-        executionLog.nodeMetrics[currentNodeId] = {
-          startTime: nodeStartTime,
-          endTime: nodeEndTime,
-          duration: (new Date(nodeEndTime).getTime() - new Date(nodeStartTime).getTime()) / 1000
-        };
+        markNodeCompleted(currentNode, nodeStartTime, 'success');
+        return executePath(outgoing[0].to, pathContext, outgoing[0]);
+      }
 
-        // Emit nodeCompleted event
-        logger.info(`[ORCHESTRATION] Node [${currentNodeId}] completed - emitting orchestrationNodeCompleted`);
-        wsBrowser.emitOrchestrationEvent(jobId, executionLog.executionId, 'orchestrationNodeCompleted', {
-          nodeId: currentNodeId,
-          nodeType: currentNode.type,
-          status: 'success'
-        });
+      if (currentNode.type === 'execute') {
+        const executeType = (currentNode.data?.executeType || 'script').toLowerCase();
 
-        // Update cache with latest visited nodes
-        if (onNodeComplete) {
-          onNodeComplete(executionLog);
+        if (executeType === 'http') {
+          const method = String(currentNode.data?.httpMethod || 'GET').toUpperCase();
+          const rawUrl = String(currentNode.data?.httpUrl || '').trim();
+          const timeoutMsRaw = parseInt(currentNode.data?.httpTimeoutMs, 10);
+          const timeoutMs = Number.isFinite(timeoutMsRaw) && timeoutMsRaw > 0 ? timeoutMsRaw : 30000;
+
+          if (!rawUrl) {
+            throw new Error(`HTTP execute node [${currentNode.id}] has no URL configured`);
+          }
+
+          let templateContext = null;
+          const getTemplateContext = () => {
+            if (templateContext) return templateContext;
+            templateContext = executionLog.triggerContext;
+            if (!templateContext) {
+              templateContext = {
+                type: 'manual',
+                timestamp: new Date().toISOString(),
+                executionId: executionLog.executionId,
+                webhook: {
+                  payload: { data: 'test' }
+                },
+                metric: { value: 0 },
+                condition: { threshold: 0 }
+              };
+              logger.debug('[ORCHESTRATION] No trigger context - using default test context for template substitution');
+            }
+            return templateContext;
+          };
+
+          const applyTemplate = (value) => {
+            if (typeof value !== 'string') return value;
+            if (!value.includes('#{')) return value;
+            return triggerContext.substituteTemplate(value, getTemplateContext());
+          };
+
+          const url = applyTemplate(rawUrl);
+          const headers = {};
+          const configuredHeaders = Array.isArray(currentNode.data?.httpHeaders) ? currentNode.data.httpHeaders : [];
+
+          configuredHeaders.forEach(header => {
+            const key = String(header?.key || '').trim();
+            if (!key) return;
+            const value = applyTemplate(String(header?.value || ''));
+            headers[key] = value;
+          });
+
+          const authType = (currentNode.data?.httpAuthType || 'none').toLowerCase();
+          const axiosConfig = {
+            method,
+            url,
+            timeout: timeoutMs,
+            headers,
+            validateStatus: () => true
+          };
+
+          if (authType === 'bearer') {
+            const token = applyTemplate(String(currentNode.data?.httpAuthBearerToken || ''));
+            if (!token.trim()) {
+              throw new Error(`HTTP execute node [${currentNode.id}] uses bearer auth but token is empty`);
+            }
+            axiosConfig.headers.Authorization = `Bearer ${token}`;
+          } else if (authType === 'basic') {
+            const username = applyTemplate(String(currentNode.data?.httpAuthUsername || ''));
+            const password = applyTemplate(String(currentNode.data?.httpAuthPassword || ''));
+            if (!username.trim() || !password.trim()) {
+              throw new Error(`HTTP execute node [${currentNode.id}] uses basic auth but username/password are incomplete`);
+            }
+            axiosConfig.auth = { username, password };
+          } else if (authType === 'apikey') {
+            const headerName = String(currentNode.data?.httpAuthApiKeyHeader || 'X-API-Key').trim();
+            const headerValue = applyTemplate(String(currentNode.data?.httpAuthApiKeyValue || ''));
+            if (!headerName || !headerValue.trim()) {
+              throw new Error(`HTTP execute node [${currentNode.id}] uses API key auth but header/value are incomplete`);
+            }
+            axiosConfig.headers[headerName] = headerValue;
+          }
+
+          const rawBody = String(currentNode.data?.httpBody || '');
+          const body = applyTemplate(rawBody);
+          if (body.trim().length > 0 && !['GET', 'HEAD'].includes(method)) {
+            try {
+              axiosConfig.data = JSON.parse(body);
+            } catch (_parseErr) {
+              axiosConfig.data = body;
+            }
+          }
+
+          let response;
+          try {
+            response = await axios(axiosConfig);
+          } catch (httpErr) {
+            const failureTime = new Date().toISOString();
+            const errorMessage = httpErr?.message || 'Unknown HTTP request error';
+            const responseBody = serializeHttpData(httpErr?.response?.data);
+            const responseStatus = httpErr?.response?.status;
+
+            executionLog.scriptOutputs[currentNode.id] = {
+              script: `HTTP ${method} ${url}`,
+              parameters: '',
+              agent: 'http',
+              status: 'failed',
+              exitCode: 1,
+              stdout: responseBody || '',
+              stderr: responseStatus ? `HTTP ${method} ${url} failed with status ${responseStatus}: ${errorMessage}` : `HTTP ${method} ${url} failed: ${errorMessage}`,
+              startTime: failureTime,
+              endTime: failureTime,
+              httpMethod: method,
+              httpUrl: url,
+              httpStatus: responseStatus || null
+            };
+
+            markNodeCompleted(currentNode, nodeStartTime, 'failed', { exitCode: 1 });
+            const outgoing = getOutgoingEdges(currentNode.id, 'out');
+            if (outgoing.length === 0) {
+              return 'failure';
+            }
+            if (outgoing.length > 1) {
+              throw new Error(`Execute node [${currentNode.id}] has multiple outgoing connections. Use split-join node in split mode.`);
+            }
+            return executePath(outgoing[0].to, { ...pathContext, lastScriptNodeId: currentNode.id }, outgoing[0]);
+          }
+
+          const responseBody = serializeHttpData(response?.data);
+          const responseStatus = Number(response?.status || 0);
+          const exitCode = responseStatus >= 200 && responseStatus < 300 ? 0 : 1;
+          const completedAt = new Date().toISOString();
+
+          executionLog.scriptOutputs[currentNode.id] = {
+            script: `HTTP ${method} ${url}`,
+            parameters: '',
+            agent: 'http',
+            status: 'completed',
+            exitCode,
+            stdout: responseBody,
+            stderr: exitCode === 0 ? '' : `HTTP ${method} ${url} returned status ${responseStatus}`,
+            startTime: completedAt,
+            endTime: completedAt,
+            httpMethod: method,
+            httpUrl: url,
+            httpStatus: responseStatus
+          };
+
+          const status = exitCode === 0 ? 'success' : 'failed';
+          markNodeCompleted(currentNode, nodeStartTime, status, { exitCode });
+
+          const outgoing = getOutgoingEdges(currentNode.id, 'out');
+          if (outgoing.length === 0) {
+            return exitCode === 0 ? 'success' : 'failure';
+          }
+          if (outgoing.length > 1) {
+            throw new Error(`Execute node [${currentNode.id}] has multiple outgoing connections. Use split-join node in split mode.`);
+          }
+
+          return executePath(outgoing[0].to, { ...pathContext, lastScriptNodeId: currentNode.id }, outgoing[0]);
         }
 
-        currentNodeId = nextEdge.to;
-      } else if (currentNode.type === 'execute') {
-        // Execute node: send script to agent and wait for completion
         let scriptPath = currentNode.data.script;
         let parameters = currentNode.data.parameters || '';
         const agentId = currentNode.data.agent;
@@ -278,7 +523,7 @@ async function executeJob(jobId, isManual = false, executionId = null, onNodeCom
         // Apply template substitution with context or default test context
         if (parameters.includes('#{')) {
           let contextForSubstitution = executionLog.triggerContext;
-          
+
           // If no trigger context (manual execution), create default test context
           if (!contextForSubstitution) {
             contextForSubstitution = {
@@ -291,31 +536,28 @@ async function executeJob(jobId, isManual = false, executionId = null, onNodeCom
               metric: { value: 0 },
               condition: { threshold: 0 }
             };
-            logger.debug(`[ORCHESTRATION] No trigger context - using default test context for template substitution`);
+            logger.debug('[ORCHESTRATION] No trigger context - using default test context for template substitution');
           }
-          
+
           parameters = triggerContext.substituteTemplate(parameters, contextForSubstitution);
           logger.debug(`[ORCHESTRATION] Applied template substitution to parameters. Result: [${parameters}]`);
         }
 
         if (!scriptPath) {
-          throw new Error(`Execute node [${currentNodeId}] has no script configured`);
+          throw new Error(`Execute node [${currentNode.id}] has no script configured`);
         }
 
         if (!agentId) {
-          throw new Error(`Execute node [${currentNodeId}] has no agent configured`);
+          throw new Error(`Execute node [${currentNode.id}] has no agent configured`);
         }
 
         try {
-          // Clear any old logs from the database for this job before execution
-          // Construct the log key that will be used (must match agentMessageProcessor logic)
           const agents = require('./agents.js');
           const agent = agents.getAgent(agentId);
-          
-          // Check if agent is online before attempting to send command
+
           let result;
           const offlineCheckTime = new Date().toISOString();
-          
+
           if (!agent) {
             logger.error(`[ORCHESTRATION] Agent [${agentId}] not found - treating as offline`);
             result = {
@@ -335,22 +577,18 @@ async function executeJob(jobId, isManual = false, executionId = null, onNodeCom
               endTime: offlineCheckTime
             };
           } else {
-            // Agent is online, proceed with execution
-            if (agent) {
-              const jobName = `Orchestration [${jobId}] Execution [${executionLog.executionId}] Node [${currentNodeId}]`;
-              const logKey = `${agent.name}_${jobName}_log`;
-              try {
-                await db.deleteData(logKey);
-                logger.debug(`[ORCHESTRATION] Cleared old log for key [${logKey}]`);
-              } catch (clearErr) {
-                // Key might not exist - that's fine
-                logger.debug(`[ORCHESTRATION] No existing log to clear for key [${logKey}]: ${clearErr.message}`);
-              }
+            const jobName = `Orchestration [${jobId}] Execution [${executionLog.executionId}] Node [${currentNode.id}]`;
+            const logKey = `${agent.name}_${jobName}_log`;
+            try {
+              await db.deleteData(logKey);
+              logger.debug(`[ORCHESTRATION] Cleared old log for key [${logKey}]`);
+            } catch (clearErr) {
+              logger.debug(`[ORCHESTRATION] No existing log to clear for key [${logKey}]: ${clearErr.message}`);
             }
-            // Read script content from server
+
             const fullScriptPath = `./scripts/${scriptPath}`;
             logger.info(`Reading script content from [${fullScriptPath}]`);
-            
+
             let scriptContent;
             try {
               scriptContent = await fs.readFile(fullScriptPath, 'utf8');
@@ -359,9 +597,8 @@ async function executeJob(jobId, isManual = false, executionId = null, onNodeCom
                 ? `Script cannot be found: [${fullScriptPath}]`
                 : `Failed to read script [${fullScriptPath}]: ${readErr.message}`;
 
-              // Record a node-level output so UI/history can show the root cause in response logs.
               const failureTime = new Date().toISOString();
-              executionLog.scriptOutputs[currentNodeId] = {
+              executionLog.scriptOutputs[currentNode.id] = {
                 script: scriptPath,
                 parameters,
                 agent: agentId,
@@ -377,21 +614,14 @@ async function executeJob(jobId, isManual = false, executionId = null, onNodeCom
               throw new Error(scriptReadMessage);
             }
 
-            // Construct job name that matches what agent will report back
-            // Format: Orchestration [jobId] Execution [executionId] Node [nodeId]
-            const jobName = `Orchestration [${jobId}] Execution [${executionLog.executionId}] Node [${currentNodeId}]`;
-            
-            // Convert trigger context to environment variables for script injection
             let contextEnvVars = {};
             if (executionLog.triggerContext) {
               contextEnvVars = triggerContext.contextToEnvVars(executionLog.triggerContext);
               logger.debug(`[ORCHESTRATION] Prepared ${Object.keys(contextEnvVars).length} trigger context environment variables`);
             }
-            
+
             logger.info(`Sending script [${scriptPath}] to agent [${agentId}]`);
-            
-            // Send script content (not path) to agent using agentComms
-            // The agent will create a temp file with this content and execute it
+
             const sendCommandArgs = [
               agentId,
               'execute/orchestrationScript',
@@ -409,20 +639,17 @@ async function executeJob(jobId, isManual = false, executionId = null, onNodeCom
 
             agentComms.sendCommand(...sendCommandArgs);
 
-            // Wait for agent response (with 5-minute timeout)
-            logger.debug(`[ORCHESTRATION] About to wait for script completion on node [${currentNodeId}]`);
+            logger.debug(`[ORCHESTRATION] About to wait for script completion on node [${currentNode.id}]`);
             const actualStartTime = new Date().toISOString();
             result = await waitForScriptCompletion(jobName, 300000);
             const actualEndTime = new Date().toISOString();
             logger.debug(`[ORCHESTRATION] Script completion received: exitCode=${result.exitCode}`);
-            
-            // Update with actual execution times for online agent case
+
             result.startTime = actualStartTime;
             result.endTime = actualEndTime;
           }
 
-          // Update execution log with actual results
-          executionLog.scriptOutputs[currentNodeId] = {
+          executionLog.scriptOutputs[currentNode.id] = {
             script: scriptPath,
             parameters,
             agent: agentId,
@@ -434,118 +661,70 @@ async function executeJob(jobId, isManual = false, executionId = null, onNodeCom
             endTime: result.endTime
           };
 
-          // Log with additional details if this failed due to agent offline
           if (result.stderr && (result.stderr.includes('offline') || result.stderr.includes('not found'))) {
-            logger.error(`Execute step failed for node [${currentNodeId}]: ${result.stderr}`);
+            logger.error(`Execute step failed for node [${currentNode.id}]: ${result.stderr}`);
           } else {
             logger.info(`Script execution completed on agent [${agentId}] with exit code [${result.exitCode}]`);
           }
 
-          const nodeEndTime = new Date().toISOString();
-          executionLog.nodeMetrics[currentNodeId] = {
-            startTime: nodeStartTime,
-            endTime: nodeEndTime,
-            duration: (new Date(nodeEndTime).getTime() - new Date(nodeStartTime).getTime()) / 1000
-          };
+          const status = result.exitCode === 0 ? 'success' : 'failed';
+          markNodeCompleted(currentNode, nodeStartTime, status, { exitCode: result.exitCode || 0 });
 
-          // Emit nodeCompleted event
-          wsBrowser.emitOrchestrationEvent(jobId, executionLog.executionId, 'orchestrationNodeCompleted', {
-            nodeId: currentNodeId,
-            nodeType: currentNode.type,
-            status: result.exitCode === 0 ? 'success' : 'failed',
-            exitCode: result.exitCode || 0
-          });
-
-          // Update cache with latest visited nodes
-          if (onNodeComplete) {
-            onNodeComplete(executionLog);
+          const outgoing = getOutgoingEdges(currentNode.id, 'out');
+          if (outgoing.length === 0) {
+            return result.exitCode === 0 ? 'success' : 'failure';
+          }
+          if (outgoing.length > 1) {
+            throw new Error(`Execute node [${currentNode.id}] has multiple outgoing connections. Use split-join node in split mode.`);
           }
 
-          // Move to next node, or complete if this execute node is terminal
-          const nextEdgeKey = `${currentNodeId}#out`;
-          const nextEdge = edgeMap[nextEdgeKey];
-
-          if (!nextEdge) {
-            executionLog.finalStatus = result.exitCode === 0 ? 'success' : 'failure';
-            executionLog.status = 'completed';
-            executionLog.endTime = nodeEndTime;
-            logger.info(
-              `Orchestration [${jobId}] completed at terminal execute node [${currentNodeId}] with status [${executionLog.finalStatus}]`
-            );
-            break;
-          }
-
-          currentNodeId = nextEdge.to;
+          return executePath(outgoing[0].to, { ...pathContext, lastScriptNodeId: currentNode.id }, outgoing[0]);
         } catch (err) {
-          // Ensure monitor marks the node as completed/failed for local pre-agent failures
-          // (for example missing script files on the server).
           wsBrowser.emitOrchestrationEvent(jobId, executionLog.executionId, 'orchestrationNodeCompleted', {
-            nodeId: currentNodeId,
+            nodeId: currentNode.id,
             nodeType: currentNode.type,
             status: 'failed',
-            exitCode: executionLog.scriptOutputs[currentNodeId]?.exitCode || 1
+            exitCode: executionLog.scriptOutputs[currentNode.id]?.exitCode || 1
           });
 
           executionLog.errors.push({
-            node: currentNodeId,
+            node: currentNode.id,
             message: err.message
           });
           throw err;
         }
-      } else if (currentNode.type === 'condition') {
-        // Condition node: evaluate and route
+      }
+
+      if (currentNode.type === 'condition') {
         const conditionType = currentNode.data.conditionType || 'return_code';
         const operator = currentNode.data.operator || '==';
         const conditionValue = currentNode.data.conditionValue || '0';
         let result = false;
 
         try {
-          if (conditionType === 'return_code') {
-            // Get last executed script node
-            const lastScriptNode = [...executionLog.visitedNodes]
-              .reverse()
-              .find(id => nodeMap[id].type === 'execute' && executionLog.scriptOutputs[id]);
+          const lastScriptNode = pathContext.lastScriptNodeId;
 
+          if (conditionType === 'return_code') {
             if (lastScriptNode && executionLog.scriptOutputs[lastScriptNode]) {
               const exitCode = executionLog.scriptOutputs[lastScriptNode].exitCode || 0;
               result = evaluateNumericCondition(exitCode, operator, parseInt(conditionValue));
             }
           } else if (conditionType === 'output_contains') {
-            // Check if last script output contains value
-            const lastScriptNode = [...executionLog.visitedNodes]
-              .reverse()
-              .find(id => nodeMap[id].type === 'execute' && executionLog.scriptOutputs[id]);
-
             if (lastScriptNode && executionLog.scriptOutputs[lastScriptNode]) {
               const output = executionLog.scriptOutputs[lastScriptNode].stdout || '';
               const contains = output.includes(conditionValue);
-              
-              // Handle equality operators for output_contains
-              if (operator === '!=' || operator === '!=') {
-                result = !contains;
-              } else {
-                result = contains;
-              }
+              result = (operator === '!=' || operator === '!=') ? !contains : contains;
             }
           } else if (conditionType === 'regex_match') {
-            // Check if last script output matches regex
-            const lastScriptNode = [...executionLog.visitedNodes]
-              .reverse()
-              .find(id => nodeMap[id].type === 'execute' && executionLog.scriptOutputs[id]);
-
             if (lastScriptNode && executionLog.scriptOutputs[lastScriptNode]) {
               try {
                 const output = executionLog.scriptOutputs[lastScriptNode].stdout || '';
                 const regex = new RegExp(conditionValue);
                 const matches = output.match(regex);
-                // For regex, we consider it a match if pattern is found
                 result = matches !== null;
-                
-                // For regex, handle != and other operators
                 if (operator.includes('!=') || operator === '!=') {
                   result = !result;
                 } else if (operator !== '==' && operator !== '!') {
-                  // If numeric operator specified, count matches
                   const matchCount = matches ? matches.length : 0;
                   result = evaluateNumericCondition(matchCount, operator, parseInt(conditionValue));
                 }
@@ -554,122 +733,209 @@ async function executeJob(jobId, isManual = false, executionId = null, onNodeCom
               }
             }
           } else if (conditionType === 'execution_time') {
-            // Check last script execution time (in seconds)
-            const lastScriptNode = [...executionLog.visitedNodes]
-              .reverse()
-              .find(id => nodeMap[id].type === 'execute' && executionLog.nodeMetrics[id]);
-
             if (lastScriptNode && executionLog.nodeMetrics[lastScriptNode]) {
               const nodeMetric = executionLog.nodeMetrics[lastScriptNode];
-              // duration is already in seconds
               result = evaluateNumericCondition(nodeMetric.duration, operator, parseFloat(conditionValue));
             }
           }
 
-          executionLog.conditionEvaluations[currentNodeId] = {
+          executionLog.conditionEvaluations[currentNode.id] = {
             type: conditionType,
-            operator: operator,
+            operator,
             value: conditionValue,
             result
           };
 
-          logger.info(`Condition [${currentNodeId}] evaluated: ${result} (${conditionType} ${operator} ${conditionValue})`);
+          logger.info(`Condition [${currentNode.id}] evaluated: ${result} (${conditionType} ${operator} ${conditionValue})`);
 
-          // Route based on result
           const portName = result ? 'true' : 'false';
-          const nextEdgeKey = `${currentNodeId}#${portName}`;
-          const nextEdge = edgeMap[nextEdgeKey];
-
-          if (!nextEdge) {
-            throw new Error(
-              `Condition node [${currentNodeId}] has no ${portName} branch connection`
-            );
+          const outgoing = getOutgoingEdges(currentNode.id, portName);
+          if (outgoing.length === 0) {
+            throw new Error(`Condition node [${currentNode.id}] has no ${portName} branch connection`);
+          }
+          if (outgoing.length > 1) {
+            throw new Error(`Condition node [${currentNode.id}] has multiple ${portName} branch connections`);
           }
 
-          const nodeEndTime = new Date().toISOString();
-          executionLog.nodeMetrics[currentNodeId] = {
-            startTime: nodeStartTime,
-            endTime: nodeEndTime,
-            duration: (new Date(nodeEndTime).getTime() - new Date(nodeStartTime).getTime()) / 1000
-          };
-
-          // Emit nodeCompleted event for condition node
-          wsBrowser.emitOrchestrationEvent(jobId, executionLog.executionId, 'orchestrationNodeCompleted', {
-            nodeId: currentNodeId,
-            nodeType: currentNode.type,
-            status: 'success'  // Condition nodes are always successful
-          });
-
-          // Update cache with latest visited nodes
-          if (onNodeComplete) {
-            onNodeComplete(executionLog);
-          }
-
-          currentNodeId = nextEdge.to;
+          markNodeCompleted(currentNode, nodeStartTime, 'success');
+          return executePath(outgoing[0].to, pathContext, outgoing[0]);
         } catch (err) {
           executionLog.errors.push({
-            node: currentNodeId,
+            node: currentNode.id,
             message: err.message
           });
           throw err;
         }
-      } else if (currentNode.type === 'end-success') {
-        // End success node
-        const nodeEndTime = new Date().toISOString();
-        executionLog.nodeMetrics[currentNodeId] = {
-          startTime: nodeStartTime,
-          endTime: nodeEndTime,
-          duration: (new Date(nodeEndTime).getTime() - new Date(nodeStartTime).getTime()) / 1000
-        };
-        
-        // Emit nodeCompleted event
-        wsBrowser.emitOrchestrationEvent(jobId, executionLog.executionId, 'orchestrationNodeCompleted', {
-          nodeId: currentNodeId,
-          nodeType: currentNode.type,
-          status: 'success'
-        });
-        
-        // Update cache with latest visited nodes
-        if (onNodeComplete) {
-          onNodeComplete(executionLog);
-        }
-        
-        executionLog.finalStatus = 'success';
-        executionLog.status = 'completed';
-        logger.info(`Orchestration [${jobId}] completed successfully at node [${currentNodeId}]`);
-        break;
-      } else if (currentNode.type === 'end-failure') {
-        // End failure node
-        const nodeEndTime = new Date().toISOString();
-        executionLog.nodeMetrics[currentNodeId] = {
-          startTime: nodeStartTime,
-          endTime: nodeEndTime,
-          duration: (new Date(nodeEndTime).getTime() - new Date(nodeStartTime).getTime()) / 1000
-        };
-        
-        // Emit nodeCompleted event  
-        wsBrowser.emitOrchestrationEvent(jobId, executionLog.executionId, 'orchestrationNodeCompleted', {
-          nodeId: currentNodeId,
-          nodeType: currentNode.type,
-          status: 'failure'
-        });
-        
-        // Update cache with latest visited nodes
-        if (onNodeComplete) {
-          onNodeComplete(executionLog);
-        }
-        
-        executionLog.finalStatus = 'failure';
-        executionLog.status = 'completed';
-        logger.info(`Orchestration [${jobId}] completed with failure at node [${currentNodeId}]`);
-        break;
-      } else {
-        throw new Error(`Unknown node type: ${currentNode.type}`);
       }
+
+      if (currentNode.type === 'wait') {
+        const rawWaitSeconds = parseFloat(currentNode.data?.waitSeconds);
+        const waitSeconds = Number.isFinite(rawWaitSeconds) && rawWaitSeconds > 0 ? rawWaitSeconds : 5;
+        const waitMs = Math.round(waitSeconds * 1000);
+        const startedAt = new Date().toISOString();
+
+        logger.info(`Wait node [${currentNode.id}] delaying for ${waitSeconds} seconds`);
+        await new Promise(resolve => setTimeout(resolve, waitMs));
+        const completedAt = new Date().toISOString();
+
+        executionLog.scriptOutputs[currentNode.id] = {
+          script: `WAIT ${waitSeconds}s`,
+          parameters: '',
+          agent: 'wait',
+          status: 'completed',
+          exitCode: 0,
+          stdout: `Waited ${waitSeconds} seconds`,
+          stderr: '',
+          startTime: startedAt,
+          endTime: completedAt,
+          waitSeconds
+        };
+
+        markNodeCompleted(currentNode, nodeStartTime, 'success', { exitCode: 0 });
+
+        const outgoing = getOutgoingEdges(currentNode.id, 'out');
+        if (outgoing.length === 0) {
+          return 'success';
+        }
+        if (outgoing.length > 1) {
+          throw new Error(`Wait node [${currentNode.id}] has multiple outgoing connections. Use split-join node in split mode.`);
+        }
+
+        return executePath(outgoing[0].to, pathContext, outgoing[0]);
+      }
+
+      if (currentNode.type === 'notify') {
+        let templateContext = null;
+        const getTemplateContext = () => {
+          if (templateContext) return templateContext;
+          templateContext = executionLog.triggerContext;
+          if (!templateContext) {
+            templateContext = {
+              type: 'manual',
+              timestamp: new Date().toISOString(),
+              executionId: executionLog.executionId,
+              webhook: {
+                payload: { data: 'test' }
+              },
+              metric: { value: 0 },
+              condition: { threshold: 0 }
+            };
+            logger.debug('[ORCHESTRATION] No trigger context - using default test context for template substitution');
+          }
+          return templateContext;
+        };
+
+        const applyTemplate = (value) => {
+          if (typeof value !== 'string') return value;
+          if (!value.includes('#{')) return value;
+          return triggerContext.substituteTemplate(value, getTemplateContext());
+        };
+
+        const notifyType = String(currentNode.data?.notifyType || 'INFORMATION').toUpperCase();
+        const notifyTitle = applyTemplate(String(currentNode.data?.notifyTitle || '')).trim();
+        const notifyBody = applyTemplate(String(currentNode.data?.notifyBody || '')).trim();
+        const notifyUrlRaw = applyTemplate(String(currentNode.data?.notifyUrl || '')).trim();
+        const notifyUrl = notifyUrlRaw || undefined;
+        const startedAt = new Date().toISOString();
+
+        if (!notifyTitle) {
+          throw new Error(`Notification node [${currentNode.id}] is missing a title`);
+        }
+        if (!notifyBody) {
+          throw new Error(`Notification node [${currentNode.id}] is missing a message`);
+        }
+
+        let exitCode = 0;
+        let stderr = '';
+        try {
+          await notifier.sendNotification(notifyTitle, notifyBody, notifyType, notifyUrl);
+        } catch (notifyErr) {
+          exitCode = 1;
+          stderr = notifyErr?.message || 'Notification send failed';
+          logger.warn(`Notification node [${currentNode.id}] failed to send: ${stderr}`);
+        }
+
+        const completedAt = new Date().toISOString();
+        executionLog.scriptOutputs[currentNode.id] = {
+          script: `NOTIFY ${notifyType} ${notifyTitle}`,
+          parameters: '',
+          agent: 'notify',
+          status: exitCode === 0 ? 'completed' : 'failed',
+          exitCode,
+          stdout: exitCode === 0 ? `Notification sent: ${notifyType} - ${notifyTitle}` : '',
+          stderr,
+          startTime: startedAt,
+          endTime: completedAt,
+          notifyType,
+          notifyTitle,
+          notifyBody,
+          notifyUrl: notifyUrl || ''
+        };
+
+        markNodeCompleted(currentNode, nodeStartTime, exitCode === 0 ? 'success' : 'failed', { exitCode });
+
+        const outgoing = getOutgoingEdges(currentNode.id, 'out');
+        if (outgoing.length === 0) {
+          return exitCode === 0 ? 'success' : 'failure';
+        }
+        if (outgoing.length > 1) {
+          throw new Error(`Notification node [${currentNode.id}] has multiple outgoing connections. Use split-join node in split mode.`);
+        }
+
+        return executePath(outgoing[0].to, { ...pathContext, lastScriptNodeId: currentNode.id }, outgoing[0]);
+      }
+
+      if (currentNode.type === 'split-join') {
+        const mode = (currentNode.data?.mode || 'split').toLowerCase();
+
+        if (mode === 'split') {
+          const outgoing = getOutgoingEdges(currentNode.id, 'out');
+          if (outgoing.length === 0) {
+            throw new Error(`Split node [${currentNode.id}] has no outgoing paths`);
+          }
+
+          markNodeCompleted(currentNode, nodeStartTime, 'success');
+
+          const branchPromises = outgoing.map(edge => executePath(edge.to, { ...pathContext }, edge));
+          const branchResults = await Promise.all(branchPromises);
+          return mergeBranchResults(branchResults, currentNode.data?.errorPolicy || 'waitForAll');
+        }
+
+        if (mode === 'join') {
+          markNodeCompleted(currentNode, nodeStartTime, 'success');
+
+          const outgoing = getOutgoingEdges(currentNode.id, 'out');
+          if (outgoing.length === 0) {
+            return 'success';
+          }
+          if (outgoing.length > 1) {
+            throw new Error(`Join node [${currentNode.id}] has multiple outgoing connections`);
+          }
+
+          return executePath(outgoing[0].to, pathContext, outgoing[0]);
+        }
+
+        throw new Error(`Split-join node [${currentNode.id}] has invalid mode [${mode}]`);
+      }
+
+      if (currentNode.type === 'end-success') {
+        markNodeCompleted(currentNode, nodeStartTime, 'success');
+        logger.info(`Orchestration [${jobId}] completed successfully at node [${currentNode.id}]`);
+        return 'success';
+      }
+
+      if (currentNode.type === 'end-failure') {
+        markNodeCompleted(currentNode, nodeStartTime, 'failure');
+        logger.info(`Orchestration [${jobId}] completed with failure at node [${currentNode.id}]`);
+        return 'failure';
+      }
+
+      throw new Error(`Unknown node type: ${currentNode.type}`);
     }
 
-    if (iterations >= maxIterations) {
-      throw new Error('Execution exceeded maximum iterations (infinite loop detected)');
+    const executionOutcome = await executePath(startNode.id, {}, null);
+    if (executionLog.finalStatus === null && executionOutcome) {
+      executionLog.finalStatus = executionOutcome;
     }
 
     // If finalStatus hasn't been set (no explicit end node was reached),
@@ -678,7 +944,7 @@ async function executeJob(jobId, isManual = false, executionId = null, onNodeCom
       // Find the last execute node that was executed
       const lastExecuteNode = [...executionLog.visitedNodes]
         .reverse()
-        .find(id => nodeMap[id].type === 'execute' && executionLog.scriptOutputs[id]);
+        .find(id => (nodeMap[id].type === 'execute' || nodeMap[id].type === 'wait' || nodeMap[id].type === 'notify') && executionLog.scriptOutputs[id]);
 
       if (lastExecuteNode && executionLog.scriptOutputs[lastExecuteNode]) {
         const exitCode = executionLog.scriptOutputs[lastExecuteNode].exitCode || 0;
@@ -815,7 +1081,6 @@ async function _doSaveExecutionResult(executionLog) {
       try {
         const serverConfig = global.serverConfig || require('./configuration.js').getConfig();
         if (serverConfig && serverConfig.server && serverConfig.server.jobFailEnabled === 'true') {
-          const notifier = require('./notify.js');
           const orchestrationMonitor = require('./orchestrationMonitor.js');
           
           // Get orchestration job name

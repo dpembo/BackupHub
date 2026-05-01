@@ -80,6 +80,43 @@ This document describes the main REST API endpoints exposed by the Orchelium ser
   - [Jobs Config](#jobs-config)
   - [ETA Config](#eta-config)
   - [Script Details](#script-details)
+  - [Delete a Script](#delete-a-script)
+  - [Jobs Using a Script](#jobs-using-a-script)
+
+- [Orchestration Management](#orchestration-management)
+  - [List All Orchestration Jobs](#list-all-orchestration-jobs)
+  - [Get an Orchestration Job](#get-an-orchestration-job)
+  - [Create an Orchestration Job](#create-an-orchestration-job)
+  - [Update an Orchestration Job](#update-an-orchestration-job)
+  - [Delete an Orchestration Job](#delete-an-orchestration-job)
+  - [Execute an Orchestration Job](#execute-an-orchestration-job)
+  - [Get Execution History](#get-execution-history)
+  - [Get Orchestration Job Metadata](#get-orchestration-job-metadata)
+  - [Get a Specific Version of an Orchestration Job](#get-a-specific-version-of-an-orchestration-job)
+  - [List Available Scripts](#list-available-scripts-for-orchestration-palette)
+  - [List Available Agents](#list-available-agents-for-orchestration-palette)
+
+- [Script Test Management](#script-test-management)
+  - [Start a Script Test](#start-a-script-test)
+  - [Get Script Test Execution State](#get-script-test-execution-state)
+  - [Get a Script Test Execution](#get-a-script-test-execution)
+  - [Acknowledge a Completed Test](#acknowledge-a-completed-test)
+  - [Discard a Retained Test Result](#discard-a-retained-test-result)
+  - [Terminate an Active Test](#terminate-an-active-test)
+
+- [Job History](#job-history)
+  - [Job History List](#job-history-list)
+  - [Job History Get](#job-history-get)
+  - [Job History Create](#job-history-create)
+  - [Job History Update](#job-history-update)
+  - [Job History Delete](#job-history-delete)
+  - [Job History Clear All](#job-history-clear-all)
+
+- [Schedule Management](#schedule-management)
+  - [List All Schedules](#list-all-schedules)
+  - [Get a Schedule by Job Name](#get-a-schedule-by-job-name)
+  - [Delete a Schedule by Job Name](#delete-a-schedule-by-job-name)
+  - [Delete All Schedules](#delete-all-schedules)
 
 ---
 
@@ -652,6 +689,14 @@ curl -X GET "http://your-server:8082/orchestration/execution/details?jobId=backu
 | **Input** | URL param: `index` | `1` |
 | **Output** | JSON with success | `{ "success": true }` |
 
+#### Job History Clear All
+`DELETE /rest/history/clear` | Delete all job history items.
+
+| Property | Value | Example |
+|---|---|---|
+| **Input** | None | |
+| **Output** | `{ "success": true, "message": "History cleared successfully" }` | |
+
 ---
 
 ## Running Jobs
@@ -977,6 +1022,184 @@ curl -X GET "http://your-server:8082/orchestration/execution/details?jobId=backu
 |---|---|---|
 | **Input** | URL param: `script` | `backupDB.sh` |
 | **Output** | JSON script object | `{ "name": "backupDB.sh", "description": "Backup database" }` |
+
+#### Delete a Script
+`DELETE /rest/script/:scriptName` | Delete a saved script by filename. Requires a valid CSRF token header (`x-csrf-token`). Returns `409` if the script is currently used by any scheduled job or orchestration.
+
+| Property | Value | Example |
+|---|---|---|
+| **Input** | URL param: `scriptName`; Header: `x-csrf-token` | `backupDB.sh` |
+| **Output** | JSON result | `{ "success": true }` |
+| **409 Conflict** | Script in use | `{ "success": false, "jobs": [ ... ], "count": 2 }` |
+
+#### Jobs Using a Script
+`GET /rest/jobs-for-script/:scriptName` | List all scheduled jobs and orchestrations that reference a given script.
+
+| Property | Value | Example |
+|---|---|---|
+| **Input** | URL param: `scriptName` | `backupDB.sh` |
+| **Output** | JSON with jobs array | `{ "success": true, "script": "backupDB.sh", "jobs": [ ... ], "count": 1 }` |
+
+---
+
+
+---
+
+## Orchestration Management
+
+The following endpoints manage orchestration job definitions and trigger their execution. All require authentication.
+
+#### List All Orchestration Jobs
+`GET /rest/orchestration/jobs` | Returns all defined orchestration jobs.
+
+| Property | Value | Example |
+|---|---|---|
+| **Input** | None | |
+| **Output** | JSON array of job summaries | `[ { "id": "backup-pipeline", "name": "Backup Pipeline", ... }, ... ]` |
+
+#### Get an Orchestration Job
+`GET /rest/orchestration/jobs/:jobId` | Returns the full definition of a specific orchestration job (nodes, edges, metadata).
+
+| Property | Value | Example |
+|---|---|---|
+| **Input** | URL param: `jobId` | `backup-pipeline` |
+| **Output** | Full job object including `nodes`, `edges`, `name`, `description`, `icon`, `color` | |
+
+#### Create an Orchestration Job
+`POST /rest/orchestration/jobs` | Create a new orchestration job. `jobId` and `name` are required.
+
+| Property | Value | Example |
+|---|---|---|
+| **Input** | JSON body: `{ jobId, name, description, nodes, edges, icon, color }` | |
+| **Output** | `{ "success": true, "job": { ... } }` | |
+
+#### Update an Orchestration Job
+`PUT /rest/orchestration/jobs/:jobId` | Update an existing orchestration job's definition or metadata.
+
+| Property | Value | Example |
+|---|---|---|
+| **Input** | URL param: `jobId`; JSON body: `{ name, description, nodes, edges, icon, color }` | |
+| **Output** | `{ "success": true, "job": { ... } }` | |
+
+#### Delete an Orchestration Job
+`DELETE /rest/orchestration/jobs/:jobId` | Delete an orchestration job and its definition.
+
+| Property | Value | Example |
+|---|---|---|
+| **Input** | URL param: `jobId` | `backup-pipeline` |
+| **Output** | `{ "success": true, "message": "Orchestration job [backup-pipeline] deleted" }` | |
+
+#### Execute an Orchestration Job
+`POST /rest/orchestration/jobs/:jobId/execute` | Trigger an orchestration job. Returns immediately with an `executionId`; the job runs asynchronously. Optionally pass `rerunFrom` (a node ID) to re-run from a specific point in a previous execution.
+
+| Property | Value | Example |
+|---|---|---|
+| **Input** | URL param: `jobId`; Optional JSON body: `{ "rerunFrom": "<nodeId>" }` | |
+| **Output** | `{ "success": true, "executionId": "a1b2c3d4e5f6g7h8" }` | |
+
+Use the returned `executionId` with the execution history endpoint or the Orchestration Monitor UI to track progress.
+
+#### Get Execution History
+`GET /rest/orchestration/jobs/:jobId/executions` | Returns all stored execution records for an orchestration job.
+
+| Property | Value | Example |
+|---|---|---|
+| **Input** | URL param: `jobId` | `backup-pipeline` |
+| **Output** | JSON array of execution records, each with `executionId`, `status`, `startTime`, `endTime`, `scriptOutputs`, `nodeMetrics`, `errors` | |
+
+#### Get Orchestration Job Metadata
+`GET /rest/orchestration/jobs/:jobId/metadata` | Returns lightweight metadata only (name, description, icon, color, version info) without the full node/edge definition.
+
+| Property | Value | Example |
+|---|---|---|
+| **Input** | URL param: `jobId` | `backup-pipeline` |
+| **Output** | `{ "id", "name", "description", "icon", "color", "currentVersion", "totalVersions", ... }` | |
+
+#### Get a Specific Version of an Orchestration Job
+`GET /rest/orchestration/jobs/:jobId/versions/:version` | Returns the definition as it was at a specific historical version.
+
+| Property | Value | Example |
+|---|---|---|
+| **Input** | URL params: `jobId`, `version` (integer) | `backup-pipeline`, `3` |
+| **Output** | Full job object at that version | |
+
+#### List Available Scripts (for Orchestration Palette)
+`GET /rest/orchestration/scripts` | Returns scripts available for use as Execute Script nodes in the orchestration builder.
+
+| Property | Value | Example |
+|---|---|---|
+| **Input** | None | |
+| **Output** | JSON array of script objects with `name` and `description` | |
+
+#### List Available Agents (for Orchestration Palette)
+`GET /rest/orchestration/agents` | Returns agents available for assignment to nodes.
+
+| Property | Value | Example |
+|---|---|---|
+| **Input** | None | |
+| **Output** | JSON array of `{ id, name, description, status, address, version }` | |
+
+---
+
+
+---
+
+## Script Test Management
+
+The following endpoints support the interactive script testing feature available in the Script Editor. All require authentication.
+
+#### Start a Script Test
+`POST /rest/script-test/start` | Run a script on a target agent for testing purposes. Returns immediately with an execution record. If a test for the same script is already active, returns `409` with the existing execution.
+
+| Property | Value | Example |
+|---|---|---|
+| **Input** | JSON body: `{ agentName, scriptName?, sourceType, scriptContent?, commandParams? }` | `{ "agentName": "my-agent", "sourceType": "saved", "scriptName": "test.sh" }` |
+| **Output** | `{ "success": true, "execution": { ... } }` | |
+| **409 Conflict** | Active or retained test exists | `{ "success": false, "code": "ACTIVE_TEST_EXISTS", "execution": { ... } }` |
+
+`sourceType` must be `"saved"` (runs the saved script file) or `"editor"` (runs `scriptContent` directly).
+
+#### Get Script Test Execution State
+`POST /rest/script-test/state` | Check whether a blocking execution (active or unacknowledged retained result) exists for a given script identity.
+
+| Property | Value | Example |
+|---|---|---|
+| **Input** | JSON body: `{ scriptName?, sourceType, scriptContent? }` | |
+| **Output** | `{ "success": true, "scriptIdentity": "...", "state": null \| { "type": "active"\|"retained", "execution": { ... } } }` | |
+
+#### Get a Script Test Execution
+`GET /rest/script-test/:executionId` | Fetch the current state and accumulated log of a specific test execution.
+
+| Property | Value | Example |
+|---|---|---|
+| **Input** | URL param: `executionId` | `a1b2c3d4` |
+| **Output** | `{ "success": true, "execution": { "executionId", "status", "log", "returnCode", "agentName", ... } }` | |
+
+#### Acknowledge a Completed Test
+`POST /rest/script-test/:executionId/acknowledge` | Mark a completed/failed test result as seen, allowing a new test to be started for the same script.
+
+| Property | Value | Example |
+|---|---|---|
+| **Input** | URL param: `executionId` | |
+| **Output** | `{ "success": true, "execution": { ... } }` | |
+
+#### Discard a Retained Test Result
+`POST /rest/script-test/:executionId/discard` | Remove a retained (completed/failed) test result before its 30-minute retention window expires. Returns `409` if the test is still active.
+
+| Property | Value | Example |
+|---|---|---|
+| **Input** | URL param: `executionId` | |
+| **Output** | `{ "success": true }` | |
+
+#### Terminate an Active Test
+`POST /rest/script-test/:executionId/terminate` | Send a termination signal to the agent running the test. The test status changes to `terminating` then `terminated` once the agent confirms.
+
+| Property | Value | Example |
+|---|---|---|
+| **Input** | URL param: `executionId` | |
+| **Output** | `{ "success": true, "execution": { ... } }` | |
+
+**Execution status values:** `pending` → `running` → `completed` | `failed` | `terminating` → `terminated`
 
 ---
 
