@@ -135,6 +135,15 @@ function redoEditor() {
   editor.trigger('toolbar', 'redo', null);
 }
 
+function exportCurrentScript() {
+  if (!onScript || !String(onScript).trim()) {
+    M.toast({ html: 'Save or select a script before exporting' });
+    return;
+  }
+
+  window.location.href = '/rest/script/' + encodeURIComponent(onScript) + '/export';
+}
+
 // Base64 Decode in the browser
 function base64Decode(base64Str) {
   return decodeURIComponent(escape(atob(base64Str)));
@@ -1176,6 +1185,10 @@ function scriptSelected(element,inScript,inDescription){
             <button class="header-action-btn" onclick="openScriptTestFromEditor()" title="Run a transient script test">
               <i class="material-icons">fact_check</i>
               Test
+            </button>
+            <button class="header-action-btn" onclick="exportCurrentScript()" title="Export this script">
+              <i class="material-icons">download</i>
+              Export
             </button>
             <button class="header-action-btn toolbar-primary" onclick="save()">
               <i class="material-icons">save</i>

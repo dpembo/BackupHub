@@ -412,6 +412,10 @@ function isSelected(inValue,compareValue){
               <i class="material-icons">cancel</i>
               Cancel
             </button>
+            <button id="export-button" class="header-action-btn" onclick="exportCurrentOrchestration()" title="Save this orchestration before exporting" disabled>
+              <i class="material-icons">download</i>
+              Export
+            </button>
             <button class="header-action-btn toolbar-primary" onclick="saveOrchestration()">
               <i class="material-icons">save</i>
               Save
@@ -862,6 +866,26 @@ function isSelected(inValue,compareValue){
     let redoStack = [];
     let isApplyingHistoryState = false;
     let historyCommitTimer = null;
+
+    function updateOrchestrationExportButtonState() {
+      const exportButton = document.getElementById('export-button');
+      if (!exportButton) return;
+
+      const canExport = Boolean(orchestrationId);
+      exportButton.disabled = !canExport;
+      exportButton.title = canExport
+        ? 'Export this orchestration'
+        : 'Save this orchestration before exporting';
+    }
+
+    function exportCurrentOrchestration() {
+      if (!orchestrationId) {
+        M.toast({ html: 'Save this orchestration before exporting' });
+        return;
+      }
+
+      window.location.href = '/rest/orchestration/jobs/' + encodeURIComponent(orchestrationId) + '/export';
+    }
     
     $(document).ready(function() {
       console.log('Orchestra Builder loaded, orchestrationId:', orchestrationId);
@@ -890,6 +914,7 @@ function isSelected(inValue,compareValue){
         resetHistoryFromCurrentState();
         markOrchestrationSavedState();
       }
+      updateOrchestrationExportButtonState();
 
       // Initialize color picker for both new and existing orchestrations
       setColorPicker(savedColor);
@@ -3285,6 +3310,7 @@ function isSelected(inValue,compareValue){
           console.log('Orchestration loaded - nodes:', Object.keys(nodes).length, 'edges:', edges.length);
           setIconDropDownValue(orch.icon);
           setColorPicker(orch.color);
+          updateOrchestrationExportButtonState();
         },
         error: function(xhr, status, error) {
           isLoadingOrchestration = false;
@@ -3530,6 +3556,7 @@ function isSelected(inValue,compareValue){
           orchestrationId = result.job.id;
           markOrchestrationSavedState();
           M.toast({html: 'Orchestration saved successfully!'});
+          updateOrchestrationExportButtonState();
           // Stay in the editor after save and reflect the persisted id in the URL.
           const editorUrl = '/orchestrationBuilder.html?id=' + encodeURIComponent(orchestrationId);
           if (window.location.pathname + window.location.search !== editorUrl) {

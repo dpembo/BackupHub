@@ -69,6 +69,9 @@ function outputArray(inArray)
           <div class="col s12">
             <button class="btn waves-effect waves-light" type="submit">Save Changes</button>
             <a href="/forgot.html" class="btn waves-effect waves-light">Reset Password</a>
+            <% if (locals.currentUser && (locals.currentUser.isSuperAdmin || (Array.isArray(locals.currentUser.permissions) && locals.currentUser.permissions.includes('users.manage')))) { %>
+            <a href="/users.html" class="btn waves-effect waves-light orange">Manage Users</a>
+            <% } %>
             <a class="btn waves-effect waves-light" style="float:right" href="/logout.html">Logout</a>
           </div>
         </div>

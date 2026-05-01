@@ -24,7 +24,7 @@ async function sendNotification(subject,body,type,url){
 
 }
 
-async function sendEmail(subject,body) {
+async function sendEmail(subject, body, to) {
     try {
       // Create a transporter object using the default SMTP transport
       let transporter = nodemailer.createTransport({
@@ -40,7 +40,7 @@ async function sendEmail(subject,body) {
       // Send mail with defined transport object
       let info = await transporter.sendMail({
         from: `"Orchelium" <${serverConfig.smtp.emailFrom}>`, // Sender address
-        to: serverConfig.smtp.emailTo,                        // List of recipients
+        to: to || serverConfig.smtp.emailTo,                  // List of recipients
         subject: subject,                                     // Subject line
         text: body,                                           // Plain text body
         /*html: '<b>Hello world?</b>'                         // HTML body*/

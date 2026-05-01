@@ -1,3 +1,10 @@
+<% 
+const hasPerm = (p) => {
+  if (!locals.currentUser) return false;
+  if (locals.currentUser.isSuperAdmin) return true;
+  return Array.isArray(locals.currentUser.permissions) && locals.currentUser.permissions.includes(p);
+};
+%>
 <!DOCTYPE html>
 <html lang="en">
 <%
@@ -561,7 +568,7 @@ function hasValidAgents(obj) {
   <div class="section no-pad-bot" id="index-banner">
     <div class="container">
       <% if(hasValidAgents(agents)){%>
-      <h5 class="header orange-text">Agent Status<span style="float:right"><a href="#" onclick="javascript:addAgent()"><span title="Deploy New Agent" class="material-icons vertMid tableIconButton" style="font-size:24pt;">add_circle</span></a></span></h5>
+      <h5 class="header orange-text">Agent Status<% if (hasPerm('agents.create')) { %><span style="float:right"><a href="#" onclick="javascript:addAgent()"><span title="Deploy New Agent" class="material-icons vertMid tableIconButton" style="font-size:24pt;">add_circle</span></a></span><% } %></h5>
       
       <div class="agentTable">
         <table>
@@ -701,8 +708,12 @@ function hasValidAgents(obj) {
           <td><%= value.lastStatusReport %></td>
           <td>
             <a title="info" href="/agentHistory.html?name=<%=value.name%>"><span class="material-icons tableIconButton">info</span></a>
+            <% if (hasPerm('agents.edit')) { %>
             <a title="edit" href="/agentEdit.html?agentId=<%=value.name%>"><span class="material-icons tableIconButton">edit</i></a>
+            <% } %>
+            <% if (hasPerm('agents.edit')) { %>
             <a href="#" onclick="deleteAgent('<%=value.name%>');" title="Delete Agent" id="deleteAgent"><i class="tableIconButton material-icons">delete</i></a>
+            <% } %>
             <% if (value.status=="register"){%>
             <a href="#" onclick="goToRegister(`<%=JSON.stringify(value)%>`);" title="Register" id="registerAgent"><i class="tableIconButton material-icons">app_registration</i></a>
             <%} else {%>
@@ -710,7 +721,9 @@ function hasValidAgents(obj) {
             <%}%>
             <% if(agentVersInt < serverVersInt){%>
               <input type="hidden" id="<%=value.name%>_command" value="bash <%=installDir%>/update.sh --restart --quiet">
+              <% if (hasPerm('agents.update')) { %>
               <a href="#" onclick='initiateUpdate("<%=value.name%>","<%=startupType%>")' title="Initiate Agent Update" id="udateAgent"><i class="tableIconButton material-icons blinking" style="color:#CF6679ed">update</i></a>
+              <% } %>
             <%}%>
           </td>
           
@@ -723,13 +736,15 @@ function hasValidAgents(obj) {
     </div>
     <% } else { %>
       <%=JSON.stringify(agents)%>;
-      <h5 class="header orange-text">Agent Status<span style="float:right"><a href="#" onclick="javascript:addAgent()"><span title="Deploy New Agent" class="material-icons vertMid tableIconButton" style="font-size:24pt;">add_circle</span></a></span></h5>
+      <h5 class="header orange-text">Agent Status<% if (hasPerm('agents.create')) { %><span style="float:right"><a href="#" onclick="javascript:addAgent()"><span title="Deploy New Agent" class="material-icons vertMid tableIconButton" style="font-size:24pt;">add_circle</span></a></span><% } %></h5>
       <div style="text-align: center; padding: 60px 20px; color: #999;">
           <i class="material-icons" style="font-size: 64px; color: #ddd; display: block; margin-bottom: 20px;" title="Agent">hub</i>
           <p>No Agents Connected Yet</p>
+          <% if (hasPerm('agents.create')) { %>
           <a href="#" onclick="javascript:addAgent()" class="btn waves-effect waves-light orange">
             <i class="material-icons left">add</i>Deploy Agent
           </a>
+          <% } %>
         </div>
      <% } %>
   </div>

@@ -1,3 +1,10 @@
+<% 
+const hasPerm = (p) => {
+  if (!locals.currentUser) return false;
+  if (locals.currentUser.isSuperAdmin) return true;
+  return Array.isArray(locals.currentUser.permissions) && locals.currentUser.permissions.includes(p);
+};
+%>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -50,6 +57,51 @@
     let orchestrationSort = null;
     let orchestrationOrder = null;
 
+    function triggerOrchestrationImportSelection() {
+      const fileInput = document.getElementById('orchestration-import-file-input');
+      if (!fileInput) return;
+      fileInput.value = '';
+      fileInput.click();
+    }
+
+    function handleOrchestrationImportSelection(event) {
+      const selectedFile = event && event.target && event.target.files ? event.target.files[0] : null;
+      if (!selectedFile) return;
+
+      const formData = new FormData();
+      formData.append('importFile', selectedFile);
+
+      fetch('/rest/orchestration/jobs/import', {
+        method: 'POST',
+        body: formData
+      })
+        .then(async (response) => {
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            const errMessage = payload && payload.message ? payload.message : (payload && payload.error ? payload.error : 'Failed to import orchestration');
+            throw new Error(errMessage);
+          }
+          return payload;
+        })
+        .then((payload) => {
+          const importedName = payload && payload.imported && payload.imported.name ? payload.imported.name : 'imported orchestration';
+          M.toast({ html: `Orchestration imported: ${importedName}` });
+          loadOrchestrations();
+        })
+        .catch((error) => {
+          console.error('Orchestration import failed:', error);
+          M.toast({ html: error.message || 'Failed to import orchestration', displayLength: 5000 });
+        });
+    }
+
+    function exportOrchestration(jobId) {
+      if (!jobId) {
+        M.toast({ html: 'Select a valid orchestration to export' });
+        return;
+      }
+      window.location.href = `/rest/orchestration/jobs/${encodeURIComponent(jobId)}/export`;
+    }
+
     function updateOrchestrationInfoBar(totalCount) {
       var infoBar = document.getElementById('infobar');
       if (!infoBar) return;
@@ -97,9 +149,7 @@
           <div style="text-align: center; padding: 60px 20px; color: #999;">
             <i class="material-icons" style="font-size: 64px; color: #ddd; display: block; margin-bottom: 20px;" title="Orchestration">schema</i>
             <p>No orchestrations yet</p>
-            <a href="/orchestrationBuilder.html" class="btn waves-effect waves-light orange">
-              <i class="material-icons left">add</i>Create Orchestration
-            </a>
+            ${CAN_ORCH_CREATE ? `<a href="/orchestrationBuilder.html" class="btn waves-effect waves-light orange"><i class="material-icons left">add</i>Create Orchestration</a>` : ''}
           </div>
         `);
         return;
@@ -183,8 +233,9 @@
             <td>${description}</td>
             <td>${updatedDate}</td>
             <td>
-              <a title="edit" href="/orchestrationBuilder.html?id=${encodeURIComponent(orchId)}"><i class="material-icons tableIconButton vertMid">edit</i></a>
-              <a title="delete" onclick="deleteOrchestration('${escapeQuotes(orchId)}', '${orchNameForOnclick}')"><i class="material-icons tableIconButton vertMid" style="cursor: pointer;">delete</i></a>
+              ${CAN_ORCH_EDIT   ? `<a title="edit" href="/orchestrationBuilder.html?id=${encodeURIComponent(orchId)}"><i class="material-icons tableIconButton vertMid">edit</i></a>` : ''}
+              ${CAN_ORCH_EXPORT ? `<a title="export" onclick="exportOrchestration('${escapeQuotes(orchId)}')"><i class="material-icons tableIconButton vertMid" style="cursor: pointer;">download</i></a>` : ''}
+              ${CAN_ORCH_DELETE ? `<a title="delete" onclick="deleteOrchestration('${escapeQuotes(orchId)}', '${orchNameForOnclick}')"><i class="material-icons tableIconButton vertMid" style="cursor: pointer;">delete</i></a>` : ''}
               <a title="run" onclick="runOrchestration('${escapeQuotes(orchId)}')"><i class="material-icons tableIconButton vertMid" style="cursor: pointer;">play_circle</i></a>
             </td>
           </tr>
@@ -281,6 +332,15 @@
 </head>
 <body>
   <%- include('./partials/_header'); %>
+
+<script>
+const CAN_ORCH_CREATE = <%- hasPerm('orchestrations.create') ? 'true' : 'false' %>;
+const CAN_ORCH_EDIT   = <%- hasPerm('orchestrations.edit')   ? 'true' : 'false' %>;
+const CAN_ORCH_DELETE = <%- hasPerm('orchestrations.delete') ? 'true' : 'false' %>;
+const CAN_ORCH_EXPORT = <%- hasPerm('orchestrations.export') ? 'true' : 'false' %>;
+const CAN_ORCH_IMPORT = <%- hasPerm('orchestrations.import') ? 'true' : 'false' %>;
+</script>
+
   
   <div class="section no-pad-bot" id="index-banner">
     <div class="container wide-table">
@@ -289,7 +349,9 @@
           <h5 class="header orange-text">Orchestrations</h5>
         </div>
         <div class="col s6" style="text-align: right; padding-top: 20px;">
-          <a class="tableIconButton" title="add" href="/orchestrationBuilder.html"><span style="font-size:24pt" class="material-icons vertTop">add_circle</span></a>
+          <input id="orchestration-import-file-input" type="file" accept=".zip,application/zip" style="display: none;" onchange="handleOrchestrationImportSelection(event)">
+          <% if (hasPerm('orchestrations.import')) { %><a class="tableIconButton" title="import" href="#" onclick="triggerOrchestrationImportSelection(); return false;"><span style="font-size:24pt" class="material-icons vertTop">upload_file</span></a><% } %>
+          <% if (hasPerm('orchestrations.create')) { %><a class="tableIconButton" title="add" href="/orchestrationBuilder.html"><span style="font-size:24pt" class="material-icons vertTop">add_circle</span></a><% } %>
         </div>
       </div>
       

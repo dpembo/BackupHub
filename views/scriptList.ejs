@@ -1,3 +1,10 @@
+<% 
+const hasPerm = (p) => {
+  if (!locals.currentUser) return false;
+  if (locals.currentUser.isSuperAdmin) return true;
+  return Array.isArray(locals.currentUser.permissions) && locals.currentUser.permissions.includes(p);
+};
+%>
 <!DOCTYPE html>
 <%
 
@@ -101,6 +108,53 @@ function addDateSuffix(date) {
   var scriptSort = null;
   var scriptOrder = null;
   var pendingDeleteScriptName = null;
+
+  function triggerScriptImportSelection() {
+    const fileInput = document.getElementById('script-import-file-input');
+    if (!fileInput) return;
+    fileInput.value = '';
+    fileInput.click();
+  }
+
+  function handleScriptImportSelection(event) {
+    const selectedFile = event && event.target && event.target.files ? event.target.files[0] : null;
+    if (!selectedFile) return;
+
+    const formData = new FormData();
+    formData.append('importFile', selectedFile);
+
+    fetch('/rest/script/import', {
+      method: 'POST',
+      body: formData
+    })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          const errMessage = payload && payload.message ? payload.message : (payload && payload.error ? payload.error : 'Failed to import script');
+          throw new Error(errMessage);
+        }
+        return payload;
+      })
+      .then((payload) => {
+        const finalName = payload && payload.scriptName ? payload.scriptName : 'imported script';
+        M.toast({ html: `Script imported successfully: ${finalName}` });
+        window.setTimeout(() => {
+          window.location.href = '/scriptList.html?message=' + encodeURIComponent(`Imported script: ${finalName}`);
+        }, 350);
+      })
+      .catch((error) => {
+        console.error('Script import failed:', error);
+        M.toast({ html: error.message || 'Failed to import script', displayLength: 5000 });
+      });
+  }
+
+  function exportScript(scriptName) {
+    if (!scriptName) {
+      M.toast({ html: 'Select a valid script to export' });
+      return;
+    }
+    window.location.href = `/rest/script/${encodeURIComponent(scriptName)}/export`;
+  }
 
   
   function doDelete()
@@ -500,7 +554,9 @@ function addDateSuffix(date) {
           <h5 class="header orange-text">Scripts</h5>
         </div>
         <div class="col s6" style="text-align: right; padding-top: 20px;">
-          <a class="tableIconButton" title="add" href="/scriptEditor.html"><span style="font-size:24pt" class="material-icons vertTop">add_circle</span></a>
+          <input id="script-import-file-input" type="file" accept=".zip,application/zip" style="display: none;" onchange="handleScriptImportSelection(event)">
+          <% if (hasPerm('scripts.import')) { %><a class="tableIconButton" title="import" href="#" onclick="triggerScriptImportSelection(); return false;"><span style="font-size:24pt" class="material-icons vertTop">upload_file</span></a><% } %>
+          <% if (hasPerm('scripts.create')) { %><a class="tableIconButton" title="add" href="/scriptEditor.html"><span style="font-size:24pt" class="material-icons vertTop">add_circle</span></a><% } %>
         </div>
       </div>
       
@@ -542,9 +598,18 @@ function addDateSuffix(date) {
                 <td><span><%=dispDate%></span></td>
                 <td>
                   <!--<a title="info" href="#" onclick="listScriptJobs('<%=scripts[i].data.filename%>'); return false;"><i class="material-icons tableIconButton vertMid">info</i></a>-->
+                  <% if (hasPerm('scripts.edit')) { %>
                   <a title="edit" href="/scriptEditor.html?index=<%= i %>"><i class="material-icons tableIconButton vertMid">edit</i></a>
+                  <% } %>
+                  <% if (hasPerm('scripts.test')) { %>
                   <a title="test" href="#" data-script-name="<%=scripts[i].data.filename%>" data-script-description="<%=scripts[i].data.metaDescription || ''%>" data-script-parameters="<%=scripts[i].data.metaParameters || ''%>" onclick="openScriptTestFromList(this.dataset.scriptName, this.dataset.scriptDescription, this.dataset.scriptParameters); return false;"><i class="material-icons tableIconButton vertMid">fact_check</i></a>
+                  <% } %>
+                  <% if (hasPerm('scripts.delete')) { %>
                   <a title="delete" href="#" data-script-name="<%=scripts[i].data.filename%>" onclick="openDeleteScriptModal(this.dataset.scriptName); return false;"><i class="material-icons tableIconButton vertMid">delete</i></a>
+                  <% } %>
+                  <% if (hasPerm('scripts.export')) { %>
+                  <a title="export" href="#" data-script-name="<%=scripts[i].data.filename%>" onclick="exportScript(this.dataset.scriptName); return false;"><i class="material-icons tableIconButton vertMid">download</i></a>
+                  <% } %>
                 </td>
 
               </tr>
@@ -556,9 +621,11 @@ function addDateSuffix(date) {
         <div style="text-align: center; padding: 60px 20px; color: #999;">
             <i class="material-icons" style="font-size: 64px; color: #ddd; display: block; margin-bottom: 20px;" title="Script">terminal</i>
             <p>No Scripts Exist Yet</p>
+            <% if (hasPerm('scripts.create')) { %>
             <a href="/scriptEditor.html" class="btn waves-effect waves-light orange">
               <i class="material-icons left">add</i>Create Script
             </a>
+            <% } %>
           </div>
       <% } %>
       

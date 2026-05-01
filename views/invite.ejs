@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Orchelium | Accept Invitation</title>
+  <link rel="stylesheet" href="/css/materialize/materialize.min.css">
+  <style>
+    body {
+      background: linear-gradient(to bottom right, #3498db, #e74c3c);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+    }
+    .card-panel {
+      width: 380px;
+      padding: 24px;
+      border-radius: 10px;
+      box-shadow: 0px 0px 10px rgba(0,0,0,0.1);
+    }
+    h1 { font-size: 22px; margin-bottom: 8px; text-align: center; color: #333; }
+    p  { font-size: 13px; color: #666; text-align: center; margin-bottom: 20px; }
+    label { font-size: 14px; color: #666; }
+    input[type="password"] {
+      border: none;
+      border-bottom: 1px solid #ccc;
+      outline: none;
+      width: 100%;
+      padding: 5px 0;
+      font-size: 16px;
+      margin-bottom: 20px;
+      color: #333;
+    }
+    .btn { background-color: #4caf50; border-radius: 5px; }
+    .btn:hover { background-color: #45a049; }
+    .footer-links { text-align: center; margin-top: 16px; font-size: 13px; color: #666; }
+  </style>
+</head>
+<body>
+  <div class="card-panel">
+    <span class="imgframe"><span class="loginimg"></span></span>
+    <h1>Welcome to Orchelium</h1>
+    <p>You have been invited. Please set a password to activate your account (<strong><%= username %></strong>).</p>
+
+    <% if (locals.message) { %>
+      <p style="color:#e74c3c;"><%= message %></p>
+    <% } %>
+
+    <form action="/invite/<%= token %>/<%= username %>" method="POST">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <label for="password">New Password</label>
+      <input id="password" type="password" name="password" minlength="8" required>
+      <label for="password2">Confirm Password</label>
+      <input id="password2" type="password" name="password2" minlength="8" required>
+      <button class="btn waves-effect waves-light orange" style="width:100%" type="submit">Activate Account</button>
+    </form>
+
+    <div class="footer-links"><a href="/login.html">Back to Login</a></div>
+  </div>
+
+  <script src="/js/materialize/materialize.min.js"></script>
+  <script>
+    const urlParams = new URLSearchParams(window.location.search);
+    const msg = urlParams.get('message');
+    if (msg) {
+      const p = document.createElement('p');
+      p.style.color = '#e74c3c';
+      p.textContent = decodeURIComponent(msg);
+      document.querySelector('form').insertAdjacentElement('beforebegin', p);
+    }
+
+    document.querySelector('form').addEventListener('submit', function(e) {
+      const p1 = document.getElementById('password').value;
+      const p2 = document.getElementById('password2').value;
+      if (p1 !== p2) {
+        e.preventDefault();
+        alert('Passwords do not match.');
+      }
+    });
+  </script>
+</body>
+</html>

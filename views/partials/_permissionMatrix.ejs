@@ -1,0 +1,86 @@
+<%
+// _permissionMatrix.ejs
+// Parameters: idPrefix (string), PERMISSIONS (object), editPerms (array of granted perms)
+const groups = [
+  {
+    label: 'History',
+    items: [
+      { key: PERMISSIONS.HISTORY_VIEW,      label: 'View history list' },
+      { key: PERMISSIONS.HISTORY_RESUBMIT,  label: 'Resubmit failed jobs' },
+    ]
+  },
+  {
+    label: 'Jobs',
+    items: [
+      { key: PERMISSIONS.JOBS_VIEW,   label: 'View job list' },
+      { key: PERMISSIONS.JOBS_CREATE, label: 'Add / clone job' },
+      { key: PERMISSIONS.JOBS_EDIT,   label: 'Edit job' },
+      { key: PERMISSIONS.JOBS_DELETE, label: 'Delete job' },
+    ]
+  },
+  {
+    label: 'Agents',
+    items: [
+      { key: PERMISSIONS.AGENTS_VIEW,   label: 'View agents' },
+      { key: PERMISSIONS.AGENTS_CREATE, label: 'Add agent' },
+      { key: PERMISSIONS.AGENTS_EDIT,   label: 'Edit / delete agent' },
+      { key: PERMISSIONS.AGENTS_UPDATE, label: 'Update agent software' },
+    ]
+  },
+  {
+    label: 'Orchestrations',
+    items: [
+      { key: PERMISSIONS.ORCHESTRATIONS_VIEW,   label: 'View orchestrations' },
+      { key: PERMISSIONS.ORCHESTRATIONS_CREATE, label: 'Add new orchestration' },
+      { key: PERMISSIONS.ORCHESTRATIONS_IMPORT, label: 'Import orchestration' },
+      { key: PERMISSIONS.ORCHESTRATIONS_EDIT,   label: 'Edit orchestration' },
+      { key: PERMISSIONS.ORCHESTRATIONS_DELETE, label: 'Delete orchestration' },
+      { key: PERMISSIONS.ORCHESTRATIONS_EXPORT, label: 'Export orchestration' },
+    ]
+  },
+  {
+    label: 'Scripts',
+    items: [
+      { key: PERMISSIONS.SCRIPTS_VIEW,   label: 'View script list' },
+      { key: PERMISSIONS.SCRIPTS_CREATE, label: 'Add new script' },
+      { key: PERMISSIONS.SCRIPTS_IMPORT, label: 'Import script' },
+      { key: PERMISSIONS.SCRIPTS_EDIT,   label: 'Edit script' },
+      { key: PERMISSIONS.SCRIPTS_DELETE, label: 'Delete script' },
+      { key: PERMISSIONS.SCRIPTS_EXPORT, label: 'Export script' },
+      { key: PERMISSIONS.SCRIPTS_TEST,   label: 'Test / run script' },
+    ]
+  },
+  {
+    label: 'Settings',
+    items: [
+      { key: (PERMISSIONS.SETTINGS_ACCESS || 'settings.access'), label: 'Full settings access' },
+    ]
+  },
+  {
+    label: 'Administration',
+    items: [
+      { key: PERMISSIONS.USERS_MANAGE, label: 'Manage users (invite, deactivate, edit permissions)' },
+    ]
+  },
+];
+%>
+<div class="permission-matrix" style="margin-top:8px;">
+  <% for (const group of groups) { %>
+  <div style="margin-bottom:12px;">
+    <p style="font-weight:bold; margin-bottom:4px; color:#555;"><%= group.label %></p>
+    <div class="row" style="margin-bottom:0;">
+      <% for (const item of group.items) { %>
+      <div class="col s12 m6" style="padding:2px 8px;">
+        <label style="font-size:13px;">
+          <input type="checkbox"
+                 class="filled-in"
+                 data-perm-<%= idPrefix %>="<%= item.key %>"
+                 <%- (editPerms && editPerms.includes(item.key)) ? 'checked' : '' %>>
+          <span><%= item.label %></span>
+        </label>
+      </div>
+      <% } %>
+    </div>
+  </div>
+  <% } %>
+</div>

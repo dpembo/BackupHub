@@ -56,6 +56,7 @@ var bodyParser = require('body-parser');
 const multer = require('multer');
 
 const User = require('./models/user');
+const PERMISSIONS = User.PERMISSIONS;
 const { asyncHandler, errorHandlerMiddleware, AppError } = require('./utils/errorHandler.js');
 const asyncUtils = require('./utils/asyncUtils.js');
 dateTimeUtils = require('./utils/dateTimeUtils.js');
@@ -78,6 +79,7 @@ fs = require('fs');
 nodemailer = require('nodemailer');
 notifier = require ("./notify.js");
 const backupManager = require('./backupManager.js');
+const importExportManager = require('./utils/importExportManager.js');
 
 serverConfig = confighandler.initServerConfig({});
 serverConfig = confighandler.loadConfigJson("./data/server-config.json");
@@ -699,11 +701,17 @@ app.use((req, res, next) => {
   next();
 });
 
+// Make currentUser available in every EJS template (populated by isAuthenticated)
+app.use((req, res, next) => {
+  res.locals.currentUser = req.session.user || null;
+  next();
+});
+
 // CSRF validation middleware for form-based authenticated routes
 const validateCsrf = (req, res, next) => {
   // Skip validation for public routes
   const publicRoutes = ['/login.html', '/register.html', '/forgot.html', '/saveScript'];
-  if (publicRoutes.includes(req.path) || req.path.startsWith('/reset')) {
+  if (publicRoutes.includes(req.path) || req.path.startsWith('/reset') || req.path.startsWith('/invite')) {
     logger.debug(`[CSRF] Skipping validation for public route: ${req.path}`);
     return next();
   }
@@ -887,6 +895,27 @@ app.post('/reset/:token/:user', validateCsrf, asyncHandler(async (req, res) => {
   }
 }));
 
+// Invite acceptance route — like reset, but activates an invited (pending) user
+app.get('/invite/:token/:username', asyncHandler(async (req, res) => {
+  if(serverConfig.server.hostname === 'UNDEFINED') serverConfig.server.hostname = req.hostname;
+  const valid = await User.isInviteTokenValid(req.params.username, req.params.token);
+  if (valid) {
+    res.render('invite', { token: req.params.token, username: req.params.username, csrf: req.csrfToken() });
+  } else {
+    res.redirect('/login.html?message=Invite+link+has+expired+or+already+been+used');
+  }
+}));
+
+app.post('/invite/:token/:username', validateCsrf, asyncHandler(async (req, res) => {
+  const accepted = await User.acceptInvite(req.params.username, req.params.token, req.body.password);
+  if (accepted) {
+    logger.info(`Invite accepted for user: ${req.params.username}`);
+    res.redirect('/login.html?message=Account+activated.+Please+login+with+your+new+credentials');
+  } else {
+    res.redirect(`/invite/${req.params.token}/${req.params.username}?message=Invite+link+has+expired+or+already+been+used`);
+  }
+}));
+
 
 app.post('/login.html', validateCsrf, asyncHandler(async (req, res) => {
   const { username, password, redirect } = req.body;
@@ -916,7 +945,16 @@ app.post('/login.html', validateCsrf, asyncHandler(async (req, res) => {
     return res.redirect(loginUrl.toString());
   }
 
+  if (!user.isActive) {
+    logger.warn(`Login attempt for deactivated account: ${username}`);
+    const loginUrl = new URL('/login.html', `${req.protocol}://${req.get('host')}`);
+    loginUrl.searchParams.append('message', 'Account has been deactivated');
+    return res.redirect(loginUrl.toString());
+  }
+
   logger.debug("passwords match - authentication successful");
+  user.lastLogin = Date.now();
+  await User.updateUser(user);
   req.session.user = user;
 
   if (serverConfig.server.loginSuccessEnabled == "true") {
@@ -1116,7 +1154,7 @@ app.post('/initial-setupMQTT.html', validateCsrf, User.isAuthenticated, async (r
     }
 });
 
-app.post('/settings.html', validateCsrf, User.isAuthenticated, async (req, res) => {
+app.post('/settings.html', validateCsrf, User.isAuthenticated, User.requirePermission(PERMISSIONS.SETTINGS_ACCESS), async (req, res) => {
   const user = req.session.user;
   if (!user) {
     return res.redirect('/register.html?not+authenticated');
@@ -1241,7 +1279,7 @@ app.post('/settings.html', validateCsrf, User.isAuthenticated, async (req, res) 
   //res.render('settings.ejs', { serverConfig, user });
 });
 
-app.get('/settings.html',User.isAuthenticated, async (req, res) => {
+app.get('/settings.html',User.isAuthenticated, User.requirePermission(PERMISSIONS.SETTINGS_ACCESS), async (req, res) => {
   const user = req.session.user;
   if (!user) {
     return res.redirect('/register.html');
@@ -1256,7 +1294,7 @@ const upload = multer({
   limits: { fileSize: 500 * 1024 * 1024 } // 500MB max
 });
 
-app.get('/api/backup/items', User.isAuthenticated, (req, res) => {
+app.get('/api/backup/items', User.isAuthenticated, User.requirePermission(PERMISSIONS.SETTINGS_ACCESS), (req, res) => {
   try {
     const items = backupManager.getBackupItems();
     res.json(items);
@@ -1266,7 +1304,7 @@ app.get('/api/backup/items', User.isAuthenticated, (req, res) => {
   }
 });
 
-app.post('/api/backup/create', User.isAuthenticated, asyncHandler(async (req, res) => {
+app.post('/api/backup/create', User.isAuthenticated, User.requirePermission(PERMISSIONS.SETTINGS_ACCESS), asyncHandler(async (req, res) => {
   try {
     const options = req.body;
     logger.info('Creating backup with options:', options);
@@ -1291,7 +1329,7 @@ app.post('/api/backup/create', User.isAuthenticated, asyncHandler(async (req, re
   }
 }));
 
-app.post('/api/backup/restore', User.isAuthenticated, upload.single('backupFile'), asyncHandler(async (req, res) => {
+app.post('/api/backup/restore', User.isAuthenticated, User.requirePermission(PERMISSIONS.SETTINGS_ACCESS), upload.single('backupFile'), asyncHandler(async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No backup file provided' });
@@ -1422,7 +1460,7 @@ app.post('/api/webhook/trigger/:jobName', asyncHandler(async (req, res) => {
  * GET /rest/webhooks/:jobName
  * Get all webhooks for a job
  */
-app.get('/rest/webhooks/:jobName', User.isAuthenticated, asyncHandler(async (req, res) => {
+app.get('/rest/webhooks/:jobName', User.isAuthenticated, User.requirePermission(PERMISSIONS.SETTINGS_ACCESS), asyncHandler(async (req, res) => {
   try {
     const { jobName } = req.params;
     const webhooksData = require('./webhooksData.js');
@@ -1452,7 +1490,7 @@ app.get('/rest/webhooks/:jobName', User.isAuthenticated, asyncHandler(async (req
  * POST /rest/webhooks/:jobName
  * Create a new webhook for a job
  */
-app.post('/rest/webhooks/:jobName', User.isAuthenticated, express.json(), asyncHandler(async (req, res) => {
+app.post('/rest/webhooks/:jobName', User.isAuthenticated, User.requirePermission(PERMISSIONS.SETTINGS_ACCESS), express.json(), asyncHandler(async (req, res) => {
   try {
     const { jobName } = req.params;
     const { name, description } = req.body;
@@ -1487,7 +1525,7 @@ app.post('/rest/webhooks/:jobName', User.isAuthenticated, express.json(), asyncH
  * PUT /rest/webhooks/:jobName/:webhookId
  * Update webhook (name, description, enable/disable)
  */
-app.put('/rest/webhooks/:jobName/:webhookId', User.isAuthenticated, express.json(), asyncHandler(async (req, res) => {
+app.put('/rest/webhooks/:jobName/:webhookId', User.isAuthenticated, User.requirePermission(PERMISSIONS.SETTINGS_ACCESS), express.json(), asyncHandler(async (req, res) => {
   try {
     const { jobName, webhookId } = req.params;
     const { name, description, isActive } = req.body;
@@ -1522,7 +1560,7 @@ app.put('/rest/webhooks/:jobName/:webhookId', User.isAuthenticated, express.json
  * POST /rest/webhooks/:jobName/:webhookId/rotate-key
  * Rotate webhook API key
  */
-app.post('/rest/webhooks/:jobName/:webhookId/rotate-key', User.isAuthenticated, express.json(), asyncHandler(async (req, res) => {
+app.post('/rest/webhooks/:jobName/:webhookId/rotate-key', User.isAuthenticated, User.requirePermission(PERMISSIONS.SETTINGS_ACCESS), express.json(), asyncHandler(async (req, res) => {
   try {
     const { jobName, webhookId } = req.params;
     const { oldKey } = req.body;
@@ -1553,7 +1591,7 @@ app.post('/rest/webhooks/:jobName/:webhookId/rotate-key', User.isAuthenticated, 
  * DELETE /rest/webhooks/:jobName/:webhookId
  * Delete a webhook
  */
-app.delete('/rest/webhooks/:jobName/:webhookId', User.isAuthenticated, asyncHandler(async (req, res) => {
+app.delete('/rest/webhooks/:jobName/:webhookId', User.isAuthenticated, User.requirePermission(PERMISSIONS.SETTINGS_ACCESS), asyncHandler(async (req, res) => {
   try {
     const { jobName, webhookId } = req.params;
     const webhooksData = require('./webhooksData.js');
@@ -1576,7 +1614,7 @@ app.delete('/rest/webhooks/:jobName/:webhookId', User.isAuthenticated, asyncHand
  * GET /rest/webhooks-all
  * Get all webhooks across all jobs
  */
-app.get('/rest/webhooks-all', User.isAuthenticated, asyncHandler(async (req, res) => {
+app.get('/rest/webhooks-all', User.isAuthenticated, User.requirePermission(PERMISSIONS.SETTINGS_ACCESS), asyncHandler(async (req, res) => {
   try {
     const webhooksData = require('./webhooksData.js');
     const webhooks = await webhooksData.getAllWebhooks();
@@ -1605,7 +1643,7 @@ app.get('/rest/webhooks-all', User.isAuthenticated, asyncHandler(async (req, res
  * GET /rest/webhooks/stats
  * Get webhook statistics
  */
-app.get('/rest/webhooks-stats', User.isAuthenticated, asyncHandler(async (req, res) => {
+app.get('/rest/webhooks-stats', User.isAuthenticated, User.requirePermission(PERMISSIONS.SETTINGS_ACCESS), asyncHandler(async (req, res) => {
   try {
     const webhooksData = require('./webhooksData.js');
     const stats = await webhooksData.getWebhookStats();
@@ -1659,7 +1697,7 @@ app.delete('/rest/notifications/:index', User.isAuthenticated, (req, res) => {
 /**
  * Get all running jobs
  */
-app.get('/rest/running', User.isAuthenticated, asyncHandler(async (req, res) => {
+app.get('/rest/running', User.isAuthenticated, User.requirePermission(PERMISSIONS.JOBS_VIEW), asyncHandler(async (req, res) => {
   const user = req.session.user;
   if (!user) {
     return res.redirect('/register.html?not+authenticated');
@@ -1677,7 +1715,7 @@ app.get('/rest/running', User.isAuthenticated, asyncHandler(async (req, res) => 
 /**
  * Delete a running job by index
  */
-app.delete('/rest/running/:index', User.isAuthenticated, asyncHandler(async (req, res) => {
+app.delete('/rest/running/:index', User.isAuthenticated, User.requirePermission(PERMISSIONS.JOBS_EDIT), asyncHandler(async (req, res) => {
   const user = req.session.user;
   if (!user) {
     return res.redirect('/register.html?not+authenticated');
@@ -1697,7 +1735,7 @@ app.delete('/rest/running/:index', User.isAuthenticated, asyncHandler(async (req
 /**
  * Delete a running job by job name
  */
-app.delete('/rest/running/byName/:jobName', User.isAuthenticated, asyncHandler(async (req, res) => {
+app.delete('/rest/running/byName/:jobName', User.isAuthenticated, User.requirePermission(PERMISSIONS.JOBS_EDIT), asyncHandler(async (req, res) => {
   const user = req.session.user;
   if (!user) {
     return res.redirect('/register.html?not+authenticated');
@@ -1717,7 +1755,7 @@ app.delete('/rest/running/byName/:jobName', User.isAuthenticated, asyncHandler(a
 /**
  * Delete a running job by execution ID
  */
-app.delete('/rest/running/byExecutionId/:executionId', User.isAuthenticated, asyncHandler(async (req, res) => {
+app.delete('/rest/running/byExecutionId/:executionId', User.isAuthenticated, User.requirePermission(PERMISSIONS.JOBS_EDIT), asyncHandler(async (req, res) => {
   const user = req.session.user;
   if (!user) {
     return res.redirect('/register.html?not+authenticated');
@@ -1734,7 +1772,7 @@ app.delete('/rest/running/byExecutionId/:executionId', User.isAuthenticated, asy
   }
 }));
 
-app.delete('/rest/running', User.isAuthenticated, asyncHandler(async (req, res) => {
+app.delete('/rest/running', User.isAuthenticated, User.requirePermission(PERMISSIONS.JOBS_EDIT), asyncHandler(async (req, res) => {
   const user = req.session.user;
   if (!user) {
     return res.redirect('/register.html?not+authenticated');
@@ -1750,7 +1788,7 @@ app.delete('/rest/running', User.isAuthenticated, asyncHandler(async (req, res) 
   }
 }));
 
-app.get('/rest/agent/:id', User.isAuthenticated, (req, res) => {
+app.get('/rest/agent/:id', User.isAuthenticated, User.requirePermission(PERMISSIONS.AGENTS_VIEW), (req, res) => {
   const user = req.session.user;
   if (!user) {
     return res.redirect('/register.html');
@@ -1764,7 +1802,7 @@ app.get('/rest/agent/:id', User.isAuthenticated, (req, res) => {
   res.send(agent);  
 });
 
-app.get('/rest/agent/:id/ping', User.isAuthenticated, (req, res) => {
+app.get('/rest/agent/:id/ping', User.isAuthenticated, User.requirePermission(PERMISSIONS.AGENTS_VIEW), (req, res) => {
   const user = req.session.user;
   if (!user) {
     return res.redirect('/register.html');
@@ -1797,7 +1835,7 @@ app.get('/rest/agent/:id/ping', User.isAuthenticated, (req, res) => {
  * Supported types: cpu, mount_usage, dir_size, file_size, file_count, file_age
  * NOTE: This is a temporary test endpoint - remove once Rules Engine is built.
  */
-app.post('/rest/agent/:id/metric', User.isAuthenticated, asyncHandler(async (req, res) => {
+app.post('/rest/agent/:id/metric', User.isAuthenticated, User.requirePermission(PERMISSIONS.AGENTS_VIEW), asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { type, path: targetPath, pattern } = req.body;
 
@@ -1892,7 +1930,7 @@ app.get('/rest/notifty/test', User.isAuthenticated, (req, res) => {
   res.sendStatus(200);
 });
 
-app.get('/rest/mqtt/reconnect', User.isAuthenticated, async (req, res) => {
+app.get('/rest/mqtt/reconnect', User.isAuthenticated, User.requirePermission(PERMISSIONS.SETTINGS_ACCESS), async (req, res) => {
   logger.info("Resetting MQTT connection")
   const user = req.session.user;
   if (!user) {
@@ -1933,7 +1971,7 @@ app.get('/about.html',User.isAuthenticated, async (req, res) => {
   
 });
 
-app.get('/runList/data',User.isAuthenticated, asyncHandler(async (req, res) => {
+app.get('/runList/data',User.isAuthenticated, User.requirePermission(PERMISSIONS.JOBS_VIEW), asyncHandler(async (req, res) => {
   var format = "json"
   if(req.query.format !==undefined && req.query.format!=null)format = req.query.format;
 
@@ -2007,7 +2045,7 @@ app.get('/runList/data',User.isAuthenticated, asyncHandler(async (req, res) => {
 }));
 
 
-app.get('/historyList/data',User.isAuthenticated, async (req, res) => {
+app.get('/historyList/data',User.isAuthenticated, User.requirePermission(PERMISSIONS.HISTORY_VIEW), async (req, res) => {
 
   var format = "json"
   if(req.query.format !==undefined && req.query.format!=null)format = req.query.format;
@@ -2150,7 +2188,7 @@ app.get('/historyList/data',User.isAuthenticated, async (req, res) => {
   }
 });
 
-app.delete('/rest/history/clear', User.isAuthenticated, asyncHandler(async (req, res) => {
+app.delete('/rest/history/clear', User.isAuthenticated, User.requirePermission(PERMISSIONS.HISTORY_RESUBMIT), asyncHandler(async (req, res) => {
   logger.info('Clearing all history items');
   try {
     await hist.clearHistory();
@@ -2167,7 +2205,7 @@ app.delete('/rest/history/clear', User.isAuthenticated, asyncHandler(async (req,
   }
 }));
 
-app.get('/history.html',User.isAuthenticated, (req, res) => {
+app.get('/history.html',User.isAuthenticated, User.requirePermission(PERMISSIONS.HISTORY_VIEW), (req, res) => {
 
   var refresh = req.query["refresh"];
   if (refresh === undefined) refresh = 0;
@@ -2182,7 +2220,7 @@ app.get('/history.html',User.isAuthenticated, (req, res) => {
   });
 });
 
-app.get('/rest/script/:script', User.isAuthenticated, (req, res) => {
+app.get('/rest/script/:script', User.isAuthenticated, User.requirePermission(PERMISSIONS.SCRIPTS_VIEW), (req, res) => {
   const scriptFilename = req.params.script;
   const mode = req.query.mode;
   const scriptPath = `./scripts/${scriptFilename}`;
@@ -2263,7 +2301,63 @@ app.get('/rest/script/:script', User.isAuthenticated, (req, res) => {
   });
 });
 
-app.get('/rest/script-test/:executionId', User.isAuthenticated, asyncHandler(async (req, res) => {
+app.get('/rest/script/:scriptName/export', User.isAuthenticated, User.requirePermission(PERMISSIONS.SCRIPTS_EXPORT), asyncHandler(async (req, res) => {
+  const scriptName = req.params.scriptName;
+  const scriptPath = getValidatedScriptPath(scriptName);
+
+  let scriptContent;
+  try {
+    scriptContent = await asyncUtils.readFileAsync(scriptPath, 'utf8');
+  } catch (error) {
+    if (error && error.code === 'ENOENT') {
+      throw new AppError('Script not found', 404);
+    }
+    throw new AppError(`Unable to read script [${scriptName}]`, 500);
+  }
+
+  const zipBuffer = await importExportManager.createScriptExportBuffer({
+    scriptName,
+    scriptContent
+  });
+
+  const safeName = importExportManager.toSafeFilenamePart(scriptName.replace(/\.sh$/i, ''), 'script');
+  const timestamp = importExportManager.getTimestampForFilename();
+  const exportFilename = `script-${safeName}-${timestamp}.zip`;
+
+  res.setHeader('Content-Type', 'application/zip');
+  res.setHeader('Content-Disposition', `attachment; filename="${exportFilename}"`);
+  res.send(zipBuffer);
+}));
+
+app.post('/rest/script/import', User.isAuthenticated, User.requirePermission(PERMISSIONS.SCRIPTS_IMPORT), upload.single('importFile'), asyncHandler(async (req, res) => {
+  if (!req.file || !req.file.buffer) {
+    throw new AppError('Missing import file upload', 400);
+  }
+
+  let parsedImport;
+  try {
+    parsedImport = await importExportManager.parseScriptImportBuffer(req.file.buffer);
+  } catch (error) {
+    throw new AppError(`Script import validation failed: ${error.message}`, 400);
+  }
+
+  const existingScripts = refreshScripts().map((item) => item && item.data ? item.data.filename : null).filter(Boolean);
+  const resolvedName = importExportManager.resolveUniqueScriptFilename(parsedImport.scriptName, existingScripts);
+  const destinationPath = getValidatedScriptPath(resolvedName.finalName);
+  await asyncUtils.writeFileAsync(destinationPath, parsedImport.scriptContent);
+
+  logger.info(`Script imported successfully as [${resolvedName.finalName}]`);
+  res.json({
+    success: true,
+    importedType: 'script',
+    originalName: parsedImport.scriptName,
+    scriptName: resolvedName.finalName,
+    renamed: resolvedName.renamed,
+    warnings: resolvedName.renamed ? ['Script name already existed and was auto-renamed.'] : []
+  });
+}));
+
+app.get('/rest/script-test/:executionId', User.isAuthenticated, User.requirePermission(PERMISSIONS.SCRIPTS_TEST), asyncHandler(async (req, res) => {
   const execution = scriptTestManager.getExecution(req.params.executionId);
   if (!execution) {
     res.status(404).json({ success: false, error: 'Test execution not found or expired' });
@@ -2273,7 +2367,7 @@ app.get('/rest/script-test/:executionId', User.isAuthenticated, asyncHandler(asy
   res.json({ success: true, execution });
 }));
 
-app.post('/rest/script-test/state', User.isAuthenticated, asyncHandler(async (req, res) => {
+app.post('/rest/script-test/state', User.isAuthenticated, User.requirePermission(PERMISSIONS.SCRIPTS_TEST), asyncHandler(async (req, res) => {
   scriptTestManager.cleanupExpiredTests();
 
   const scriptName = req.body.scriptName || null;
@@ -2304,7 +2398,7 @@ app.post('/rest/script-test/state', User.isAuthenticated, asyncHandler(async (re
   });
 }));
 
-app.post('/rest/script-test/start', User.isAuthenticated, asyncHandler(async (req, res) => {
+app.post('/rest/script-test/start', User.isAuthenticated, User.requirePermission(PERMISSIONS.SCRIPTS_TEST), asyncHandler(async (req, res) => {
   scriptTestManager.cleanupExpiredTests();
 
   const agentName = req.body.agentName;
@@ -2392,7 +2486,7 @@ app.post('/rest/script-test/start', User.isAuthenticated, asyncHandler(async (re
   res.json({ success: true, execution });
 }));
 
-app.post('/rest/script-test/:executionId/acknowledge', User.isAuthenticated, asyncHandler(async (req, res) => {
+app.post('/rest/script-test/:executionId/acknowledge', User.isAuthenticated, User.requirePermission(PERMISSIONS.SCRIPTS_TEST), asyncHandler(async (req, res) => {
   const execution = scriptTestManager.acknowledgeExecution(req.params.executionId);
   if (!execution) {
     res.status(404).json({ success: false, error: 'Test execution not found or expired' });
@@ -2402,7 +2496,7 @@ app.post('/rest/script-test/:executionId/acknowledge', User.isAuthenticated, asy
   res.json({ success: true, execution });
 }));
 
-app.post('/rest/script-test/:executionId/discard', User.isAuthenticated, asyncHandler(async (req, res) => {
+app.post('/rest/script-test/:executionId/discard', User.isAuthenticated, User.requirePermission(PERMISSIONS.SCRIPTS_TEST), asyncHandler(async (req, res) => {
   const discarded = scriptTestManager.discardExecution(req.params.executionId);
   if (!discarded) {
     res.status(409).json({ success: false, error: 'Unable to discard active or missing test execution' });
@@ -2412,7 +2506,7 @@ app.post('/rest/script-test/:executionId/discard', User.isAuthenticated, asyncHa
   res.json({ success: true });
 }));
 
-app.post('/rest/script-test/:executionId/terminate', User.isAuthenticated, asyncHandler(async (req, res) => {
+app.post('/rest/script-test/:executionId/terminate', User.isAuthenticated, User.requirePermission(PERMISSIONS.SCRIPTS_TEST), asyncHandler(async (req, res) => {
   const execution = scriptTestManager.getExecution(req.params.executionId);
   if (!execution) {
     res.status(404).json({ success: false, error: 'Test execution not found or expired' });
@@ -2491,7 +2585,7 @@ async function getScriptUsageEntries(scriptName) {
   return formattedJobs;
 }
 
-app.get('/rest/jobs-for-script/:scriptName', User.isAuthenticated, asyncHandler(async (req, res) => {
+app.get('/rest/jobs-for-script/:scriptName', User.isAuthenticated, User.requirePermission(PERMISSIONS.SCRIPTS_VIEW), asyncHandler(async (req, res) => {
   try {
     const scriptName = req.params.scriptName;
     if (!SCRIPT_FILENAME_REGEX.test(scriptName)) {
@@ -2515,7 +2609,7 @@ app.get('/rest/jobs-for-script/:scriptName', User.isAuthenticated, asyncHandler(
   }
 }));
 
-app.delete('/rest/script/:scriptName', User.isAuthenticated, asyncHandler(async (req, res) => {
+app.delete('/rest/script/:scriptName', User.isAuthenticated, User.requirePermission(PERMISSIONS.SCRIPTS_DELETE), asyncHandler(async (req, res) => {
   const scriptName = req.params.scriptName;
   const csrfToken = req.headers['x-csrf-token'];
 
@@ -2552,7 +2646,7 @@ app.delete('/rest/script/:scriptName', User.isAuthenticated, asyncHandler(async 
   }
 }));
 
-app.get('/delete-schedule.html',User.isAuthenticated, (req, res) => {
+app.get('/delete-schedule.html',User.isAuthenticated, User.requirePermission(PERMISSIONS.JOBS_DELETE), (req, res) => {
   logger.warn("Deleting Schedule*******************");
   var jobName=req.query.jobName;
   var redir=req.query.redir;
@@ -2567,7 +2661,7 @@ app.get('/delete-schedule.html',User.isAuthenticated, (req, res) => {
 });
 
 
-app.get('/scriptEditor.html',User.isAuthenticated, (req, res) => {
+app.get('/scriptEditor.html',User.isAuthenticated, User.requireAnyPermission([PERMISSIONS.SCRIPTS_CREATE, PERMISSIONS.SCRIPTS_EDIT]), (req, res) => {
   //refresh the scripts list
   var scriptsMeta = refreshScripts();
   var scriptToEdit=req.query.index;
@@ -2584,7 +2678,7 @@ app.get('/scriptEditor.html',User.isAuthenticated, (req, res) => {
   });
 });
 
-app.get('/scheduler.html',User.isAuthenticated, async (req, res) => {
+app.get('/scheduler.html',User.isAuthenticated, User.requireAnyPermission([PERMISSIONS.JOBS_CREATE, PERMISSIONS.JOBS_EDIT]), async (req, res) => {
   logger.info("Scheduler.html");
   var index=req.query.index;
   var copyIndex=req.query.copyIndex;
@@ -2646,7 +2740,7 @@ app.get('/scheduler.html',User.isAuthenticated, async (req, res) => {
 });
 
 
-app.get('/scheduleInfo/data/name',User.isAuthenticated, async(req, res) => {
+app.get('/scheduleInfo/data/name',User.isAuthenticated, User.requirePermission(PERMISSIONS.JOBS_VIEW), async(req, res) => {
   const user = req.session.user;
   
   if (!user) {
@@ -2662,7 +2756,7 @@ app.get('/scheduleInfo/data/name',User.isAuthenticated, async(req, res) => {
   res.send(data);
 });
 
-app.get('/scheduleInfo/data/:index',User.isAuthenticated, async(req, res) => {
+app.get('/scheduleInfo/data/:index',User.isAuthenticated, User.requirePermission(PERMISSIONS.JOBS_VIEW), async(req, res) => {
   const user = req.session.user;
   if (!user) {
     return res.redirect('/register.html?not+authenticated');
@@ -2678,7 +2772,7 @@ app.get('/scheduleInfo/data/:index',User.isAuthenticated, async(req, res) => {
 });
 
 
-app.get('/scheduleInfo.html',User.isAuthenticated, async(req, res) => {
+app.get('/scheduleInfo.html',User.isAuthenticated, User.requirePermission(PERMISSIONS.JOBS_VIEW), async(req, res) => {
   var index=req.query.index;
   var redir=req.query.redir;
   var jobname=req.query.jobname;
@@ -2733,7 +2827,7 @@ app.get('/scheduleInfo.html',User.isAuthenticated, async(req, res) => {
 
 
 
-app.post('/scheduler.html', validateCsrf, User.isAuthenticated, asyncHandler(async (req, res) => {
+app.post('/scheduler.html', validateCsrf, User.isAuthenticated, User.requireAnyPermission([PERMISSIONS.JOBS_CREATE, PERMISSIONS.JOBS_EDIT]), asyncHandler(async (req, res) => {
   
   let { jobName, colour, description, scheduleType, scheduleTime, dayOfWeek,
     dayInMonth, agentselect, agentcommand, commandparams, index, redir, icon, scheduleMode, orchestrationId,
@@ -2843,7 +2937,7 @@ app.post('/scheduler.html', validateCsrf, User.isAuthenticated, asyncHandler(asy
   res.redirect(redir);
 }));
 
-app.get('/scheduleList.html',User.isAuthenticated, asyncHandler(async (req, res) => {
+app.get('/scheduleList.html',User.isAuthenticated, User.requirePermission(PERMISSIONS.JOBS_VIEW), asyncHandler(async (req, res) => {
   //console.time('getSchedules');
   const schedules = scheduler.getSchedules();
   //console.timeEnd('getSchedules');
@@ -2901,7 +2995,7 @@ app.get('/scheduleList.html',User.isAuthenticated, asyncHandler(async (req, res)
   //console.timeEnd('render');
 }));
 
-app.get('/scheduleListCalendar.html',User.isAuthenticated, (req, res) => {
+app.get('/scheduleListCalendar.html',User.isAuthenticated, User.requirePermission(PERMISSIONS.JOBS_VIEW), (req, res) => {
   const schedules = scheduler.getSchedules();
   viewType = req.query.viewType;
   inDate = req.query.inDate;
@@ -2914,7 +3008,7 @@ app.get('/scheduleListCalendar.html',User.isAuthenticated, (req, res) => {
   });
 });
 
-app.get('/runSchedule.html',User.isAuthenticated, asyncHandler(async (req, res) => {
+app.get('/runSchedule.html',User.isAuthenticated, User.requirePermission(PERMISSIONS.JOBS_VIEW), asyncHandler(async (req, res) => {
   var index=req.query.index;
   var jobname=req.query.jobname;
   var redir=req.query.redir;
@@ -3104,7 +3198,7 @@ app.get('/runSchedule.html',User.isAuthenticated, asyncHandler(async (req, res) 
   res.redirect(redir);
 }));
 
-app.get('/edit/:index',User.isAuthenticated, (req, res) => {
+app.get('/edit/:index',User.isAuthenticated, User.requirePermission(PERMISSIONS.JOBS_EDIT), (req, res) => {
   const index = req.params.index;
   const schedules = scheduler.getSchedules();
   const schedule = schedules[index];
@@ -3118,7 +3212,7 @@ app.get('/edit/:index',User.isAuthenticated, (req, res) => {
   });
 });
 
-app.post('/edit/:index', validateCsrf, User.isAuthenticated, (req, res) => {
+app.post('/edit/:index', validateCsrf, User.isAuthenticated, User.requirePermission(PERMISSIONS.JOBS_EDIT), (req, res) => {
   const index = req.params.index;
   const schedules = scheduler.getSchedules();
   const schedule = schedules[index];
@@ -3132,7 +3226,7 @@ app.post('/edit/:index', validateCsrf, User.isAuthenticated, (req, res) => {
   res.redirect('/schedules');
 });
 
-app.get('/rest/jobs',User.isAuthenticated, (req, res) => {
+app.get('/rest/jobs',User.isAuthenticated, User.requirePermission(PERMISSIONS.JOBS_VIEW), (req, res) => {
   //populateBackupConfig();
   res.header('Content-type', 'application/json');
   res.send(JSON.stringify(config, null, "  "));
@@ -3185,7 +3279,7 @@ app.get('/index.html',User.isAuthenticated, (request, response) => {
 
 
 
-app.get('/agentHistory.html',User.isAuthenticated, async (request, response) => {
+app.get('/agentHistory.html',User.isAuthenticated, User.requirePermission(PERMISSIONS.AGENTS_VIEW), async (request, response) => {
   var agentname = request.query.name;
   var startDate = request.query.startDate;
   var dateNow = new Date();
@@ -3216,7 +3310,7 @@ app.get('/rest/servertime',User.isAuthenticated, async (request, response) => {
 });
 
 
-app.get('/rest/agentdetail',User.isAuthenticated, async (request, response) => {
+app.get('/rest/agentdetail',User.isAuthenticated, User.requirePermission(PERMISSIONS.AGENTS_VIEW), async (request, response) => {
   
   var agentname = request.query.agentname;
   logger.info("Getting agent detail for Agent [" + agentname + "]")
@@ -3261,7 +3355,7 @@ app.get('/rest/agentdetail',User.isAuthenticated, async (request, response) => {
 });
 
 
-app.get('/rest/agentquery',User.isAuthenticated, (request, response) => {
+app.get('/rest/agentquery',User.isAuthenticated, User.requirePermission(PERMISSIONS.AGENTS_VIEW), (request, response) => {
   var agentname = request.query.name;
   var agent = agents.getAgent(agentname);
   response.header('Content-type', 'application/json');
@@ -3270,7 +3364,7 @@ app.get('/rest/agentquery',User.isAuthenticated, (request, response) => {
   response.send(JSON.stringify(agent,null,2));
 });
 
-app.get('/agentEdit.html',User.isAuthenticated, (request, response) => {
+app.get('/agentEdit.html',User.isAuthenticated, User.requirePermission(PERMISSIONS.AGENTS_EDIT), (request, response) => {
   var msg = request.query.agentId;
   var agentObj=agents.getAgent(msg);
   response.render('agentEdit', {
@@ -3282,7 +3376,7 @@ app.get('/agentEdit.html',User.isAuthenticated, (request, response) => {
   });
 });
 
-app.get('/agentregister.html',User.isAuthenticated, (request, response) => {
+app.get('/agentregister.html',User.isAuthenticated, User.requirePermission(PERMISSIONS.AGENTS_CREATE), (request, response) => {
   var msg = request.query.message;
   var agentObj=JSON.parse(msg);
   response.render('agentregister', {
@@ -3294,7 +3388,7 @@ app.get('/agentregister.html',User.isAuthenticated, (request, response) => {
   });
 });
 
-app.get('/agentstatus.html',User.isAuthenticated,async (request, response) => {
+app.get('/agentstatus.html',User.isAuthenticated, User.requirePermission(PERMISSIONS.AGENTS_VIEW),async (request, response) => {
 
     var agentdict = agents.getDict();
     var history = {};
@@ -3343,7 +3437,7 @@ app.get('/rest/eta',User.isAuthenticated, (request, response) => {
 var logsStr = "";
 
 
-app.post('/agent-submit.html', validateCsrf, User.isAuthenticated, (req, res) => {
+app.post('/agent-submit.html', validateCsrf, User.isAuthenticated, User.requirePermission(PERMISSIONS.JOBS_CREATE), (req, res) => {
   //Get the form data
   
   var name = req.body.agentname;
@@ -3356,7 +3450,7 @@ app.post('/agent-submit.html', validateCsrf, User.isAuthenticated, (req, res) =>
 
 });
 
-app.post('/agentEdit.html', validateCsrf, User.isAuthenticated, async (req, res) => {
+app.post('/agentEdit.html', validateCsrf, User.isAuthenticated, User.requirePermission(PERMISSIONS.AGENTS_EDIT), async (req, res) => {
   try {
     //Get the form data
     var name = req.body.agentname;
@@ -3382,7 +3476,7 @@ app.get('/socket.io/socket.io.js', (req, res) => {
 });
 
 
-app.get('/rest/debug/logs', User.isAuthenticated, async (req, res) => {
+app.get('/rest/debug/logs', User.isAuthenticated, User.requireSuperAdmin(), async (req, res) => {
   const user = req.session.user;
   if (!user) {
     return res.redirect('/register.html');
@@ -3392,7 +3486,7 @@ app.get('/rest/debug/logs', User.isAuthenticated, async (req, res) => {
 });
 
 
-app.get('/rest/debug/on', User.isAuthenticated, async (req, res) => {
+app.get('/rest/debug/on', User.isAuthenticated, User.requireSuperAdmin(), async (req, res) => {
   const user = req.session.user;
   if (!user) {
     return res.redirect('/register.html');
@@ -3410,7 +3504,7 @@ app.get('/rest/debug/on', User.isAuthenticated, async (req, res) => {
 });
 
 
-app.get('/rest/debug/off', User.isAuthenticated, async (req, res) => {
+app.get('/rest/debug/off', User.isAuthenticated, User.requireSuperAdmin(), async (req, res) => {
   const user = req.session.user;
   if (!user) {
     return res.redirect('/register.html');
@@ -3427,7 +3521,7 @@ app.get('/rest/debug/off', User.isAuthenticated, async (req, res) => {
   }
 });
 
-app.get('/rest/updateAgent/:agentId/isRunning', express.json(), User.isAuthenticated, (req, res) => {
+app.get('/rest/updateAgent/:agentId/isRunning', express.json(), User.isAuthenticated, User.requirePermission(PERMISSIONS.AGENTS_VIEW), (req, res) => {
   const user = req.session.user;
   if (!user) {
     return res.redirect('/register.html');
@@ -3452,7 +3546,7 @@ app.get('/rest/updateAgent/:agentId/isRunning', express.json(), User.isAuthentic
   res.send(response);
 });
 
-app.get('/rest/updateAgent/:agentId/status', express.json(), User.isAuthenticated, (req, res) => {
+app.get('/rest/updateAgent/:agentId/status', express.json(), User.isAuthenticated, User.requirePermission(PERMISSIONS.AGENTS_VIEW), (req, res) => {
   const user = req.session.user;
   if (!user) {
     return res.redirect('/register.html');
@@ -3513,7 +3607,7 @@ app.get('/rest/updateAgent/:agentId/status', express.json(), User.isAuthenticate
 });
 
 
-app.post('/rest/updateAgent/:agentId', express.json(), User.isAuthenticated, (req, res) => {
+app.post('/rest/updateAgent/:agentId', express.json(), User.isAuthenticated, User.requirePermission(PERMISSIONS.AGENTS_UPDATE), (req, res) => {
   
   const user = req.session.user;
   if (!user) {
@@ -3538,7 +3632,7 @@ app.post('/rest/updateAgent/:agentId', express.json(), User.isAuthenticated, (re
   }
 });
 
-app.get('/rest/templates', User.isAuthenticated, async (req, res) => {
+app.get('/rest/templates', User.isAuthenticated, User.requirePermission(PERMISSIONS.SETTINGS_ACCESS), async (req, res) => {
   const user = req.session.user;
   if (!user) {
     return res.redirect('/register.html');
@@ -3553,7 +3647,7 @@ app.get('/rest/templates', User.isAuthenticated, async (req, res) => {
   res.send(templateRepository);
 });
 
-app.get('/rest/templates/refresh', User.isAuthenticated, async (req, res) => {
+app.get('/rest/templates/refresh', User.isAuthenticated, User.requirePermission(PERMISSIONS.SETTINGS_ACCESS), async (req, res) => {
   const user = req.session.user;
   if (!user) {
     return res.redirect('/register.html');
@@ -3579,7 +3673,7 @@ app.get('/rest/templates/refresh', User.isAuthenticated, async (req, res) => {
 
 });
 
-app.get('/rest/debug', User.isAuthenticated, async (req, res) => {
+app.get('/rest/debug', User.isAuthenticated, User.requireSuperAdmin(), async (req, res) => {
   const user = req.session.user;
   if (!user) {
     return res.redirect('/register.html');
@@ -3697,7 +3791,7 @@ function markOffline()
 /**
  * Get list of all orchestration jobs
  */
-app.get('/rest/orchestration/jobs', User.isAuthenticated, asyncHandler(async (req, res) => {
+app.get('/rest/orchestration/jobs', User.isAuthenticated, User.requirePermission(PERMISSIONS.ORCHESTRATIONS_VIEW), asyncHandler(async (req, res) => {
   const jobs = await orchestration.getAllJobs();
   res.json(jobs);
 }));
@@ -3705,7 +3799,7 @@ app.get('/rest/orchestration/jobs', User.isAuthenticated, asyncHandler(async (re
 /**
  * Get a specific orchestration job
  */
-app.get('/rest/orchestration/jobs/:jobId', User.isAuthenticated, asyncHandler(async (req, res) => {
+app.get('/rest/orchestration/jobs/:jobId', User.isAuthenticated, User.requirePermission(PERMISSIONS.ORCHESTRATIONS_VIEW), asyncHandler(async (req, res) => {
   const job = await orchestration.getJob(req.params.jobId);
   res.json(job);
 }));
@@ -3713,7 +3807,7 @@ app.get('/rest/orchestration/jobs/:jobId', User.isAuthenticated, asyncHandler(as
 /**
  * Create or update an orchestration job
  */
-app.post('/rest/orchestration/jobs', User.isAuthenticated, asyncHandler(async (req, res) => {
+app.post('/rest/orchestration/jobs', User.isAuthenticated, User.requirePermission(PERMISSIONS.ORCHESTRATIONS_CREATE), asyncHandler(async (req, res) => {
   const { jobId, name, description, nodes, edges, icon, color } = req.body;
   
   if (!jobId || !name) {
@@ -3733,12 +3827,80 @@ app.post('/rest/orchestration/jobs', User.isAuthenticated, asyncHandler(async (r
 }));
 
 /**
+ * Export a single orchestration job
+ */
+app.get('/rest/orchestration/jobs/:jobId/export', User.isAuthenticated, User.requirePermission(PERMISSIONS.ORCHESTRATIONS_EXPORT), asyncHandler(async (req, res) => {
+  const jobId = req.params.jobId;
+  const job = await orchestration.getJob(jobId);
+
+  const zipBuffer = await importExportManager.createOrchestrationExportBuffer({
+    jobId,
+    orchestration: job
+  });
+
+  const safeName = importExportManager.toSafeFilenamePart(job.name || jobId, 'orchestration');
+  const timestamp = importExportManager.getTimestampForFilename();
+  const exportFilename = `orchestration-${safeName}-${timestamp}.zip`;
+
+  res.setHeader('Content-Type', 'application/zip');
+  res.setHeader('Content-Disposition', `attachment; filename="${exportFilename}"`);
+  res.send(zipBuffer);
+}));
+
+app.post('/rest/orchestration/jobs/import', User.isAuthenticated, User.requirePermission(PERMISSIONS.ORCHESTRATIONS_IMPORT), upload.single('importFile'), asyncHandler(async (req, res) => {
+  if (!req.file || !req.file.buffer) {
+    throw new AppError('Missing import file upload', 400);
+  }
+
+  let parsedImport;
+  try {
+    parsedImport = await importExportManager.parseOrchestrationImportBuffer(req.file.buffer);
+  } catch (error) {
+    throw new AppError(`Orchestration import validation failed: ${error.message}`, 400);
+  }
+
+  const existingJobs = await orchestration.getAllJobs();
+  const identity = importExportManager.resolveUniqueOrchestrationIdentity({
+    desiredName: parsedImport.orchestration.name,
+    desiredJobId: parsedImport.orchestration.jobId,
+    existingJobs
+  });
+
+  const savePayload = {
+    name: identity.name,
+    description: parsedImport.orchestration.description,
+    icon: parsedImport.orchestration.icon,
+    color: parsedImport.orchestration.color,
+    nodes: parsedImport.orchestration.nodes,
+    edges: parsedImport.orchestration.edges
+  };
+
+  await orchestration.saveJob(identity.jobId, savePayload);
+  logger.info(`Orchestration imported successfully as [${identity.jobId}]`);
+
+  res.json({
+    success: true,
+    importedType: 'orchestration',
+    original: {
+      jobId: parsedImport.orchestration.jobId || null,
+      name: parsedImport.orchestration.name
+    },
+    imported: {
+      jobId: identity.jobId,
+      name: identity.name
+    },
+    renamed: identity.renamed,
+    warnings: identity.renamed ? ['Orchestration identity already existed and was auto-renamed.'] : []
+  });
+}));
+
+/**
  * Update an existing orchestration job
  */
-app.put('/rest/orchestration/jobs/:jobId', User.isAuthenticated, asyncHandler(async (req, res) => {
+app.put('/rest/orchestration/jobs/:jobId', User.isAuthenticated, User.requirePermission(PERMISSIONS.ORCHESTRATIONS_EDIT), asyncHandler(async (req, res) => {
   const { name, description, nodes, edges, icon, color } = req.body;
   const { jobId } = req.params;
-  
+
   const job = await orchestration.saveJob(jobId, {
     name,
     description,
@@ -3754,7 +3916,7 @@ app.put('/rest/orchestration/jobs/:jobId', User.isAuthenticated, asyncHandler(as
 /**
  * Delete an orchestration job
  */
-app.delete('/rest/orchestration/jobs/:jobId', User.isAuthenticated, asyncHandler(async (req, res) => {
+app.delete('/rest/orchestration/jobs/:jobId', User.isAuthenticated, User.requirePermission(PERMISSIONS.ORCHESTRATIONS_DELETE), asyncHandler(async (req, res) => {
   const { jobId } = req.params;
   
   await orchestration.deleteJob(jobId);
@@ -3764,7 +3926,7 @@ app.delete('/rest/orchestration/jobs/:jobId', User.isAuthenticated, asyncHandler
 /**
  * Mark a classic job execution as having been re-run
  */
-app.post('/rest/jobs/executions/:executionId/markAsRerun', User.isAuthenticated, asyncHandler(async (req, res) => {
+app.post('/rest/jobs/executions/:executionId/markAsRerun', User.isAuthenticated, User.requirePermission(PERMISSIONS.HISTORY_RESUBMIT), asyncHandler(async (req, res) => {
   const { executionId } = req.params;
   
   logger.info(`Marking classic job execution [${executionId}] as re-run`);
@@ -3788,7 +3950,7 @@ app.post('/rest/jobs/executions/:executionId/markAsRerun', User.isAuthenticated,
 /**
  * Mark an orchestration execution as having been re-run
  */
-app.post('/rest/orchestration/jobs/:jobId/executions/:executionId/markAsRerun', User.isAuthenticated, asyncHandler(async (req, res) => {
+app.post('/rest/orchestration/jobs/:jobId/executions/:executionId/markAsRerun', User.isAuthenticated, User.requirePermission(PERMISSIONS.HISTORY_RESUBMIT), asyncHandler(async (req, res) => {
   const { jobId, executionId } = req.params;
   
   logger.info(`Marking orchestration execution [${jobId}] [${executionId}] as re-run`);
@@ -3822,7 +3984,7 @@ app.post('/rest/orchestration/jobs/:jobId/executions/:executionId/markAsRerun', 
 /**
  * Execute an orchestration job
  */
-app.post('/rest/orchestration/jobs/:jobId/execute', User.isAuthenticated, asyncHandler(async (req, res) => {
+app.post('/rest/orchestration/jobs/:jobId/execute', User.isAuthenticated, User.requirePermission(PERMISSIONS.ORCHESTRATIONS_VIEW), asyncHandler(async (req, res) => {
   const { jobId } = req.params;
   const { rerunFrom } = req.body || {};  
   
@@ -3937,7 +4099,7 @@ app.post('/rest/orchestration/jobs/:jobId/execute', User.isAuthenticated, asyncH
 /**
  * Get execution history for a job
  */
-app.get('/rest/orchestration/jobs/:jobId/executions', User.isAuthenticated, asyncHandler(async (req, res) => {
+app.get('/rest/orchestration/jobs/:jobId/executions', User.isAuthenticated, User.requirePermission(PERMISSIONS.ORCHESTRATIONS_VIEW), asyncHandler(async (req, res) => {
   const { jobId } = req.params;
   
   const executions = await orchestration.getExecutionHistory(jobId);
@@ -3947,7 +4109,7 @@ app.get('/rest/orchestration/jobs/:jobId/executions', User.isAuthenticated, asyn
 /**
  * Get list of available scripts for the palette
  */
-app.get('/rest/orchestration/scripts', User.isAuthenticated, asyncHandler(async (req, res) => {
+app.get('/rest/orchestration/scripts', User.isAuthenticated, User.requirePermission(PERMISSIONS.ORCHESTRATIONS_VIEW), asyncHandler(async (req, res) => {
   const scripts = await orchestration.getAvailableScripts();
   res.json(scripts);
 }));
@@ -3955,7 +4117,7 @@ app.get('/rest/orchestration/scripts', User.isAuthenticated, asyncHandler(async 
 /**
  * Get list of available agents for orchestration execution
  */
-app.get('/rest/orchestration/agents', User.isAuthenticated, asyncHandler(async (req, res) => {
+app.get('/rest/orchestration/agents', User.isAuthenticated, User.requirePermission(PERMISSIONS.ORCHESTRATIONS_VIEW), asyncHandler(async (req, res) => {
   const agentDict = agents.getDict();
   const agentList = Object.entries(agentDict).map(([name, agent]) => ({
     id: name,
@@ -3971,7 +4133,7 @@ app.get('/rest/orchestration/agents', User.isAuthenticated, asyncHandler(async (
 /**
  * Get orchestration metadata (name, description, icon, color) without full definition
  */
-app.get('/rest/orchestration/jobs/:jobId/metadata', User.isAuthenticated, asyncHandler(async (req, res) => {
+app.get('/rest/orchestration/jobs/:jobId/metadata', User.isAuthenticated, User.requirePermission(PERMISSIONS.ORCHESTRATIONS_VIEW), asyncHandler(async (req, res) => {
   const job = await orchestration.getJob(req.params.jobId);
   res.json({
     id: job.id,
@@ -3990,7 +4152,7 @@ app.get('/rest/orchestration/jobs/:jobId/metadata', User.isAuthenticated, asyncH
 /**
  * Get a specific version of an orchestration job
  */
-app.get('/rest/orchestration/jobs/:jobId/versions/:version', User.isAuthenticated, asyncHandler(async (req, res) => {
+app.get('/rest/orchestration/jobs/:jobId/versions/:version', User.isAuthenticated, User.requirePermission(PERMISSIONS.ORCHESTRATIONS_VIEW), asyncHandler(async (req, res) => {
   const job = await orchestration.getJobVersion(req.params.jobId, req.params.version);
   res.json(job);
 }));
@@ -3998,7 +4160,7 @@ app.get('/rest/orchestration/jobs/:jobId/versions/:version', User.isAuthenticate
 /**
  * Get all schedules
  */
-app.get('/rest/schedules', User.isAuthenticated, asyncHandler(async (req, res) => {
+app.get('/rest/schedules', User.isAuthenticated, User.requirePermission(PERMISSIONS.JOBS_VIEW), asyncHandler(async (req, res) => {
   const schedules = scheduler.getSchedules();
   res.json(schedules);
 }));
@@ -4006,7 +4168,7 @@ app.get('/rest/schedules', User.isAuthenticated, asyncHandler(async (req, res) =
 /**
  * Get a specific schedule by job name
  */
-app.get('/rest/schedules/:jobName', User.isAuthenticated, asyncHandler(async (req, res) => {
+app.get('/rest/schedules/:jobName', User.isAuthenticated, User.requirePermission(PERMISSIONS.JOBS_VIEW), asyncHandler(async (req, res) => {
   const { jobName } = req.params;
   const schedule = scheduler.getSchedule(jobName);
   
@@ -4023,7 +4185,7 @@ app.get('/rest/schedules/:jobName', User.isAuthenticated, asyncHandler(async (re
 /**
  * Delete a specific schedule by job name
  */
-app.delete('/rest/schedules/:jobName', User.isAuthenticated, asyncHandler(async (req, res) => {
+app.delete('/rest/schedules/:jobName', User.isAuthenticated, User.requirePermission(PERMISSIONS.JOBS_DELETE), asyncHandler(async (req, res) => {
   const { jobName } = req.params;
   
   try {
@@ -4041,7 +4203,7 @@ app.delete('/rest/schedules/:jobName', User.isAuthenticated, asyncHandler(async 
 /**
  * Delete all schedules
  */
-app.delete('/rest/schedules', User.isAuthenticated, asyncHandler(async (req, res) => {
+app.delete('/rest/schedules', User.isAuthenticated, User.requirePermission(PERMISSIONS.JOBS_DELETE), asyncHandler(async (req, res) => {
   try {
     // Clear all schedules by writing an empty array
     await db.putData('SCHEDULES_CONFIG', []);
@@ -4093,7 +4255,7 @@ app.put('/rest/notifications/:index', User.isAuthenticated, asyncHandler(async (
 /**
  * Get all job history items
  */
-app.get('/rest/history', User.isAuthenticated, asyncHandler(async (req, res) => {
+app.get('/rest/history', User.isAuthenticated, User.requirePermission(PERMISSIONS.HISTORY_VIEW), asyncHandler(async (req, res) => {
   const items = await hist.getItemsUsingTZ();
   res.json(items);
 }));
@@ -4101,7 +4263,7 @@ app.get('/rest/history', User.isAuthenticated, asyncHandler(async (req, res) => 
 /**
  * Get a single job history item by index
  */
-app.get('/rest/history/:index', User.isAuthenticated, asyncHandler(async (req, res) => {
+app.get('/rest/history/:index', User.isAuthenticated, User.requirePermission(PERMISSIONS.HISTORY_VIEW), asyncHandler(async (req, res) => {
   const items = await hist.getItemsUsingTZ();
   const index = parseInt(req.params.index);
   if (index < 0 || index >= items.length) {
@@ -4113,7 +4275,7 @@ app.get('/rest/history/:index', User.isAuthenticated, asyncHandler(async (req, r
 /**
  * Create a new job history item
  */
-app.post('/rest/history', User.isAuthenticated, asyncHandler(async (req, res) => {
+app.post('/rest/history', User.isAuthenticated, User.requirePermission(PERMISSIONS.HISTORY_VIEW), asyncHandler(async (req, res) => {
   const item = req.body;
   hist.add(item);
   res.status(201).json({ success: true, item });
@@ -4122,7 +4284,7 @@ app.post('/rest/history', User.isAuthenticated, asyncHandler(async (req, res) =>
 /**
  * Update a job history item by index
  */
-app.put('/rest/history/:index', User.isAuthenticated, asyncHandler(async (req, res) => {
+app.put('/rest/history/:index', User.isAuthenticated, User.requirePermission(PERMISSIONS.HISTORY_RESUBMIT), asyncHandler(async (req, res) => {
   const items = await hist.getItemsUsingTZ();
   const index = parseInt(req.params.index);
   if (index < 0 || index >= items.length) {
@@ -4136,7 +4298,7 @@ app.put('/rest/history/:index', User.isAuthenticated, asyncHandler(async (req, r
 /**
  * Delete a job history item by index
  */
-app.delete('/rest/history/:index', User.isAuthenticated, asyncHandler(async (req, res) => {
+app.delete('/rest/history/:index', User.isAuthenticated, User.requirePermission(PERMISSIONS.HISTORY_RESUBMIT), asyncHandler(async (req, res) => {
   let items = await hist.getItemsUsingTZ();
   const index = parseInt(req.params.index);
   if (index < 0 || index >= items.length) {
@@ -4148,78 +4310,99 @@ app.delete('/rest/history/:index', User.isAuthenticated, asyncHandler(async (req
 }));
 
 // =========================
-// USER REST API - CRUD ENDPOINTS
+// USER MANAGEMENT PAGE
 // =========================
 
-/**
- * List all users
- */
-app.get('/rest/users', User.isAuthenticated, asyncHandler(async (req, res) => {
-  try {
-    let users = [];
-    for await (const [key, value] of User.db.iterator()) {
-      users.push({ username: value.username, email: value.email });
-    }
-    res.json(users);
-  } catch (err) {
-    logger.error(`Error listing users: ${err.message}`);
-    res.status(500).json({ success: false, message: 'Error listing users' });
-  }
+app.get('/users.html', User.isAuthenticated, User.requirePermission(PERMISSIONS.USERS_MANAGE), asyncHandler(async (req, res) => {
+  const users = await User.getAllUsers();
+  const smtpEnabledValue = serverConfig?.smtp?.enabled;
+  const smtpEnabled = smtpEnabledValue === true || String(smtpEnabledValue).toLowerCase() === 'true';
+  const smtpHostConfigured = typeof serverConfig?.smtp?.host === 'string' && serverConfig.smtp.host.trim().length > 0;
+  const smtpPortConfigured = serverConfig?.smtp?.port !== undefined && serverConfig.smtp.port !== null && String(serverConfig.smtp.port).trim().length > 0;
+  const smtpConfigured = smtpEnabled && smtpHostConfigured && smtpPortConfigured;
+  res.render('userManagement', {
+    users,
+    PERMISSIONS,
+    ROLE_PRESETS: User.ROLE_PRESETS,
+    DEFAULT_INVITED_PERMISSIONS: User.DEFAULT_INVITED_PERMISSIONS,
+    csrf: req.csrfToken(),
+    version,
+    smtpConfigured,
+  });
 }));
 
-/**
- * Get a user by username
- */
-app.get('/rest/users/:username', User.isAuthenticated, asyncHandler(async (req, res) => {
-  const user = await User.getUserByUsername(req.params.username);
+// =========================
+// USER REST API
+// =========================
+
+// List all users (sanitised — no passwords)
+app.get('/rest/users', User.isAuthenticated, User.requirePermission(PERMISSIONS.USERS_MANAGE), asyncHandler(async (req, res) => {
+  const users = await User.getAllUsers();
+  res.json(users);
+}));
+
+// Get single user (sanitised)
+app.get('/rest/users/:username', User.isAuthenticated, User.requirePermission(PERMISSIONS.USERS_MANAGE), asyncHandler(async (req, res) => {
+  const user = await User.getUserByUsername(req.params.username.toLowerCase());
   if (!user) return res.status(404).json({ success: false, message: 'User not found' });
-  res.json({ username: user.username, email: user.email });
+  const { password, resetPasswordToken, resetPasswordExpires, inviteToken, inviteExpires, ...safe } = user;
+  res.json(safe);
 }));
 
-/**
- * Create a new user
- */
-app.post('/rest/users', User.isAuthenticated, asyncHandler(async (req, res) => {
-  const { username, email, password } = req.body;
-  try {
-    await User.createUser(username, email, password);
-    res.status(201).json({ success: true, message: 'User created' });
-  } catch (err) {
-    logger.error(`Error creating user [${username}]: ${err.message}`);
-    res.status(400).json({ success: false, message: `Error creating user: ${err.message}` });
+// Invite a new user (creates pending account + sends email)
+app.post('/rest/users/invite', User.isAuthenticated, User.requirePermission(PERMISSIONS.USERS_MANAGE), express.json(), asyncHandler(async (req, res) => {
+  const { username, email, permissions } = req.body;
+  if (!username || !email) return res.status(400).json({ success: false, message: 'username and email are required' });
+  const smtpEnabledValue = serverConfig?.smtp?.enabled;
+  const smtpEnabled = smtpEnabledValue === true || String(smtpEnabledValue).toLowerCase() === 'true';
+  const smtpHostConfigured = typeof serverConfig?.smtp?.host === 'string' && serverConfig.smtp.host.trim().length > 0;
+  const smtpPortConfigured = serverConfig?.smtp?.port !== undefined && serverConfig.smtp.port !== null && String(serverConfig.smtp.port).trim().length > 0;
+  if (!(smtpEnabled && smtpHostConfigured && smtpPortConfigured)) {
+    return res.status(400).json({ success: false, message: 'SMTP must be enabled and configured before sending invites. Please configure SMTP in Settings.' });
   }
+  const result = await User.createInvitedUser(username, email, permissions);
+  res.status(201).json({ success: true, message: 'User invited', username: result.user.username });
 }));
 
-/**
- * Update a user's email or password
- */
-app.put('/rest/users/:username', User.isAuthenticated, asyncHandler(async (req, res) => {
-  const { email, password } = req.body;
-  try {
-    const user = await User.getUserByUsername(req.params.username);
-    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
-    if (email) user.email = email;
-    if (password) await User.updatePassword(req.params.username, password);
-    else await User.updateUser(req.params.username, user);
-    res.json({ success: true });
-  } catch (err) {
-    logger.error(`Error updating user [${req.params.username}]: ${err.message}`);
-    res.status(400).json({ success: false, message: `Error updating user: ${err.message}` });
-  }
+// Resend invite
+app.post('/rest/users/:username/resend-invite', User.isAuthenticated, User.requirePermission(PERMISSIONS.USERS_MANAGE), asyncHandler(async (req, res) => {
+  await User.regenerateInviteToken(req.params.username.toLowerCase());
+  res.json({ success: true, message: 'Invite resent' });
 }));
 
-/**
- * Delete a user
- */
-app.delete('/rest/users/:username', User.isAuthenticated, asyncHandler(async (req, res) => {
-  try {
-    await User.deleteUser(req.params.username);
-    res.json({ success: true });
-  } catch (err) {
-    logger.error(`Error deleting user [${req.params.username}]: ${err.message}`);
-    res.status(400).json({ success: false, message: `Error deleting user: ${err.message}` });
-  }
+// Update user permissions
+app.put('/rest/users/:username/permissions', User.isAuthenticated, User.requirePermission(PERMISSIONS.USERS_MANAGE), express.json(), asyncHandler(async (req, res) => {
+  const { permissions } = req.body;
+  if (!Array.isArray(permissions)) return res.status(400).json({ success: false, message: 'permissions must be an array' });
+  await User.updateUserPermissions(req.params.username.toLowerCase(), permissions);
+  res.json({ success: true });
 }));
+
+// Activate a user
+app.put('/rest/users/:username/activate', User.isAuthenticated, User.requirePermission(PERMISSIONS.USERS_MANAGE), asyncHandler(async (req, res) => {
+  await User.setUserActive(req.params.username.toLowerCase(), true);
+  res.json({ success: true });
+}));
+
+// Deactivate a user
+app.put('/rest/users/:username/deactivate', User.isAuthenticated, User.requirePermission(PERMISSIONS.USERS_MANAGE), asyncHandler(async (req, res) => {
+  await User.setUserActive(req.params.username.toLowerCase(), false);
+  res.json({ success: true });
+}));
+
+// Admin-initiated password reset (sends reset email)
+app.post('/rest/users/:username/reset-password', User.isAuthenticated, User.requirePermission(PERMISSIONS.USERS_MANAGE), asyncHandler(async (req, res) => {
+  await User.generateResetToken(req.params.username.toLowerCase());
+  res.json({ success: true, message: 'Password reset email sent' });
+}));
+
+// Delete a user (cannot delete super admin)
+app.delete('/rest/users/:username', User.isAuthenticated, User.requirePermission(PERMISSIONS.USERS_MANAGE), asyncHandler(async (req, res) => {
+  await User.deleteUser(req.params.username.toLowerCase());
+  res.json({ success: true });
+}));
+
+
 
 // =========================
 // GENERIC KEY-VALUE DATA REST API
@@ -4267,7 +4450,7 @@ app.delete('/rest/data/:key', User.isAuthenticated, validateSensitiveDataToken, 
 }));
 
 //New scriptsList screen
-app.get('/scriptList.html', User.isAuthenticated, asyncHandler(async (req, res) => {
+app.get('/scriptList.html', User.isAuthenticated, User.requirePermission(PERMISSIONS.SCRIPTS_VIEW), asyncHandler(async (req, res) => {
   var scriptsMeta = refreshScripts();
 
   res.render('scriptList', {
@@ -4281,11 +4464,11 @@ app.get('/scriptList.html', User.isAuthenticated, asyncHandler(async (req, res) 
 /**
  * Orchestration UI pages
  */
-app.get('/orchestrationList.html', User.isAuthenticated, asyncHandler(async (req, res) => {
+app.get('/orchestrationList.html', User.isAuthenticated, User.requirePermission(PERMISSIONS.ORCHESTRATIONS_VIEW), asyncHandler(async (req, res) => {
   res.render('orchestrationList', { csrfToken: req.csrfToken() });
 }));
 
-app.get('/orchestrationBuilder.html', User.isAuthenticated, asyncHandler(async (req, res) => {
+app.get('/orchestrationBuilder.html', User.isAuthenticated, User.requireAnyPermission([PERMISSIONS.ORCHESTRATIONS_CREATE, PERMISSIONS.ORCHESTRATIONS_EDIT]), asyncHandler(async (req, res) => {
   const jobId = req.query.id; // undefined for new jobs, or specific ID for editing
   var color = "#FF9800";
   var icon = "workspaces";
@@ -4363,7 +4546,7 @@ function clearInProgressExecution(jobId, executionId) {
 /**
  * Orchestration Monitor/Detail Routes
  */
-app.get('/orchestration/monitor.html', User.isAuthenticated, asyncHandler(async (req, res) => {
+app.get('/orchestration/monitor.html', User.isAuthenticated, User.requirePermission(PERMISSIONS.ORCHESTRATIONS_VIEW), asyncHandler(async (req, res) => {
   const jobId = req.query.jobId;
   let executionIndex = req.query.executionIndex || 'latest';
   const executionId = req.query.executionId;
@@ -4382,7 +4565,7 @@ app.get('/orchestration/monitor.html', User.isAuthenticated, asyncHandler(async 
   });
 }));
 
-app.get('/orchestration/execution/details', User.isAuthenticated, asyncHandler(async (req, res) => {
+app.get('/orchestration/execution/details', User.isAuthenticated, User.requirePermission(PERMISSIONS.ORCHESTRATIONS_VIEW), asyncHandler(async (req, res) => {
   const orchestrationMonitor = require('./orchestrationMonitor.js');
   const jobId = req.query.jobId;
   let executionIndex = req.query.executionIndex || 'latest';
@@ -4498,7 +4681,7 @@ app.get('/orchestration/execution/details', User.isAuthenticated, asyncHandler(a
   res.json(details);
 }));
 
-app.get('/orchestration/node/output', User.isAuthenticated, asyncHandler(async (req, res) => {
+app.get('/orchestration/node/output', User.isAuthenticated, User.requirePermission(PERMISSIONS.ORCHESTRATIONS_VIEW), asyncHandler(async (req, res) => {
   const orchestrationMonitor = require('./orchestrationMonitor.js');
   const jobId = req.query.jobId;
   const nodeId = req.query.nodeId;
@@ -4521,7 +4704,7 @@ app.get('/orchestration/node/output', User.isAuthenticated, asyncHandler(async (
   res.json(output);
 }));
 
-app.get('/api/schedules/by-orchestration/:orchestrationId', User.isAuthenticated, asyncHandler(async (req, res) => {
+app.get('/api/schedules/by-orchestration/:orchestrationId', User.isAuthenticated, User.requirePermission(PERMISSIONS.ORCHESTRATIONS_VIEW), asyncHandler(async (req, res) => {
   const orchestrationId = req.params.orchestrationId;
   
   if (!orchestrationId) {
@@ -4659,6 +4842,14 @@ var server = app.listen(port, async function () {
   
   try {
     passman.checkKey();
+
+    // Run idempotent user schema migration before accepting traffic
+    try {
+      await User.migrateUsers();
+    } catch (err) {
+      logger.error('User migration failed on startup — aborting:', err.message);
+      process.exit(1);
+    }
 
     await scheduler.init();
     logger.info('Scheduler initialized successfully');

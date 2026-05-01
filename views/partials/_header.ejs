@@ -1,5 +1,29 @@
 <script src="/js/utils.js"></script>
 
+<%
+// Helper: returns true if the current user has permission (or is superAdmin)
+function hasPerm(p) {
+  if (!locals.currentUser) return false;
+  if (locals.currentUser.isSuperAdmin) return true;
+  if (!Array.isArray(locals.currentUser.permissions)) return false;
+  if (p === 'settings.access') {
+    const legacySettingsPerms = [
+      'settings.server',
+      'settings.websocket',
+      'settings.mqtt',
+      'settings.alerts',
+      'settings.icons',
+      'settings.templates',
+      'settings.webhooks',
+      'settings.backup',
+    ];
+    return locals.currentUser.permissions.includes('settings.access')
+      || locals.currentUser.permissions.some((perm) => legacySettingsPerms.includes(perm));
+  }
+  return locals.currentUser.permissions.includes(p);
+}
+%>
+
 <style>
   .active-nav-link {
     background-color: rgba(255, 255, 255, 0.3);
@@ -8,6 +32,10 @@
   
   .active-nav-link .material-icons {
     color: #ffffff !important;
+  }
+
+  #dropdown1{
+    width: 125px !important;
   }
 </style>
 
@@ -20,7 +48,12 @@
       <li><a href="/about.html">About</a></li>
       <li class="divider"></li>
       <li><a href="/profile.html">User Info</a></li>
+      <% if (hasPerm('settings.access')) { %>
       <li><a href="/settings.html">Settings</a></li>
+      <% } %>
+      <% if (hasPerm('users.manage')) { %>
+      <li><a href="/users.html">User Management</a></li>
+      <% } %>
       <li class="divider"></li>
       <li><a href="/logout.html">Logout</a></li>
     </ul>
@@ -37,11 +70,21 @@
         </div>
       </li>
       <li>&nbsp;&nbsp;&nbsp;</li>
+      <% if (hasPerm('history.view')) { %>
       <li><a href="/history.html" title="Monitor"><span title="Monitor" style="font-size:24pt" class="navicon material-icons vertMid">format_list_bulleted</span></a></li>
+      <% } %>
+      <% if (hasPerm('jobs.view')) { %>
       <li><a href="/scheduleList.html" title="Jobs"><span title="Jobs" style="font-size:24pt" class="navicon material-icons vertMid">calendar_month</span></a></li>
+      <% } %>
+      <% if (hasPerm('agents.view')) { %>
       <li><a href="/agentstatus.html" title="Agents"><span title="Agents" style="font-size:24pt" class="navicon material-icons vertMid">hub</span></a></li>
+      <% } %>
+      <% if (hasPerm('orchestrations.view')) { %>
       <li><a href="/orchestrationList.html" title="Orchestrations"><span title="Orchestrations" style="font-size:24pt" class="navicon material-icons vertMid">schema</span></a></li>
+      <% } %>
+      <% if (hasPerm('scripts.view')) { %>
       <li><a href="/scriptList.html" title="Scripts Editor"><span title="Script List and Editor" style="font-size:24pt" class="navicon material-icons vertMid">terminal</span></a></li>
+      <% } %>
       <li id="topMenuSpacer"></li>
       <!--<li><a style="padding:6px" href="profile.html" title="User Profile"><span title="User Profile" class="mdi mdi-account" style="font-size:24pt"></span></a></li>-->
       <li id="notificationsOpenButton">
@@ -54,16 +97,31 @@
     </ul>
 
     <ul id="nav-mobile" class="sidenav headerColor">
+      <% if (hasPerm('history.view')) { %>
       <li><a href="/history.html" title="Monitor" style="color:#ffffff"><span title="Monitor" style="font-size:24pt" class="material-icons vertMid">format_list_bulleted</span>&nbsp;Monitor</a></li>
+      <% } %>
+      <% if (hasPerm('jobs.view')) { %>
       <li><a href="/scheduleList.html" title="Job Schedule" style="color:#ffffff"><span title="Job Schedule" style="font-size:24pt" class="material-icons vertMid">calendar_month</span>&nbsp;Job Schedule</a></li>
+      <% } %>
+      <% if (hasPerm('agents.view')) { %>
       <li><a href="/agentstatus.html" title="Agents" style="color:#ffffff"><span title="Agents" style="font-size:24pt" class="material-icons vertMid">hub</span>&nbsp;Agents</a></li>
+      <% } %>
+      <% if (hasPerm('orchestrations.view')) { %>
       <li><a href="/orchestrationList.html" title="Orchestrations" style="color:#ffffff"><span title="Orchestrations" style="font-size:24pt" class="material-icons vertMid">schema</span>&nbsp;Orchestrations</a></li>
+      <% } %>
+      <% if (hasPerm('scripts.view')) { %>
       <li><a href="/scriptList.html" title="Script List and Editor" style="color:#ffffff"><span title="Script List and Editor" style="font-size:24pt" class="material-icons vertMid">terminal</span>&nbsp;Scripts</a></li>
+      <% } %>
       <li class="divider"></li>
       <!--<li><a class="btn-open-panel" href="#" title="Notifications"><span title="Notifications" style="font-size:24pt" class="material-icons vertMid">notifications</span>Notifications</a></li>-->
  
       <li><a href="/profile.html" title="User Info" style="color:#ffffff"><span title="User Info" style="font-size:24pt" class="material-icons vertMid">account_circle</span>&nbsp;User Profile</a></li>
+      <% if (hasPerm('settings.access')) { %>
       <li><a href="/settings.html" title="Settings" style="color:#ffffff"><span title="Settings" style="font-size:24pt" class="material-icons vertMid">settings</span>&nbsp;Settings</a></li>
+      <% } %>
+      <% if (hasPerm('users.manage')) { %>
+      <li><a href="/users.html" title="User Management" style="color:#ffffff"><span title="User Management" style="font-size:24pt" class="material-icons vertMid">manage_accounts</span>&nbsp;User Management</a></li>
+      <% } %>
       <li class="divider"></li>
       <li><a href="/about.html" title="About" style="color:#ffffff"><span title="About" style="font-size:24pt" class="material-icons vertMid">info</span>&nbsp;About</a></li>
       <li><a href="/logout.html" title="Logout" style="color:#ffffff"><span title="Logout" style="font-size:24pt" class="material-icons vertMid">logout</span>&nbsp;Logout</a></li>

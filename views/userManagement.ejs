@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0"/>
+  <title>Orchelium | User Management</title>
+  <%- include('./partials/_head'); %>
+</head>
+<body>
+<%- include('./partials/_header'); %>
+
+<div class="container" style="margin-top:24px;">
+  <div class="row" style="margin-bottom:0">
+    <div class="col s12 m6">
+      <h5 class="header orange-text">User Management</h5>
+    </div>
+    <div class="col s12 m6" style="text-align:right;padding-top:16px;">
+      <% if (locals.smtpConfigured) { %>
+      <a class="btn waves-effect waves-light orange modal-trigger" href="#inviteUserModal">
+        <i class="material-icons left">person_add</i>Invite User
+      </a>
+      <% } else { %>
+      <a class="btn waves-effect waves-light grey disabled tooltipped" data-position="left" data-tooltip="SMTP must be configured to invite users">
+        <i class="material-icons left">person_add</i>Invite User
+      </a>
+      <% } %>
+    </div>
+  </div>
+
+  <% if (!locals.smtpConfigured) { %>
+  <div class="card-panel orange lighten-4" style="margin-bottom:16px;">
+    <span class="orange-text text-darken-3">
+      <i class="material-icons tiny" style="vertical-align:middle;">warning</i>
+      SMTP is not configured. User invitations cannot be sent until SMTP is enabled and configured in
+      <a href="/settings.html" class="orange-text text-darken-4"><strong>Settings</strong></a>.
+    </span>
+  </div>
+  <% } %>
+
+  <% if (locals.message) { %>
+    <div class="card-panel <%= locals.messageType === 'error' ? 'red' : 'green' %> lighten-4">
+      <span class="<%= locals.messageType === 'error' ? 'red' : 'green' %>-text"><%= message %></span>
+    </div>
+  <% } %>
+
+  <table class="striped responsive-table">
+    <thead>
+      <tr>
+        <th>Username</th>
+        <th>Email</th>
+        <th>Role</th>
+        <th>Status</th>
+        <th>Last Login</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% for (const u of users) { %>
+      <tr>
+        <td><strong><%= u.username %></strong></td>
+        <td><%= u.email %></td>
+        <td>
+          <% if (u.isSuperAdmin) { %>
+            <span class="badge orange white-text" style="border-radius:4px;padding:2px 8px;">Super Admin</span>
+          <% } else { %>
+            <span class="badge blue lighten-3 white-text" style="border-radius:4px;padding:2px 8px;">User</span>
+          <% } %>
+        </td>
+        <td>
+          <% if (u.status === 'active') { %>
+            <span class="green-text"><i class="material-icons tiny">check_circle</i> Active</span>
+          <% } else if (u.status === 'invited') { %>
+            <span class="orange-text"><i class="material-icons tiny">mail</i> Invited</span>
+          <% } else { %>
+            <span class="grey-text"><i class="material-icons tiny">block</i> Inactive</span>
+          <% } %>
+        </td>
+        <td>
+          <% if (u.lastLogin) { %>
+            <%= new Date(u.lastLogin).toLocaleString() %>
+          <% } else { %>
+            <span class="grey-text">Never</span>
+          <% } %>
+        </td>
+        <td>
+          <% if (!u.isSuperAdmin) { %>
+            <a class="tableIconButton" title="Edit permissions" onclick='openEditPermissions(<%- JSON.stringify(u.username) %>, <%- JSON.stringify(u.permissions || []) %>); return false;' href="#editPermissionsModal"><i class="material-icons vertMid">edit</i></a>
+            <% if (u.status === 'active') { %>
+              <a class="tableIconButton" title="Deactivate user" onclick="deactivateUser('<%= u.username %>')" href="#!"><i class="material-icons vertMid grey-text">person_off</i></a>
+            <% } else if (u.status === 'inactive') { %>
+              <a class="tableIconButton" title="Activate user" onclick="activateUser('<%= u.username %>')" href="#!"><i class="material-icons vertMid green-text">person</i></a>
+            <% } %>
+            <% if (u.status === 'invited' && u.hasPendingInvite) { %>
+              <a class="tableIconButton" title="Resend invite" onclick="resendInvite('<%= u.username %>')" href="#!"><i class="material-icons vertMid orange-text">send</i></a>
+            <% } %>
+            <% if (u.status === 'active') { %>
+              <a class="tableIconButton" title="Send password reset" onclick="sendPasswordReset('<%= u.username %>')" href="#!"><i class="material-icons vertMid">lock_reset</i></a>
+            <% } %>
+            <a class="tableIconButton" title="Delete user" onclick="openDeleteUser('<%= u.username %>'); return false;" href="#deleteUserModal"><i class="material-icons vertMid red-text">delete</i></a>
+          <% } else { %>
+            <span class="grey-text" style="font-size:12px">Protected</span>
+          <% } %>
+        </td>
+      </tr>
+      <% } %>
+    </tbody>
+  </table>
+</div>
+
+<!-- ===================== INVITE USER MODAL ===================== -->
+<div id="inviteUserModal" class="modal modal-fixed-footer" style="max-height:90vh;overflow-y:auto;">
+  <div class="modal-content">
+    <h5>Invite New User</h5>
+    <div class="row">
+      <div class="input-field col s12 m6">
+        <input id="inviteUsername" type="text" placeholder="e.g. jsmith">
+        <label for="inviteUsername">Username</label>
+      </div>
+      <div class="input-field col s12 m6">
+        <input id="inviteEmail" type="email" placeholder="e.g. j.smith@example.com">
+        <label for="inviteEmail">Email Address</label>
+      </div>
+    </div>
+
+    <p class="grey-text" style="margin-bottom:4px;">Preset Role</p>
+    <div class="row" style="margin-bottom:8px;">
+      <div class="col s12">
+        <a class="btn-small waves-effect waves-light grey lighten-1" onclick="applyPreset('viewer')">Viewer</a>&nbsp;
+        <a class="btn-small waves-effect waves-light grey lighten-1" onclick="applyPreset('operator')">Operator</a>&nbsp;
+        <a class="btn-small waves-effect waves-light grey lighten-1" onclick="applyPreset('manager')">Manager</a>&nbsp;
+        <a class="btn-small waves-effect waves-light grey lighten-1" onclick="applyPreset('none')">None</a>
+      </div>
+    </div>
+
+    <%- include('./partials/_permissionMatrix', { idPrefix: 'invite', PERMISSIONS, editPerms: DEFAULT_INVITED_PERMISSIONS }) %>
+  </div>
+  <div class="modal-footer">
+    <a href="#!" class="modal-close btn-flat">Cancel</a>
+    <a href="#!" class="btn waves-effect waves-light orange" onclick="submitInvite()">Send Invite</a>
+  </div>
+</div>
+
+<!-- ===================== EDIT PERMISSIONS MODAL ===================== -->
+<div id="editPermissionsModal" class="modal modal-fixed-footer" style="max-height:90vh;overflow-y:auto;">
+  <div class="modal-content">
+    <h5>Edit Permissions — <span id="editPermUsername"></span></h5>
+    <div class="row" style="margin-bottom:8px;">
+      <div class="col s12">
+        <a class="btn-small waves-effect waves-light grey lighten-1" onclick="applyEditPreset('viewer')">Viewer</a>&nbsp;
+        <a class="btn-small waves-effect waves-light grey lighten-1" onclick="applyEditPreset('operator')">Operator</a>&nbsp;
+        <a class="btn-small waves-effect waves-light grey lighten-1" onclick="applyEditPreset('manager')">Manager</a>&nbsp;
+        <a class="btn-small waves-effect waves-light grey lighten-1" onclick="applyEditPreset('none')">None</a>
+      </div>
+    </div>
+    <%- include('./partials/_permissionMatrix', { idPrefix: 'edit', PERMISSIONS, editPerms: [] }) %>
+  </div>
+  <div class="modal-footer">
+    <a href="#!" class="modal-close btn-flat">Cancel</a>
+    <a href="#!" class="btn waves-effect waves-light orange" onclick="saveEditPermissions()">Save Permissions</a>
+  </div>
+</div>
+
+<!-- ===================== DELETE USER CONFIRM MODAL ===================== -->
+<div id="deleteUserModal" class="modal">
+  <div class="modal-content">
+    <h5>Delete User</h5>
+    <p>Are you sure you want to permanently delete user <strong id="deleteUserName"></strong>? This cannot be undone.</p>
+  </div>
+  <div class="modal-footer">
+    <a href="#!" class="modal-close btn-flat">Cancel</a>
+    <a href="#!" class="modal-close btn waves-effect waves-light red" onclick="confirmDeleteUser()">Delete</a>
+  </div>
+</div>
+
+<%- include('./partials/_footer'); %>
+<%- include('./partials/_scripts'); %>
+
+<script>
+const CSRF_TOKEN = '<%= csrf %>';
+const ROLE_PRESETS = <%- JSON.stringify(ROLE_PRESETS) %>;
+let currentEditUsername = null;
+let currentDeleteUsername = null;
+
+function applyPreset(preset) {
+  const perms = ROLE_PRESETS[preset] || [];
+  document.querySelectorAll('[data-perm-invite]').forEach(cb => {
+    cb.checked = perms.includes(cb.dataset.permInvite);
+  });
+}
+
+function applyEditPreset(preset) {
+  const perms = ROLE_PRESETS[preset] || [];
+  document.querySelectorAll('[data-perm-edit]').forEach(cb => {
+    cb.checked = perms.includes(cb.dataset.permEdit);
+  });
+}
+
+function getCheckedPerms(prefix) {
+  return Array.from(document.querySelectorAll(`[data-perm-${prefix}]:checked`))
+    .map(cb => cb.getAttribute(`data-perm-${prefix}`))
+    .map(v => (typeof v === 'string' ? v.trim() : ''))
+    .filter(Boolean);
+}
+
+async function submitInvite() {
+  const username = document.getElementById('inviteUsername').value.trim();
+  const email = document.getElementById('inviteEmail').value.trim();
+  if (!username || !email) { M.toast({html: 'Username and email are required'}); return; }
+  const permissions = getCheckedPerms('invite');
+  const res = await fetch('/rest/users/invite', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN },
+    body: JSON.stringify({ username, email, permissions })
+  });
+  const data = await res.json();
+  if (data.success) {
+    M.toast({html: `Invite sent to ${email}`});
+    setTimeout(() => location.reload(), 1200);
+  } else {
+    M.toast({html: data.message || 'Failed to invite user', displayLength: 5000});
+  }
+}
+
+function openEditPermissions(username, currentPerms) {
+  currentEditUsername = username;
+  document.getElementById('editPermUsername').textContent = username;
+
+  const legacySettingsPerms = [
+    'settings.server',
+    'settings.websocket',
+    'settings.mqtt',
+    'settings.alerts',
+    'settings.icons',
+    'settings.templates',
+    'settings.webhooks',
+    'settings.backup'
+  ];
+  const normalizedPerms = new Set(currentPerms || []);
+  if (legacySettingsPerms.some((p) => normalizedPerms.has(p))) {
+    normalizedPerms.add('settings.access');
+  }
+
+  document.querySelectorAll('[data-perm-edit]').forEach(cb => {
+    cb.checked = normalizedPerms.has(cb.dataset.permEdit);
+  });
+  const modalEl = document.getElementById('editPermissionsModal');
+  const modal = M.Modal.getInstance(modalEl) || M.Modal.init(modalEl);
+  modal.open();
+}
+
+async function saveEditPermissions() {
+  const permissions = getCheckedPerms('edit');
+  const res = await fetch(`/rest/users/${encodeURIComponent(currentEditUsername)}/permissions`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN },
+    body: JSON.stringify({ permissions })
+  });
+  const data = await res.json();
+  if (data.success) {
+    M.toast({html: 'Permissions updated'});
+    setTimeout(() => location.reload(), 1000);
+  } else {
+    M.toast({html: data.message || 'Failed to update permissions', displayLength: 5000});
+  }
+}
+
+async function deactivateUser(username) {
+  if (!confirm(`Deactivate user "${username}"? Their active session will be revoked.`)) return;
+  const res = await fetch(`/rest/users/${encodeURIComponent(username)}/deactivate`, {
+    method: 'PUT', headers: { 'X-CSRF-Token': CSRF_TOKEN }
+  });
+  const data = await res.json();
+  M.toast({html: data.success ? 'User deactivated' : (data.message || 'Failed')});
+  if (data.success) setTimeout(() => location.reload(), 1000);
+}
+
+async function activateUser(username) {
+  const res = await fetch(`/rest/users/${encodeURIComponent(username)}/activate`, {
+    method: 'PUT', headers: { 'X-CSRF-Token': CSRF_TOKEN }
+  });
+  const data = await res.json();
+  M.toast({html: data.success ? 'User activated' : (data.message || 'Failed')});
+  if (data.success) setTimeout(() => location.reload(), 1000);
+}
+
+async function resendInvite(username) {
+  const res = await fetch(`/rest/users/${encodeURIComponent(username)}/resend-invite`, {
+    method: 'POST', headers: { 'X-CSRF-Token': CSRF_TOKEN }
+  });
+  const data = await res.json();
+  M.toast({html: data.success ? 'Invite resent' : (data.message || 'Failed')});
+}
+
+async function sendPasswordReset(username) {
+  if (!confirm(`Send a password reset email to "${username}"?`)) return;
+  const res = await fetch(`/rest/users/${encodeURIComponent(username)}/reset-password`, {
+    method: 'POST', headers: { 'X-CSRF-Token': CSRF_TOKEN }
+  });
+  const data = await res.json();
+  M.toast({html: data.success ? 'Reset email sent' : (data.message || 'Failed')});
+}
+
+function openDeleteUser(username) {
+  currentDeleteUsername = username;
+  document.getElementById('deleteUserName').textContent = username;
+  const modalEl = document.getElementById('deleteUserModal');
+  const modal = M.Modal.getInstance(modalEl) || M.Modal.init(modalEl);
+  modal.open();
+}
+
+async function confirmDeleteUser() {
+  const res = await fetch(`/rest/users/${encodeURIComponent(currentDeleteUsername)}`, {
+    method: 'DELETE', headers: { 'X-CSRF-Token': CSRF_TOKEN }
+  });
+  const data = await res.json();
+  M.toast({html: data.success ? 'User deleted' : (data.message || 'Failed')});
+  if (data.success) setTimeout(() => location.reload(), 1000);
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  M.Modal.init(document.querySelectorAll('.modal'));
+});
+</script>
+</body>
+</html>
