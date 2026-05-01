@@ -24,8 +24,12 @@ async function sendNotification(subject,body,type,url){
 
 }
 
-async function sendEmail(subject,body) {
+async function sendEmail(subject,body,recipient) {
     try {
+      const toAddress = (typeof recipient === 'string' && recipient.trim().length > 0)
+        ? recipient.trim()
+        : serverConfig.smtp.emailTo;
+
       // Create a transporter object using the default SMTP transport
       let transporter = nodemailer.createTransport({
         host: serverConfig.smtp.host, // Example: 'smtp.gmail.com'
@@ -40,7 +44,7 @@ async function sendEmail(subject,body) {
       // Send mail with defined transport object
       let info = await transporter.sendMail({
         from: `"Orchelium" <${serverConfig.smtp.emailFrom}>`, // Sender address
-        to: serverConfig.smtp.emailTo,                        // List of recipients
+        to: toAddress,                                        // Recipient
         subject: subject,                                     // Subject line
         text: body,                                           // Plain text body
         /*html: '<b>Hello world?</b>'                         // HTML body*/

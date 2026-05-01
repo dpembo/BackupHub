@@ -704,6 +704,7 @@ app.use((req, res, next) => {
 // Make currentUser available in every EJS template (populated by isAuthenticated)
 app.use((req, res, next) => {
   res.locals.currentUser = req.session.user || null;
+  res.locals.hasPerm = (permission) => User.hasPermission(res.locals.currentUser, permission);
   next();
 });
 
@@ -907,12 +908,26 @@ app.get('/invite/:token/:username', asyncHandler(async (req, res) => {
 }));
 
 app.post('/invite/:token/:username', validateCsrf, asyncHandler(async (req, res) => {
-  const accepted = await User.acceptInvite(req.params.username, req.params.token, req.body.password);
+  const { password, password2 } = req.body;
+  const inviteUrl = new URL(`/invite/${req.params.token}/${req.params.username}`, `${req.protocol}://${req.get('host')}`);
+
+  if (typeof password !== 'string' || password.length < 8) {
+    inviteUrl.searchParams.append('message', 'Password must be at least 8 characters long');
+    return res.redirect(inviteUrl.toString());
+  }
+
+  if (password2 !== undefined && password !== password2) {
+    inviteUrl.searchParams.append('message', 'Passwords do not match');
+    return res.redirect(inviteUrl.toString());
+  }
+
+  const accepted = await User.acceptInvite(req.params.username, req.params.token, password);
   if (accepted) {
     logger.info(`Invite accepted for user: ${req.params.username}`);
     res.redirect('/login.html?message=Account+activated.+Please+login+with+your+new+credentials');
   } else {
-    res.redirect(`/invite/${req.params.token}/${req.params.username}?message=Invite+link+has+expired+or+already+been+used`);
+    inviteUrl.searchParams.append('message', 'Invite link has expired or already been used');
+    res.redirect(inviteUrl.toString());
   }
 }));
 
@@ -931,6 +946,25 @@ app.post('/login.html', validateCsrf, asyncHandler(async (req, res) => {
     return res.redirect(loginUrl.toString());
   }
 
+  if (!user.isActive) {
+    logger.warn(`Login attempt for inactive account: ${username}`);
+    const loginUrl = new URL('/login.html', `${req.protocol}://${req.get('host')}`);
+    if (!user.password) {
+      loginUrl.searchParams.append('message', 'Account is not active yet. Please complete your invite setup from the email link.');
+    } else {
+      loginUrl.searchParams.append('message', 'Account has been deactivated');
+    }
+    return res.redirect(loginUrl.toString());
+  }
+
+  if (!user.password) {
+    logger.warn(`Login blocked for user without password hash: ${username}`);
+    const loginUrl = new URL('/login.html', `${req.protocol}://${req.get('host')}`);
+    loginUrl.searchParams.append('message', 'Invalid username or password');
+    if (redirect) loginUrl.searchParams.append('redirect', redirect);
+    return res.redirect(loginUrl.toString());
+  }
+
   const passwordMatch = await bcrypt.compare(password, user.password);
   if (!passwordMatch) {
     logger.warn(`Failed login attempt for user: ${username} from IP: ${ipAddress}`);
@@ -942,13 +976,6 @@ app.post('/login.html', validateCsrf, asyncHandler(async (req, res) => {
     const loginUrl = new URL('/login.html', `${req.protocol}://${req.get('host')}`);
     loginUrl.searchParams.append('message', 'Invalid username or password');
     if (redirect) loginUrl.searchParams.append('redirect', redirect);
-    return res.redirect(loginUrl.toString());
-  }
-
-  if (!user.isActive) {
-    logger.warn(`Login attempt for deactivated account: ${username}`);
-    const loginUrl = new URL('/login.html', `${req.protocol}://${req.get('host')}`);
-    loginUrl.searchParams.append('message', 'Account has been deactivated');
     return res.redirect(loginUrl.toString());
   }
 
