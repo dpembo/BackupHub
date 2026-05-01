@@ -21,14 +21,36 @@ function isSelected(inValue,compareValue){
   <style>
     body { margin: 0; padding: 0; overflow: hidden; }
     #orchestration-container { display: flex; height: calc(100vh - 120px); flex-direction: column; overflow: hidden; width: 100%; margin-top: 1px; }
-    #orchestration-header { background: #f5f5f5; padding: 15px 20px; border-bottom: 1px solid #ddd; flex-shrink: 0; position: relative;}
+    #orchestration-header { position: relative; top: -5px; background: #f5f5f5; padding: 15px 20px; border-bottom: 1px solid #ddd; flex-shrink: 0; position: relative;}
     #header-buttonss {
       position: absolute;
       top: 15px;   /* matches header padding */
       right: 20px; /* matches header padding */
-      display: flex;
-      gap: 10px;
       align-items: center;
+    }
+    .header-toolbar {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px;
+      border: 1px solid #c9d1db;
+      border-radius: 8px;
+      background: linear-gradient(180deg, #fbfcfd 0%, #eef2f6 100%);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 1px 1px rgba(0, 0, 0, 0.04);
+    }
+    .toolbar-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 0;
+      border: 1px solid #d6dde6;
+      border-radius: 6px;
+      background: #f6f8fb;
+      overflow: hidden;
+    }
+    .toolbar-divider {
+      width: 1px;
+      height: 24px;
+      background: #cfd6df;
     }
     
     #orchestration-main { display: flex; flex: 1; overflow: hidden; }
@@ -149,6 +171,60 @@ function isSelected(inValue,compareValue){
     .delete-btn:hover { background: #d32f2f; }
     .save-btn { background: #4caf50; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }
     .save-btn:hover { background: #388e3c; }
+    .save-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .header-action-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      padding: 8px 11px;
+      border-radius: 0;
+      border: 0;
+      border-right: 1px solid #d6dde6;
+      background: transparent;
+      color: #324252;
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 1;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+      transition: background 0.12s ease, color 0.12s ease, box-shadow 0.12s ease;
+    }
+    .toolbar-group .header-action-btn:last-child {
+      border-right: 0;
+    }
+    .header-action-btn:hover {
+      background: linear-gradient(180deg, #ffffff 0%, #e7edf5 100%);
+      color: #173a5e;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.95), inset 0 -1px 0 rgba(0, 0, 0, 0.03);
+    }
+    .header-action-btn:active {
+      background: linear-gradient(180deg, #dfe7f1 0%, #f4f7fb 100%);
+      box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.08);
+    }
+    .header-action-btn:disabled,
+    .header-action-btn:disabled:hover {
+      background: transparent;
+      color: #93a0ae;
+      box-shadow: none;
+      opacity: 0.7;
+    }
+    .header-action-btn .material-icons {
+      font-size: 15px;
+      line-height: 1;
+    }
+    .header-action-btn.toolbar-primary {
+      background: linear-gradient(180deg, #2b7bd4 0%, #1e66b8 100%);
+      color: #fff;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    }
+    .header-action-btn.toolbar-primary:hover {
+      background: linear-gradient(180deg, #3585de 0%, #256fc3 100%);
+      color: white;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24);
+    }
+    .header-action-btn.toolbar-primary:active {
+      background: linear-gradient(180deg, #1d5fa8 0%, #2a75cb 100%);
+    }
     #orch-name-display { cursor: pointer; border-radius: 4px; transition: background 0.2s; display: flex; flex-direction: column; gap: 1px; }
     #orch-name-display:hover { background: rgba(33, 150, 243, 0.1); }
     #orch-name-text { font-size: 16px; font-weight: 600; }
@@ -225,6 +301,18 @@ function isSelected(inValue,compareValue){
       width: 100% !important;
     }
 
+    .modal-compact-confirm {
+      width: 92%;
+      max-width: 560px;
+      max-height: 260px;
+      height: auto;
+      top: 12% !important;
+    }
+
+    .modal-compact-confirm .modal-content {
+      padding: 20px 24px 8px 24px;
+    }
+
   </style>
   <link rel="stylesheet" href="/css/spectrum/spectrum.min.css">
   <script src="/js/spectrum/spectrum.min.js"></script>
@@ -298,19 +386,38 @@ function isSelected(inValue,compareValue){
           </div>
         </div>
       </h3>
-      <div id="header-buttonss" style="display: flex; gap: 10px;">
-        <button class="save-btn" style="background: #1976d2;" onclick="listSchedulesForOrchestration()" title="View schedules that use this orchestration">
-          <i class="material-icons" style="font-size: 16px; vertical-align: middle;">assignment</i>
-          List Jobs
-        </button>
-        <button class="save-btn" style="background: #2196f3;" onclick="runOrchestration()" title="Execute the orchestration">
-          <i class="material-icons" style="font-size: 16px; vertical-align: middle;">play_arrow</i>
-          Run
-        </button>
-        <button class="save-btn" onclick="saveOrchestration()">
-          <i class="material-icons" style="font-size: 16px; vertical-align: middle;">save</i>
-          Save Orchestration
-        </button>
+      <div id="header-buttonss">
+        <div class="header-toolbar" role="toolbar" aria-label="Orchestration actions">
+          <div class="toolbar-group">
+            <button id="undo-button" class="header-action-btn" onclick="undoGraphChange()" title="Undo last change" disabled>
+              <i class="material-icons">undo</i>
+              Undo
+            </button>
+            <button id="redo-button" class="header-action-btn" onclick="redoGraphChange()" title="Redo last undone change" disabled>
+              <i class="material-icons">redo</i>
+              Redo
+            </button>
+          </div>
+          <span class="toolbar-divider" aria-hidden="true"></span>
+          <div class="toolbar-group">
+            <button class="header-action-btn" onclick="listSchedulesForOrchestration()" title="View schedules that use this orchestration">
+              <i class="material-icons">assignment</i>
+              List Jobs
+            </button>
+            <button id="run-button" class="header-action-btn" onclick="runOrchestration()" title="Execute the orchestration">
+              <i class="material-icons">play_arrow</i>
+              Run
+            </button>
+            <button class="header-action-btn" onclick="cancelOrchestrationChanges()" title="Discard changes and return to list">
+              <i class="material-icons">cancel</i>
+              Cancel
+            </button>
+            <button class="header-action-btn toolbar-primary" onclick="saveOrchestration()">
+              <i class="material-icons">save</i>
+              Save
+            </button>
+          </div>
+        </div>
       </div>
     </div>
     
@@ -336,7 +443,7 @@ function isSelected(inValue,compareValue){
         </div>
         
         <div class="palette-section">
-          <h4>Execute Scripts</h4>
+          <h4>Actions</h4>
           <div class="palette-item" draggable="true" data-node-type="execute">
             <i class="material-icons">settings</i>
             <span>Execute Script</span>
@@ -677,6 +784,17 @@ function isSelected(inValue,compareValue){
       <a href="#!" onclick="confirmDeleteNode()" class="waves-effect waves-red btn-flat" style="color: #f44336; font-weight: 600;">Delete</a>
     </div>
   </div>
+
+  <div id="orchestration-cancel-confirm-modal" class="modal modal-compact-confirm">
+    <div class="modal-content">
+      <h4>Discard Changes?</h4>
+      <p>You have unsaved changes. Leaving now will discard them.</p>
+    </div>
+    <div class="modal-footer">
+      <a href="#!" class="modal-close waves-effect waves-green btn-flat">Stay</a>
+      <a href="#!" onclick="discardOrchestrationChanges()" class="waves-effect waves-red btn-flat" style="color: #f44336; font-weight: 600;">Discard &amp; Exit</a>
+    </div>
+  </div>
   
   <script>
     // SVG-based orchestration builder with labeled exit ports for conditions
@@ -689,7 +807,7 @@ function isSelected(inValue,compareValue){
       nodeWidth: 200,
       nodeHeight: 60,
       portRadius: 6,
-      verticalSpacing: 150,
+      verticalSpacing: 75,
       expandPadding: 200,
       expandStep: 400
     };
@@ -704,6 +822,7 @@ function isSelected(inValue,compareValue){
     let edgeLayer = null;
     let nodeLayer = null;
     let selectedNode = null;
+    let selectedNodes = new Set();
     let selectedEdge = null;
     let orchestrationId = '<%= jobId %>'.trim();
     if (!orchestrationId) orchestrationId = null;
@@ -714,6 +833,9 @@ function isSelected(inValue,compareValue){
     let orchestrationIcon = savedIcon;
     let orchestrationColor = savedColor;
     let pendingSave = false;
+    let lastSavedOrchestrationState = '';
+    let isLoadingOrchestration = false;
+    let suppressUnsavedWarning = false;
     
     // Data structures
     let nodes = {};
@@ -723,10 +845,23 @@ function isSelected(inValue,compareValue){
     
     // State
     let isDraggingNode = null;
+    let dragStartMouse = null;
+    let dragStartNodePositions = null;
+    let didDragMove = false;
+    let isBoxSelecting = false;
+    let boxSelectStart = null;
+    let boxSelectRect = null;
+    let suppressNextCanvasClick = false;
     let isDrawingEdge = false;
     let tempEdgeLine = null;
     let tempEdgeStartPort = null;
     let zoomLevel = 1;
+
+    const MAX_HISTORY_ENTRIES = 100;
+    let undoStack = [];
+    let redoStack = [];
+    let isApplyingHistoryState = false;
+    let historyCommitTimer = null;
     
     $(document).ready(function() {
       console.log('Orchestra Builder loaded, orchestrationId:', orchestrationId);
@@ -736,6 +871,7 @@ function isSelected(inValue,compareValue){
       loadScripts();
       loadAgents();
       if (orchestrationId) {
+        isLoadingOrchestration = true;
         console.log('Loading existing orchestration:', orchestrationId);
         loadOrchestration();
       } else {
@@ -743,6 +879,18 @@ function isSelected(inValue,compareValue){
       }
       setupDragAndDrop();
       setupZoomControls();
+
+      const propsContent = document.getElementById('properties-content');
+      if (propsContent) {
+        propsContent.addEventListener('input', () => scheduleHistoryCommit(350));
+        propsContent.addEventListener('change', () => scheduleHistoryCommit(120));
+      }
+
+      if (!orchestrationId) {
+        resetHistoryFromCurrentState();
+        markOrchestrationSavedState();
+      }
+
       // Initialize color picker for both new and existing orchestrations
       setColorPicker(savedColor);
       // Setup name display click handler
@@ -762,6 +910,12 @@ function isSelected(inValue,compareValue){
         });
         observer.observe(stylesheetLink, { attributes: true, attributeFilter: ['href'] });
       }
+
+      window.addEventListener('beforeunload', function(e) {
+        if (suppressUnsavedWarning || !hasUnsavedOrchestrationChanges()) return;
+        e.preventDefault();
+        e.returnValue = '';
+      });
     });
     
     function initializeSVG() {
@@ -789,9 +943,294 @@ function isSelected(inValue,compareValue){
       nodeLayer = nodeLyr;
       
       // Add canvas interaction
+      svg.addEventListener('mousedown', onSVGMouseDown);
       svg.addEventListener('click', onSVGClick);
       svg.addEventListener('mousemove', onSVGMouseMove);
       svg.addEventListener('mouseup', onSVGMouseUp);
+    }
+
+    function getCanvasPointFromEvent(e) {
+      const rect = svg.getBoundingClientRect();
+      return {
+        x: ((e.clientX - rect.left) / rect.width) * CANVAS.width,
+        y: ((e.clientY - rect.top) / rect.height) * CANVAS.height
+      };
+    }
+
+    function getNodeBounds(node) {
+      const isCircularNode = node.type === 'start' || node.type === 'end-success' || node.type === 'end-failure';
+      const isDiamondNode = node.type === 'condition' || node.type === 'split-join';
+
+      if (isCircularNode || isDiamondNode) {
+        return {
+          left: node.x - 28,
+          right: node.x + 28,
+          top: node.y - 28,
+          bottom: node.y + 28
+        };
+      }
+
+      const dim = getNodeDimensions(node);
+      return {
+        left: node.x - (dim.width / 2),
+        right: node.x + (dim.width / 2),
+        top: node.y - (CANVAS.nodeHeight / 2),
+        bottom: node.y + (CANVAS.nodeHeight / 2)
+      };
+    }
+
+    function createGraphStateSnapshot() {
+      return {
+        nodes: JSON.parse(JSON.stringify(nodes)),
+        edges: JSON.parse(JSON.stringify(edges)),
+        nodeIdCounter,
+        edgeIdCounter
+      };
+    }
+
+    function serializeGraphState(state) {
+      const nodeIds = Object.keys(state.nodes || {}).sort();
+      const sortedNodes = {};
+      nodeIds.forEach(id => {
+        sortedNodes[id] = state.nodes[id];
+      });
+
+      const sortedEdges = (state.edges || []).slice().sort((a, b) => {
+        const aId = a.id || '';
+        const bId = b.id || '';
+        if (aId && bId && aId !== bId) return aId.localeCompare(bId);
+        if ((a.from || '') !== (b.from || '')) return (a.from || '').localeCompare(b.from || '');
+        if ((a.to || '') !== (b.to || '')) return (a.to || '').localeCompare(b.to || '');
+        return (a.fromPort || '').localeCompare(b.fromPort || '');
+      });
+
+      return JSON.stringify({
+        nodes: sortedNodes,
+        edges: sortedEdges,
+        nodeIdCounter: state.nodeIdCounter || 0,
+        edgeIdCounter: state.edgeIdCounter || 0
+      });
+    }
+
+    function graphStatesEqual(a, b) {
+      if (!a || !b) return false;
+      return serializeGraphState(a) === serializeGraphState(b);
+    }
+
+    function getOrchestrationStateSignature() {
+      return JSON.stringify({
+        graph: serializeGraphState(createGraphStateSnapshot()),
+        name: orchestrationName || '',
+        description: orchestrationDescription || '',
+        icon: orchestrationIcon || '',
+        color: orchestrationColor || ''
+      });
+    }
+
+    function markOrchestrationSavedState() {
+      lastSavedOrchestrationState = getOrchestrationStateSignature();
+    }
+
+    function hasUnsavedOrchestrationChanges() {
+      if (isLoadingOrchestration) return false;
+      if (!lastSavedOrchestrationState) return false;
+      return getOrchestrationStateSignature() !== lastSavedOrchestrationState;
+    }
+
+    function promptDiscardOrchestrationChanges() {
+      const modalElement = document.getElementById('orchestration-cancel-confirm-modal');
+      if (!modalElement) {
+        discardOrchestrationChanges();
+        return;
+      }
+      const modal = M.Modal.getInstance(modalElement) || M.Modal.init(modalElement);
+      modal.open();
+    }
+
+    function cancelOrchestrationChanges() {
+      if (!hasUnsavedOrchestrationChanges()) {
+        window.location.href = '/orchestrationList.html';
+        return;
+      }
+      promptDiscardOrchestrationChanges();
+    }
+
+    function discardOrchestrationChanges() {
+      suppressUnsavedWarning = true;
+      window.location.href = '/orchestrationList.html';
+    }
+
+    function updateUndoRedoButtons() {
+      const undoButton = document.getElementById('undo-button');
+      const redoButton = document.getElementById('redo-button');
+      if (undoButton) undoButton.disabled = undoStack.length <= 1;
+      if (redoButton) redoButton.disabled = redoStack.length === 0;
+    }
+
+    function applyGraphState(state) {
+      if (!state) return;
+      isApplyingHistoryState = true;
+
+      nodes = JSON.parse(JSON.stringify(state.nodes || {}));
+      edges = JSON.parse(JSON.stringify(state.edges || []));
+      nodeIdCounter = state.nodeIdCounter || 0;
+      edgeIdCounter = state.edgeIdCounter || 0;
+
+      Object.keys(nodes).forEach(id => {
+        ensureExecuteDefaults(nodes[id]);
+        ensureWaitDefaults(nodes[id]);
+        ensureNotifyDefaults(nodes[id]);
+      });
+
+      selectedNode = null;
+      selectedNodes.clear();
+      selectedEdge = null;
+      updatePropertiesPanel();
+      renderAllNodes();
+      shrinkCanvasToFitNodes();
+      expandCanvasForAllNodes();
+      updateStats();
+      updateUndoRedoButtons();
+
+      isApplyingHistoryState = false;
+    }
+
+    function resetHistoryFromCurrentState() {
+      const snapshot = createGraphStateSnapshot();
+      undoStack = [snapshot];
+      redoStack = [];
+      if (historyCommitTimer) {
+        clearTimeout(historyCommitTimer);
+        historyCommitTimer = null;
+      }
+      updateUndoRedoButtons();
+    }
+
+    function commitHistorySnapshot() {
+      if (isApplyingHistoryState) return;
+      const snapshot = createGraphStateSnapshot();
+      const previousSnapshot = undoStack.length ? undoStack[undoStack.length - 1] : null;
+      if (previousSnapshot && graphStatesEqual(previousSnapshot, snapshot)) return;
+
+      undoStack.push(snapshot);
+      if (undoStack.length > MAX_HISTORY_ENTRIES) {
+        undoStack.shift();
+      }
+      redoStack = [];
+      updateUndoRedoButtons();
+    }
+
+    function scheduleHistoryCommit(delayMs = 250) {
+      if (isApplyingHistoryState) return;
+      if (historyCommitTimer) clearTimeout(historyCommitTimer);
+      historyCommitTimer = setTimeout(() => {
+        historyCommitTimer = null;
+        commitHistorySnapshot();
+      }, delayMs);
+    }
+
+    function undoGraphChange() {
+      if (undoStack.length <= 1) return false;
+      if (historyCommitTimer) {
+        clearTimeout(historyCommitTimer);
+        historyCommitTimer = null;
+      }
+
+      const current = undoStack.pop();
+      redoStack.push(current);
+      const previous = undoStack[undoStack.length - 1];
+      applyGraphState(previous);
+      return true;
+    }
+
+    function redoGraphChange() {
+      if (redoStack.length === 0) return false;
+      if (historyCommitTimer) {
+        clearTimeout(historyCommitTimer);
+        historyCommitTimer = null;
+      }
+
+      const next = redoStack.pop();
+      undoStack.push(next);
+      applyGraphState(next);
+      return true;
+    }
+
+    function finalizeBoxSelection() {
+      if (!boxSelectStart) {
+        isBoxSelecting = false;
+        if (boxSelectRect) boxSelectRect.remove();
+        boxSelectRect = null;
+        return;
+      }
+
+      const startX = boxSelectStart.x;
+      const startY = boxSelectStart.y;
+      const endX = boxSelectStart.currentX;
+      const endY = boxSelectStart.currentY;
+      const minX = Math.min(startX, endX);
+      const maxX = Math.max(startX, endX);
+      const minY = Math.min(startY, endY);
+      const maxY = Math.max(startY, endY);
+      const movedFarEnough = Math.abs(endX - startX) > 4 || Math.abs(endY - startY) > 4;
+
+      if (movedFarEnough) {
+        const nextSelection = boxSelectStart.additive ? new Set(selectedNodes) : new Set();
+
+        Object.keys(nodes).forEach(nodeId => {
+          const node = nodes[nodeId];
+          const bounds = getNodeBounds(node);
+          const intersects = !(
+            bounds.right < minX ||
+            bounds.left > maxX ||
+            bounds.bottom < minY ||
+            bounds.top > maxY
+          );
+
+          if (intersects) nextSelection.add(nodeId);
+        });
+
+        selectedNodes = nextSelection;
+        selectedNode = selectedNodes.size ? Array.from(selectedNodes)[selectedNodes.size - 1] : null;
+        selectedEdge = null;
+        suppressNextCanvasClick = true;
+        updatePropertiesPanel();
+        renderAllNodes();
+      }
+
+      isBoxSelecting = false;
+      boxSelectStart = null;
+      if (boxSelectRect) boxSelectRect.remove();
+      boxSelectRect = null;
+    }
+
+    function onSVGMouseDown(e) {
+      const isCanvasBackground = e.target === svg || (e.target.tagName === 'g' && !e.target.hasAttribute('data-node-id'));
+      if (!isCanvasBackground || isDrawingEdge) return;
+
+      const point = getCanvasPointFromEvent(e);
+      isBoxSelecting = true;
+      boxSelectStart = {
+        x: point.x,
+        y: point.y,
+        currentX: point.x,
+        currentY: point.y,
+        additive: Boolean(e.ctrlKey || e.metaKey)
+      };
+
+      if (boxSelectRect) boxSelectRect.remove();
+      boxSelectRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      boxSelectRect.setAttribute('x', point.x);
+      boxSelectRect.setAttribute('y', point.y);
+      boxSelectRect.setAttribute('width', 0);
+      boxSelectRect.setAttribute('height', 0);
+      boxSelectRect.setAttribute('fill', getCSSVariable('--primary-color', '#2196f3'));
+      boxSelectRect.setAttribute('fill-opacity', '0.08');
+      boxSelectRect.setAttribute('stroke', getCSSVariable('--primary-color', '#2196f3'));
+      boxSelectRect.setAttribute('stroke-width', '1');
+      boxSelectRect.setAttribute('stroke-dasharray', '4,3');
+      boxSelectRect.setAttribute('pointer-events', 'none');
+      svg.appendChild(boxSelectRect);
     }
 
     function roundUpToStep(value, step) {
@@ -1142,7 +1581,7 @@ function isSelected(inValue,compareValue){
       });
 
       const horizontalGap = 110;
-      const verticalGap = 160;
+      const verticalGap = 105;
       const topPadding = 120;
       const sidePadding = 120;
 
@@ -1213,30 +1652,97 @@ function isSelected(inValue,compareValue){
         }
       });
 
-      // Ensure condition branch semantics: true branch node should sit left of false branch when peers share a layer.
+      // Keep true/false branch semantics while widening branches based on downstream subtree size.
       const nextNodeByPort = {};
       edges.forEach(edge => {
         if (!nextNodeByPort[edge.from]) nextNodeByPort[edge.from] = {};
         nextNodeByPort[edge.from][edge.fromPort] = edge.to;
       });
 
-      Object.keys(nodes).forEach(nodeId => {
+      function collectReachableNodeIds(startId) {
+        const visited = new Set();
+        const stack = [startId];
+
+        while (stack.length) {
+          const currentId = stack.pop();
+          if (!currentId || visited.has(currentId) || !nodes[currentId]) continue;
+          visited.add(currentId);
+          (outgoing[currentId] || []).forEach(nextId => {
+            if (!visited.has(nextId)) stack.push(nextId);
+          });
+        }
+
+        return visited;
+      }
+
+      function shiftNodeSetX(nodeIdSet, deltaX) {
+        if (!deltaX) return;
+        nodeIdSet.forEach(id => {
+          if (nodes[id]) nodes[id].x += deltaX;
+        });
+      }
+
+      topo.forEach(nodeId => {
         const node = nodes[nodeId];
-        if (node.type !== 'condition') return;
+        if (!node || node.type !== 'condition') return;
 
         const trueTargetId = nextNodeByPort[nodeId]?.true;
         const falseTargetId = nextNodeByPort[nodeId]?.false;
         if (!trueTargetId || !falseTargetId) return;
         if (!nodes[trueTargetId] || !nodes[falseTargetId]) return;
+        if (trueTargetId === falseTargetId) return;
 
-        const trueDepth = depth[trueTargetId] || 0;
-        const falseDepth = depth[falseTargetId] || 0;
-        if (trueDepth !== falseDepth) return;
+        const trueReachable = collectReachableNodeIds(trueTargetId);
+        const falseReachable = collectReachableNodeIds(falseTargetId);
+
+        const sharedReachable = new Set();
+        trueReachable.forEach(id => {
+          if (falseReachable.has(id)) sharedReachable.add(id);
+        });
+
+        const trueExclusive = new Set([...trueReachable].filter(id => !sharedReachable.has(id)));
+        const falseExclusive = new Set([...falseReachable].filter(id => !sharedReachable.has(id)));
+
+        if (!trueExclusive.size) trueExclusive.add(trueTargetId);
+        if (!falseExclusive.size) falseExclusive.add(falseTargetId);
 
         if (nodes[trueTargetId].x > nodes[falseTargetId].x) {
-          const swapX = nodes[trueTargetId].x;
-          nodes[trueTargetId].x = nodes[falseTargetId].x;
-          nodes[falseTargetId].x = swapX;
+          const leftDelta = nodes[falseTargetId].x - nodes[trueTargetId].x;
+          const rightDelta = nodes[trueTargetId].x - nodes[falseTargetId].x;
+          shiftNodeSetX(trueExclusive, leftDelta);
+          shiftNodeSetX(falseExclusive, rightDelta);
+        }
+
+        const trueWeight = Math.max(1, trueExclusive.size);
+        const falseWeight = Math.max(1, falseExclusive.size);
+        const minSpread = 220;
+        const dynamicSpread = Math.min(760, minSpread + ((trueWeight + falseWeight - 2) * 24));
+        const desiredSpread = Math.max(minSpread, dynamicSpread);
+
+        const currentSpread = nodes[falseTargetId].x - nodes[trueTargetId].x;
+        if (currentSpread < desiredSpread) {
+          const additionalSpread = desiredSpread - currentSpread;
+          const totalWeight = trueWeight + falseWeight;
+          const trueShift = (additionalSpread * falseWeight) / totalWeight;
+          const falseShift = (additionalSpread * trueWeight) / totalWeight;
+
+          shiftNodeSetX(trueExclusive, -trueShift);
+          shiftNodeSetX(falseExclusive, falseShift);
+        }
+
+        // Re-center branch targets around the condition node for a cleaner fan-out shape.
+        const midPoint = (nodes[trueTargetId].x + nodes[falseTargetId].x) / 2;
+        const targetMidPoint = nodes[nodeId].x;
+        const reCenterDelta = targetMidPoint - midPoint;
+
+        shiftNodeSetX(trueExclusive, reCenterDelta);
+        shiftNodeSetX(falseExclusive, reCenterDelta);
+
+        // Ensure spread remains positive after recentering.
+        if (nodes[falseTargetId].x <= nodes[trueTargetId].x) {
+          const correction = ((nodes[trueTargetId].x - nodes[falseTargetId].x) + 30) / 2;
+          shiftNodeSetX(trueExclusive, -correction);
+          shiftNodeSetX(falseExclusive, correction);
         }
       });
 
@@ -1244,6 +1750,7 @@ function isSelected(inValue,compareValue){
       shrinkCanvasToFitNodes();
       expandCanvasForAllNodes();
       renderAllEdges();
+      commitHistorySnapshot();
       M.toast({ html: 'Auto layout applied' });
     }
     
@@ -1466,6 +1973,7 @@ function isSelected(inValue,compareValue){
       renderNode(id);
       expandCanvasForNode(id);
       updateStats();
+      commitHistorySnapshot();
     }
     
     function renderNode(nodeId) {
@@ -1523,8 +2031,8 @@ function isSelected(inValue,compareValue){
         ];
         diamond.setAttribute('points', points.map(p => p.join(',')).join(' '));
         diamond.setAttribute('fill', getCSSVariable('--surface-secondary', '#f9f9f9'));
-        diamond.setAttribute('stroke', selectedNode === nodeId ? getCSSVariable('--warning-color', '#ff9800') : getCSSVariable('--border-color', '#e0e0e0'));
-        diamond.setAttribute('stroke-width', selectedNode === nodeId ? '2' : '1');
+        diamond.setAttribute('stroke', selectedNodes.has(nodeId) ? getCSSVariable('--warning-color', '#ff9800') : getCSSVariable('--border-color', '#e0e0e0'));
+        diamond.setAttribute('stroke-width', selectedNodes.has(nodeId) ? '2' : '1');
         grp.appendChild(diamond);
         
         // Draw icon (above center in diamond)
@@ -1571,8 +2079,8 @@ function isSelected(inValue,compareValue){
         circle.setAttribute('cy', node.y);
         circle.setAttribute('r', circleRadius);
         circle.setAttribute('fill', getCSSVariable('--surface-secondary', '#f9f9f9'));
-        circle.setAttribute('stroke', selectedNode === nodeId ? getCSSVariable('--warning-color', '#ff9800') : getCSSVariable('--border-color', '#e0e0e0'));
-        circle.setAttribute('stroke-width', selectedNode === nodeId ? '2' : '1');
+        circle.setAttribute('stroke', selectedNodes.has(nodeId) ? getCSSVariable('--warning-color', '#ff9800') : getCSSVariable('--border-color', '#e0e0e0'));
+        circle.setAttribute('stroke-width', selectedNodes.has(nodeId) ? '2' : '1');
         grp.appendChild(circle);
         
         // Draw icon (centered in circle)
@@ -1630,8 +2138,8 @@ function isSelected(inValue,compareValue){
         square.setAttribute('width', squareSize);
         square.setAttribute('height', squareSize);
         square.setAttribute('fill', getCSSVariable('--surface-secondary', '#f9f9f9'));
-        square.setAttribute('stroke', selectedNode === nodeId ? getCSSVariable('--warning-color', '#ff9800') : getCSSVariable('--border-color', '#e0e0e0'));
-        square.setAttribute('stroke-width', selectedNode === nodeId ? '2' : '1');
+        square.setAttribute('stroke', selectedNodes.has(nodeId) ? getCSSVariable('--warning-color', '#ff9800') : getCSSVariable('--border-color', '#e0e0e0'));
+        square.setAttribute('stroke-width', selectedNodes.has(nodeId) ? '2' : '1');
         grp.appendChild(square);
 
         const icon = document.createElementNS('http://www.w3.org/2000/svg', 'text');
@@ -1683,8 +2191,8 @@ function isSelected(inValue,compareValue){
         rect.setAttribute('width', nodeWidth);
         rect.setAttribute('height', CANVAS.nodeHeight);
         rect.setAttribute('fill', getCSSVariable('--surface-secondary', '#f9f9f9'));
-        rect.setAttribute('stroke', selectedNode === nodeId ? getCSSVariable('--warning-color', '#ff9800') : getCSSVariable('--border-color', '#e0e0e0'));
-        rect.setAttribute('stroke-width', selectedNode === nodeId ? '2' : '1');
+        rect.setAttribute('stroke', selectedNodes.has(nodeId) ? getCSSVariable('--warning-color', '#ff9800') : getCSSVariable('--border-color', '#e0e0e0'));
+        rect.setAttribute('stroke-width', selectedNodes.has(nodeId) ? '2' : '1');
         rect.setAttribute('rx', '4');
         grp.appendChild(rect);
         
@@ -1797,8 +2305,15 @@ function isSelected(inValue,compareValue){
         portLabel.setAttribute('font-size', '11');
         portLabel.setAttribute('fill', getCSSVariable('--text-muted', '#666'));
         portLabel.setAttribute('pointer-events', 'none');
-        portLabel.textContent = port.label;
-        portGroup.appendChild(portLabel);
+
+        const isNextPortLabel = (port.label || '').toLowerCase() === 'next';
+        const hasOutgoingFromThisPort = edges.some(edge => edge.from === nodeId && edge.fromPort === port.id);
+
+        // Hide "next" helper text once that port is connected to avoid overlapping edge visuals.
+        if (!(isNextPortLabel && hasOutgoingFromThisPort)) {
+          portLabel.textContent = port.label;
+          portGroup.appendChild(portLabel);
+        }
         
         portGroup.addEventListener('mousedown', (e) => startDrawEdge(e, nodeId, port.id));
         grp.appendChild(portGroup);
@@ -1806,17 +2321,63 @@ function isSelected(inValue,compareValue){
       
       // Node interaction
       grp.addEventListener('mousedown', (e) => {
+        e.stopPropagation();
         // Only ignore if it's a port circle (parent has data-port attribute)
         if (e.target.tagName === 'circle' && e.target.parentElement.hasAttribute('data-port')) return;
+
+        if (e.ctrlKey || e.metaKey) return;
+
+        if (!selectedNodes.has(nodeId)) {
+          selectedNodes.clear();
+          selectedNodes.add(nodeId);
+        }
+
         isDraggingNode = nodeId;
         selectedNode = nodeId;
         selectedEdge = null;
+
+        const rect = svg.getBoundingClientRect();
+        const x = ((e.clientX - rect.left) / rect.width) * CANVAS.width;
+        const y = ((e.clientY - rect.top) / rect.height) * CANVAS.height;
+        dragStartMouse = { x, y };
+        dragStartNodePositions = {};
+        didDragMove = false;
+
+        selectedNodes.forEach(id => {
+          if (nodes[id]) {
+            dragStartNodePositions[id] = { x: nodes[id].x, y: nodes[id].y };
+          }
+        });
+
         updatePropertiesPanel();
         renderAllNodes();
       });
       
       grp.addEventListener('click', (e) => {
         e.stopPropagation();
+
+        if (e.ctrlKey || e.metaKey) {
+          if (selectedNodes.has(nodeId)) {
+            selectedNodes.delete(nodeId);
+          } else {
+            selectedNodes.add(nodeId);
+          }
+
+          if (selectedNodes.size === 1) {
+            selectedNode = Array.from(selectedNodes)[0];
+          } else if (selectedNodes.size > 1) {
+            selectedNode = nodeId;
+          } else {
+            selectedNode = null;
+          }
+          selectedEdge = null;
+          updatePropertiesPanel();
+          renderAllNodes();
+          return;
+        }
+
+        selectedNodes.clear();
+        selectedNodes.add(nodeId);
         selectedNode = nodeId;
         selectedEdge = null;
         updatePropertiesPanel();
@@ -1881,6 +2442,7 @@ function isSelected(inValue,compareValue){
         e.stopPropagation();
         selectedEdge = edge.id;
         selectedNode = null;
+        selectedNodes.clear();
         updatePropertiesPanel();
         renderAllNodes();
       });
@@ -1951,13 +2513,27 @@ function isSelected(inValue,compareValue){
     }
     
     function onSVGMouseUp(e) {
+      if (isBoxSelecting) {
+        finalizeBoxSelection();
+        isDraggingNode = null;
+        dragStartMouse = null;
+        dragStartNodePositions = null;
+        didDragMove = false;
+        return;
+      }
+
       if (!isDrawingEdge || !tempEdgeStartPort) {
+        const shouldCommitDrag = Boolean(isDraggingNode && didDragMove);
         isDrawingEdge = false;
         if (tempEdgeLine) tempEdgeLine.remove();
         tempEdgeLine = null;
         tempEdgeStartPort = null;
         isDraggingNode = null;
+        dragStartMouse = null;
+        dragStartNodePositions = null;
+        didDragMove = false;
         document.removeEventListener('mousemove', updateTempEdgeLine);
+        if (shouldCommitDrag) commitHistorySnapshot();
         return;
       }
       
@@ -1987,24 +2563,65 @@ function isSelected(inValue,compareValue){
       }
       
       tempEdgeStartPort = null;
+      isDraggingNode = null;
+      dragStartMouse = null;
+      dragStartNodePositions = null;
+      didDragMove = false;
       document.removeEventListener('mousemove', updateTempEdgeLine);
       renderAllEdges();
     }
     
     function onSVGMouseMove(e) {
+      if (isBoxSelecting && boxSelectStart && boxSelectRect) {
+        const point = getCanvasPointFromEvent(e);
+        boxSelectStart.currentX = point.x;
+        boxSelectStart.currentY = point.y;
+
+        const minX = Math.min(boxSelectStart.x, point.x);
+        const minY = Math.min(boxSelectStart.y, point.y);
+        const width = Math.abs(point.x - boxSelectStart.x);
+        const height = Math.abs(point.y - boxSelectStart.y);
+
+        boxSelectRect.setAttribute('x', minX);
+        boxSelectRect.setAttribute('y', minY);
+        boxSelectRect.setAttribute('width', width);
+        boxSelectRect.setAttribute('height', height);
+        return;
+      }
+
       if (isDraggingNode) {
         const rect = svg.getBoundingClientRect();
         const x = ((e.clientX - rect.left) / rect.width) * CANVAS.width;
         const y = ((e.clientY - rect.top) / rect.height) * CANVAS.height;
-        
-        nodes[isDraggingNode].x = x;
-        nodes[isDraggingNode].y = y;
+
+        if (dragStartMouse && dragStartNodePositions && Object.keys(dragStartNodePositions).length > 0) {
+          const deltaX = x - dragStartMouse.x;
+          const deltaY = y - dragStartMouse.y;
+          if (deltaX !== 0 || deltaY !== 0) didDragMove = true;
+
+          Object.keys(dragStartNodePositions).forEach(nodeId => {
+            if (!nodes[nodeId]) return;
+            nodes[nodeId].x = dragStartNodePositions[nodeId].x + deltaX;
+            nodes[nodeId].y = dragStartNodePositions[nodeId].y + deltaY;
+          });
+          expandCanvasForAllNodes();
+        } else {
+          nodes[isDraggingNode].x = x;
+          nodes[isDraggingNode].y = y;
+          didDragMove = true;
+          expandCanvasForNode(isDraggingNode);
+        }
+
         renderAllNodes();
-        expandCanvasForNode(isDraggingNode);
       }
     }
     
     function onSVGClick(e) {
+      if (suppressNextCanvasClick) {
+        suppressNextCanvasClick = false;
+        return;
+      }
+
       if (e.target === svg || (e.target.tagName === 'g' && !e.target.hasAttribute('data-node-id'))) {
         closeDetailsPanel();
       }
@@ -2012,6 +2629,7 @@ function isSelected(inValue,compareValue){
 
     function closeDetailsPanel(){
       selectedNode = null;
+      selectedNodes.clear();
       selectedEdge = null;
       document.getElementById('orchestration-properties').classList.remove('show');
       document.getElementById('zoom-controls').classList.remove('shift-left');
@@ -2044,6 +2662,7 @@ function isSelected(inValue,compareValue){
       
       updateStats();
       renderAllEdges();
+      commitHistorySnapshot();
     }
 
     function deleteSelectedEdge() {
@@ -2057,6 +2676,7 @@ function isSelected(inValue,compareValue){
       if (deleted) {
         renderAllEdges();
         updateStats();
+        commitHistorySnapshot();
         M.toast({html: 'Connection deleted successfully'});
       }
 
@@ -2107,11 +2727,13 @@ function isSelected(inValue,compareValue){
       edges = edges.filter(e => e.from !== selectedNode && e.to !== selectedNode);
       delete nodes[selectedNode];
       selectedNode = null;
+      selectedNodes.clear();
       selectedEdge = null;
       updatePropertiesPanel();
       renderAllNodes();
       shrinkCanvasToFitNodes();
       updateStats();
+      commitHistorySnapshot();
       
       // Close the modal
       var modal = M.Modal.getInstance(document.getElementById('delete-node-confirmation-modal'));
@@ -2127,7 +2749,7 @@ function isSelected(inValue,compareValue){
       const propsContent = document.getElementById('properties-content');
       const propsPanel = document.getElementById('orchestration-properties');
       
-      if (!selectedNode || !nodes[selectedNode]) {
+      if (!selectedNode || !nodes[selectedNode] || selectedNodes.size !== 1 || !selectedNodes.has(selectedNode)) {
         propsEmpty.style.display = 'block';
         propsContent.style.display = 'none';
         propsPanel.classList.remove('show');
@@ -2657,11 +3279,15 @@ function isSelected(inValue,compareValue){
           // Re-render all nodes to attach event handlers and connections
           renderAllNodes();
           updateStats();
+          resetHistoryFromCurrentState();
+          markOrchestrationSavedState();
+          isLoadingOrchestration = false;
           console.log('Orchestration loaded - nodes:', Object.keys(nodes).length, 'edges:', edges.length);
           setIconDropDownValue(orch.icon);
           setColorPicker(orch.color);
         },
         error: function(xhr, status, error) {
+          isLoadingOrchestration = false;
           console.error('Failed to load orchestration:', error, xhr);
           alert('Failed to load orchestration: ' + error);
         }  
@@ -2902,6 +3528,7 @@ function isSelected(inValue,compareValue){
         data: JSON.stringify(orchestration),
         success: function(result) {
           orchestrationId = result.job.id;
+          markOrchestrationSavedState();
           M.toast({html: 'Orchestration saved successfully!'});
           // Stay in the editor after save and reflect the persisted id in the URL.
           const editorUrl = '/orchestrationBuilder.html?id=' + encodeURIComponent(orchestrationId);
@@ -2934,7 +3561,7 @@ function isSelected(inValue,compareValue){
     
     function proceedWithExecution() {
       // Disable the button during execution
-      const runButton = document.querySelector('.save-btn');
+      const runButton = document.getElementById('run-button');
       if (runButton) {
         runButton.disabled = true;
         runButton.style.opacity = '0.6';
@@ -3229,6 +3856,21 @@ function isSelected(inValue,compareValue){
         activeEl.isContentEditable
       );
 
+      const isMeta = event.ctrlKey || event.metaKey;
+      const key = (event.key || '').toLowerCase();
+      const isUndoShortcut = isMeta && !event.shiftKey && key === 'z';
+      const isRedoShortcut = isMeta && (key === 'y' || (event.shiftKey && key === 'z'));
+
+      if (!isTyping && (isUndoShortcut || isRedoShortcut)) {
+        event.preventDefault();
+        if (isUndoShortcut) {
+          undoGraphChange();
+        } else {
+          redoGraphChange();
+        }
+        return;
+      }
+
       if (isTyping) return;
 
       if (event.key === 'Delete' || event.key === 'del') {
@@ -3240,6 +3882,26 @@ function isSelected(inValue,compareValue){
           deleteSelectedEdge();
         } else if (selectedNode) {
           deleteSelectedNode();
+        }
+      }
+
+      if (selectedNode && (event.key === 'ArrowLeft' || event.key === 'ArrowRight' || event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
+        event.preventDefault();
+        const moveTargets = selectedNodes.size ? Array.from(selectedNodes) : [selectedNode];
+        let moved = false;
+        moveTargets.forEach(nodeId => {
+          const node = nodes[nodeId];
+          if (!node) return;
+          if (event.key === 'ArrowLeft')  node.x -= 1;
+          if (event.key === 'ArrowRight') node.x += 1;
+          if (event.key === 'ArrowUp')    node.y -= 1;
+          if (event.key === 'ArrowDown')  node.y += 1;
+          moved = true;
+        });
+        if (moved) {
+          renderAllNodes();
+          expandCanvasForAllNodes();
+          scheduleHistoryCommit(180);
         }
       }
     });

@@ -146,32 +146,105 @@ In the Orchestration Builder, you can reference metric values directly in script
 #{context.type}                     // "rule", "webhook", "sample"
 #{context.executionId}              // Unique execution ID
 #{context.timestamp}                // ISO8601 timestamp
+
+// Webhook-specific (when triggered by a webhook):
+#{context.webhook.payload.field}    // Any field from the webhook JSON body
 ```
+
+### Which Node Types Support Template Substitution
+
+| Node type | Fields that accept `#{...}` |
+|-----------|------------------------------|
+| **Execute Script** | Parameters |
+| **HTTP Request** | URL, header values, body, auth token/username/password/API key value |
+| **Notify** | Title, Message, Link URL |
+| **Wait** | — (no text fields) |
+| **Split / Join** | — (no text fields) |
+| **Condition** | Condition value (text comparison) |
 
 ### Example: Tier-Based Response Orchestration
 
-```json
-{
-  "type": "condition",
-  "data": {
-    "condition": "#{context.metric.value} > 95",
-    "trueBranch": "critical_response",
-    "falseBranch": "normal_response"
-  }
-}
 ```
-
-Then in your execute nodes:
-
-```
-Critical Path Node:
+Critical Path Node (Execute Script):
   Script: emergency_cleanup.sh
   Parameters: --aggressive --mount #{context.metric.path}
 
-Normal Path Node:
+Normal Path Node (Execute Script):
   Script: standard_cleanup.sh
   Parameters: --mount #{context.metric.path}
 ```
+
+### Example: HTTP Request with Trigger Context
+
+Send the triggering metric details to an external monitoring API:
+
+```
+Method:  POST
+URL:     https://ops.example.com/api/events/#{context.metric.type}
+Headers: Authorization: Bearer my-api-token
+         Content-Type: application/json
+Body:
+  {
+    "agent":      "#{context.metric.agent}",
+    "path":       "#{context.metric.path}",
+    "value":      #{context.metric.value},
+    "threshold":  #{context.condition.threshold},
+    "executionId":"#{context.executionId}"
+  }
+```
+
+With a `mount_usage` rule triggering on `/mnt/data` at 94%, this sends:
+
+```json
+{
+  "agent":      "server1",
+  "path":       "/mnt/data",
+  "value":      94,
+  "threshold":  90,
+  "executionId":"a1b2c3d4e5f6"
+}
+```
+
+### Example: Notify Node with Trigger Context
+
+Send a rich alert notification when a threshold is exceeded:
+
+```
+Type:    WARNING
+Title:   High #{context.metric.type} on #{context.metric.path}
+Message: Usage has reached #{context.metric.value}#{context.metric.unit},
+         exceeding the threshold of #{context.condition.threshold}#{context.metric.unit}.
+         Triggered at #{context.timestamp}.
+Link:    /orchestration/monitor.html?executionId=#{context.executionId}
+```
+
+### Example: Webhook Payload in HTTP and Notify Nodes
+
+When triggered via webhook you can reference any field from the incoming JSON payload:
+
+```json
+// Incoming webhook payload:
+{ "server": "db-01", "severity": "critical", "message": "Replication lag > 30s" }
+```
+
+HTTP node body:
+```json
+{ "alert": "#{context.webhook.payload.message}", "host": "#{context.webhook.payload.server}" }
+```
+
+Notify node message:
+```
+#{context.webhook.payload.severity} alert on #{context.webhook.payload.server}:
+#{context.webhook.payload.message}
+```
+
+### Manual Execution Behaviour
+
+When an orchestration is run manually (no trigger context), `#{context.*}` references fall back to safe defaults:
+- String fields → empty string `""`
+- Numeric fields → `0`
+
+This means your orchestration will still execute without error, but any values injected via templates will be blank or zero. Use manual execution for flow testing only; trigger via a rule or webhook for real data.
 
 ## Webhook API
 

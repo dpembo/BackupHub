@@ -89,6 +89,51 @@ function displaySecs(secs) {
 #end-params`;
 
 var onScript = "";
+var lastSavedScriptContent = "";
+var suppressUnsavedScriptWarning = false;
+
+function markScriptSavedState() {
+  if (!editor) return;
+  lastSavedScriptContent = editor.getValue();
+}
+
+function hasUnsavedScriptChanges() {
+  if (!editor) return false;
+  return editor.getValue() !== lastSavedScriptContent;
+}
+
+function promptDiscardScriptChanges() {
+  const modalElement = document.getElementById('script-cancel-confirm-modal');
+  if (!modalElement) {
+    discardScriptChanges();
+    return;
+  }
+  const modal = M.Modal.getInstance(modalElement) || M.Modal.init(modalElement);
+  modal.open();
+}
+
+function discardScriptChanges() {
+  suppressUnsavedScriptWarning = true;
+  window.location.href = "/scriptList.html";
+}
+
+window.addEventListener('beforeunload', function(e) {
+  if (suppressUnsavedScriptWarning || !hasUnsavedScriptChanges()) return;
+  e.preventDefault();
+  e.returnValue = '';
+});
+
+function undoEditor() {
+  if (!editor) return;
+  editor.focus();
+  editor.trigger('toolbar', 'undo', null);
+}
+
+function redoEditor() {
+  if (!editor) return;
+  editor.focus();
+  editor.trigger('toolbar', 'redo', null);
+}
 
 // Base64 Decode in the browser
 function base64Decode(base64Str) {
@@ -128,6 +173,7 @@ function scriptSelected(element,inScript,inDescription){
     //var desc = extractHTMLParams(data);
     window.scrollTo(0, 0);
     document.getElementById('scriptInfoDetail').innerHTML="";
+    markScriptSavedState();
     return;
   }
   else{
@@ -150,6 +196,7 @@ function scriptSelected(element,inScript,inDescription){
       document.getElementById('scriptInfoDetail').innerHTML=params;
       //alert(element.innerHTML);
       element.style.backgroundColor="rgba(0,0,0,0.2)";
+      markScriptSavedState();
       //element.style.color="red";
     })
     .catch(error => {
@@ -370,6 +417,8 @@ function scriptSelected(element,inScript,inDescription){
                   language: 'shell',
                   theme: 'vs-dark'
               });
+
+                  markScriptSavedState();
   
               // Handle editor content changes
               editor.getModel().onDidChangeContent(function() {
@@ -422,6 +471,7 @@ function scriptSelected(element,inScript,inDescription){
             deSelectAllFiles();
             onScript="";
             editor.setValue("");
+            markScriptSavedState();
             window.scrollTo(0, 0);
             document.getElementById('scriptInfoDetail').innerHTML="";
             //Add the overview
@@ -487,6 +537,7 @@ function scriptSelected(element,inScript,inDescription){
             xhr.onload = function() {
               if (xhr.status === 200) {
                 console.log(xhr.responseText);
+                markScriptSavedState();
                 //M.toast({html: "Script Saved", displayLength: 5000});
                 window.location.href="/scriptList.html?message=Script%20Saved%20Successfully";
               } else {
@@ -579,7 +630,11 @@ function scriptSelected(element,inScript,inDescription){
           }
 
           function cancelChanges(){
-            window.location.href="/scriptList.html";  
+            if (hasUnsavedScriptChanges()) {
+              promptDiscardScriptChanges();
+              return;
+            }
+            window.location.href="/scriptList.html";
           }
 
           function openScriptTestFromEditor() {
@@ -670,15 +725,37 @@ function scriptSelected(element,inScript,inDescription){
       
         <style>
     body { margin: 0; padding: 0; overflow: hidden; }
-    #orchestration-container { display: flex; height: calc(100vh - 120px); flex-direction: column; overflow: hidden; width: 100%; margin-top: 0; }
-    #orchestration-header { background: #f5f5f5; padding: 15px 20px; border-bottom: 1px solid #ddd; flex-shrink: 0; position: relative;}
+    #orchestration-container { display: flex; height: calc(100vh - 120px); flex-direction: column; overflow: hidden; width: 100%; margin-top: 1px; }
+    #orchestration-header { position: relative; top: -5px; background: #f5f5f5; padding: 15px 20px; border-bottom: 1px solid #ddd; flex-shrink: 0; position: relative;}
     #header-buttonss {
       position: absolute;
       top: 15px;   /* matches header padding */
       right: 20px; /* matches header padding */
-      display: flex;
-      gap: 10px;
       align-items: center;
+    }
+    .header-toolbar {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px;
+      border: 1px solid #c9d1db;
+      border-radius: 8px;
+      background: linear-gradient(180deg, #fbfcfd 0%, #eef2f6 100%);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 1px 1px rgba(0, 0, 0, 0.04);
+    }
+    .toolbar-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 0;
+      border: 1px solid #d6dde6;
+      border-radius: 6px;
+      background: #f6f8fb;
+      overflow: hidden;
+    }
+    .toolbar-divider {
+      width: 1px;
+      height: 24px;
+      background: #cfd6df;
     }
     
     #orchestration-counts{
@@ -774,6 +851,60 @@ function scriptSelected(element,inScript,inDescription){
     .delete-btn:hover { background: #d32f2f; }
     .save-btn { background: #4caf50; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }
     .save-btn:hover { background: #388e3c; }
+    .save-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .header-action-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      padding: 8px 11px;
+      border-radius: 0;
+      border: 0;
+      border-right: 1px solid #d6dde6;
+      background: transparent;
+      color: #324252;
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 1;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+      transition: background 0.12s ease, color 0.12s ease, box-shadow 0.12s ease;
+    }
+    .toolbar-group .header-action-btn:last-child {
+      border-right: 0;
+    }
+    .header-action-btn:hover {
+      background: linear-gradient(180deg, #ffffff 0%, #e7edf5 100%);
+      color: #173a5e;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.95), inset 0 -1px 0 rgba(0, 0, 0, 0.03);
+    }
+    .header-action-btn:active {
+      background: linear-gradient(180deg, #dfe7f1 0%, #f4f7fb 100%);
+      box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.08);
+    }
+    .header-action-btn:disabled,
+    .header-action-btn:disabled:hover {
+      background: transparent;
+      color: #93a0ae;
+      box-shadow: none;
+      opacity: 0.7;
+    }
+    .header-action-btn .material-icons {
+      font-size: 15px;
+      line-height: 1;
+    }
+    .header-action-btn.toolbar-primary {
+      background: linear-gradient(180deg, #2b7bd4 0%, #1e66b8 100%);
+      color: #fff;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    }
+    .header-action-btn.toolbar-primary:hover {
+      background: linear-gradient(180deg, #3585de 0%, #256fc3 100%);
+      color: white;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24);
+    }
+    .header-action-btn.toolbar-primary:active {
+      background: linear-gradient(180deg, #1d5fa8 0%, #2a75cb 100%);
+    }
     #orch-name-display { cursor: pointer; border-radius: 4px; transition: background 0.2s; display: flex; flex-direction: column; gap: 1px; }
     #orch-name-display:hover { background: rgba(33, 150, 243, 0.1); }
     #orch-name-text { font-size: 16px; font-weight: 600; }
@@ -848,6 +979,18 @@ function scriptSelected(element,inScript,inDescription){
       font-weight: 600 !important;
       text-align: left !important;
       width: 100% !important;
+    }
+
+    .modal-compact-confirm {
+      width: 92%;
+      max-width: 560px;
+      max-height: 260px;
+      height: auto;
+      top: 12% !important;
+    }
+
+    .modal-compact-confirm .modal-content {
+      padding: 20px 24px 8px 24px;
     }
 
   </style>
@@ -958,6 +1101,17 @@ function scriptSelected(element,inScript,inDescription){
     </div>
   </div>
 
+  <div id="script-cancel-confirm-modal" class="modal modal-compact-confirm">
+    <div class="modal-content">
+      <h4>Discard Changes?</h4>
+      <p>You have unsaved changes. Leaving now will discard them.</p>
+    </div>
+    <div class="modal-footer">
+      <a href="#!" class="modal-close waves-effect waves-green btn-flat">Stay</a>
+      <a href="#!" onclick="discardScriptChanges()" class="waves-effect waves-red btn-flat" style="color: #f44336; font-weight: 600;">Discard &amp; Exit</a>
+    </div>
+  </div>
+
   <!-- loader -->
   <div id="loader" style="display:none">
   <div style="display:block;position:absolute;z-index:199;top:0px;left:0px;width:100%;height:100%;background-color: rgba(180, 180, 180, 0.5)"></div>
@@ -990,27 +1144,45 @@ function scriptSelected(element,inScript,inDescription){
         </div>
         
       </h3>
-      <div id="header-buttonss" style="display: flex; gap: 10px;">
-        <button class="save-btn" style="background: #1976d2;" onclick="listSchedulesForOrchestration()" title="View schedules that use this orchestration">
-          <i class="material-icons" style="font-size: 16px; vertical-align: middle;">assignment</i>
-          List Jobs
-        </button>
-        <button class="save-btn" style="background: #1976d2;" onclick="newFromTemplate()" title="Use Template">
-          <i class="material-icons" style="font-size: 16px; vertical-align: middle;">article</i>
-          Template
-        </button>
-        <button class="save-btn" style="background: #1976d2;" onclick="cancelChanges()" title="Cancel Changes and return to list">
-          <i class="material-icons" style="font-size: 16px; vertical-align: middle;">cancel</i>
-          Cancel
-        </button>
-        <button class="save-btn" style="background: #1976d2;" onclick="openScriptTestFromEditor()" title="Run a transient script test">
-          <i class="material-icons" style="font-size: 16px; vertical-align: middle;">fact_check</i>
-          Test
-        </button>
-        <button class="save-btn" onclick="save()">
-          <i class="material-icons" style="font-size: 16px; vertical-align: middle;">save</i>
-          Save
-        </button>
+      <div id="header-buttonss">
+        <div class="header-toolbar" role="toolbar" aria-label="Script editor actions">
+          <div class="toolbar-group">
+            <button class="header-action-btn" onclick="undoEditor()" title="Undo">
+              <i class="material-icons">undo</i>
+              Undo
+            </button>
+            <button class="header-action-btn" onclick="redoEditor()" title="Redo">
+              <i class="material-icons">redo</i>
+              Redo
+            </button>
+          </div>
+          <span class="toolbar-divider" aria-hidden="true"></span>
+          <div class="toolbar-group">
+            <button class="header-action-btn" onclick="listSchedulesForOrchestration()" title="View schedules that use this script">
+              <i class="material-icons">assignment</i>
+              List Jobs
+            </button>
+            <button class="header-action-btn" onclick="newFromTemplate()" title="Use Template">
+              <i class="material-icons">article</i>
+              Template
+            </button>
+          </div>
+          <span class="toolbar-divider" aria-hidden="true"></span>
+          <div class="toolbar-group">
+            <button class="header-action-btn" onclick="cancelChanges()" title="Cancel changes and return to list">
+              <i class="material-icons">cancel</i>
+              Cancel
+            </button>
+            <button class="header-action-btn" onclick="openScriptTestFromEditor()" title="Run a transient script test">
+              <i class="material-icons">fact_check</i>
+              Test
+            </button>
+            <button class="header-action-btn toolbar-primary" onclick="save()">
+              <i class="material-icons">save</i>
+              Save
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   <!-- ========== -->

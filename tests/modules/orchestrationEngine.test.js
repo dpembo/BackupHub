@@ -53,6 +53,9 @@ jest.mock('../../configuration.js', () => ({
   getConfig: jest.fn(),
 }));
 
+// Mock axios for HTTP execute node tests
+jest.mock('axios', () => jest.fn());
+
 const db = require('../../db.js');
 const wsBrowserTransport = require('../../communications/wsBrowserTransport.js');
 const notifier = require('../../notify.js');
@@ -60,6 +63,7 @@ const orchestrationMonitor = require('../../orchestrationMonitor.js');
 const configuration = require('../../configuration.js');
 const history = require('../../history.js');
 const fs = require('fs');
+const axios = require('axios');
 
 describe('Orchestration Engine Module', () => {
   let orchestrationEngine;
@@ -1704,6 +1708,705 @@ describe('Orchestration Engine Module', () => {
         expect(result2.executionId).toBe('exec-2');
         expect(result1.scriptOutputs['execute-node'].exitCode).toBe(0);
         expect(result2.scriptOutputs['execute-node'].exitCode).toBe(1);
+      });
+    });
+
+    describe('HTTP Execute Node', () => {
+      const createHttpJob = (httpData, extraNodes = [], extraEdges = []) => createMockJob({
+        versions: [{
+          nodes: [
+            { id: 'start-node', type: 'start', data: {} },
+            { id: 'http-node', type: 'execute', data: { executeType: 'http', httpHeaders: [], httpAuthType: 'none', ...httpData } },
+            { id: 'end-node', type: 'end-success', data: {} },
+            ...extraNodes,
+          ],
+          edges: [
+            { from: 'start-node', fromPort: 'out', to: 'http-node' },
+            { from: 'http-node', fromPort: 'out', to: 'end-node' },
+            ...extraEdges,
+          ],
+        }],
+      });
+
+      it('should execute HTTP GET and set exitCode 0 for 200 response', async () => {
+        axios.mockResolvedValue({ status: 200, data: { result: 'ok' } });
+        db.getData.mockResolvedValue({ 'test-job': createHttpJob({ httpMethod: 'GET', httpUrl: 'https://api.example.com/status' }) });
+
+        const result = await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(result.finalStatus).toBe('success');
+        const output = result.scriptOutputs['http-node'];
+        expect(output.exitCode).toBe(0);
+        expect(output.httpStatus).toBe(200);
+        expect(output.agent).toBe('http');
+        expect(output.httpMethod).toBe('GET');
+        expect(output.httpUrl).toBe('https://api.example.com/status');
+      });
+
+      it('should set exitCode 1 for non-2xx HTTP response', async () => {
+        axios.mockResolvedValue({ status: 404, data: 'Not Found' });
+        db.getData.mockResolvedValue({ 'test-job': createHttpJob({ httpMethod: 'GET', httpUrl: 'https://api.example.com/missing' }) });
+
+        const result = await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(result.scriptOutputs['http-node'].exitCode).toBe(1);
+        expect(result.scriptOutputs['http-node'].httpStatus).toBe(404);
+        expect(result.scriptOutputs['http-node'].stderr).toContain('404');
+      });
+
+      it('should continue execution after non-2xx response', async () => {
+        axios.mockResolvedValue({ status: 500, data: 'Server Error' });
+        db.getData.mockResolvedValue({ 'test-job': createHttpJob({ httpMethod: 'GET', httpUrl: 'https://api.example.com/error' }) });
+
+        const result = await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        // Execution continues to end-node despite HTTP failure
+        expect(result.visitedNodes).toContain('end-node');
+        expect(result.scriptOutputs['http-node'].exitCode).toBe(1);
+      });
+
+      it('should handle HTTP network errors gracefully and continue execution', async () => {
+        axios.mockRejectedValue(new Error('ECONNREFUSED: Connection refused'));
+        db.getData.mockResolvedValue({ 'test-job': createHttpJob({ httpMethod: 'GET', httpUrl: 'https://unreachable.example.com' }) });
+
+        const result = await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(result.scriptOutputs['http-node'].exitCode).toBe(1);
+        expect(result.scriptOutputs['http-node'].status).toBe('failed');
+        expect(result.scriptOutputs['http-node'].stderr).toContain('ECONNREFUSED');
+        expect(result.visitedNodes).toContain('end-node');
+      });
+
+      it('should throw when HTTP node has no URL configured', async () => {
+        db.getData.mockResolvedValue({ 'test-job': createHttpJob({ httpMethod: 'GET', httpUrl: '' }) });
+
+        const result = await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(result.status).toBe('failed');
+        expect(result.errors[0].message).toContain('no URL');
+      });
+
+      it('should add bearer token to Authorization header', async () => {
+        axios.mockResolvedValue({ status: 200, data: {} });
+        db.getData.mockResolvedValue({ 'test-job': createHttpJob({
+          httpMethod: 'GET', httpUrl: 'https://api.example.com/secure',
+          httpAuthType: 'bearer', httpAuthBearerToken: 'my-secret-token',
+        }) });
+
+        await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(axios.mock.calls[0][0].headers.Authorization).toBe('Bearer my-secret-token');
+      });
+
+      it('should throw when bearer token is empty', async () => {
+        db.getData.mockResolvedValue({ 'test-job': createHttpJob({
+          httpMethod: 'GET', httpUrl: 'https://api.example.com/secure',
+          httpAuthType: 'bearer', httpAuthBearerToken: '',
+        }) });
+
+        const result = await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(result.status).toBe('failed');
+        expect(result.errors[0].message).toContain('bearer auth but token is empty');
+      });
+
+      it('should configure basic auth credentials', async () => {
+        axios.mockResolvedValue({ status: 200, data: {} });
+        db.getData.mockResolvedValue({ 'test-job': createHttpJob({
+          httpMethod: 'POST', httpUrl: 'https://api.example.com/data',
+          httpAuthType: 'basic', httpAuthUsername: 'admin', httpAuthPassword: 's3cr3t',
+        }) });
+
+        await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(axios.mock.calls[0][0].auth).toEqual({ username: 'admin', password: 's3cr3t' });
+      });
+
+      it('should throw when basic auth credentials are incomplete', async () => {
+        db.getData.mockResolvedValue({ 'test-job': createHttpJob({
+          httpMethod: 'POST', httpUrl: 'https://api.example.com/data',
+          httpAuthType: 'basic', httpAuthUsername: 'admin', httpAuthPassword: '',
+        }) });
+
+        const result = await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(result.status).toBe('failed');
+        expect(result.errors[0].message).toContain('username/password are incomplete');
+      });
+
+      it('should add API key to the configured header', async () => {
+        axios.mockResolvedValue({ status: 200, data: {} });
+        db.getData.mockResolvedValue({ 'test-job': createHttpJob({
+          httpMethod: 'GET', httpUrl: 'https://api.example.com/data',
+          httpAuthType: 'apikey', httpAuthApiKeyHeader: 'X-API-Key', httpAuthApiKeyValue: 'abc-123',
+        }) });
+
+        await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(axios.mock.calls[0][0].headers['X-API-Key']).toBe('abc-123');
+      });
+
+      it('should throw when API key value is empty', async () => {
+        db.getData.mockResolvedValue({ 'test-job': createHttpJob({
+          httpMethod: 'GET', httpUrl: 'https://api.example.com/data',
+          httpAuthType: 'apikey', httpAuthApiKeyHeader: 'X-API-Key', httpAuthApiKeyValue: '',
+        }) });
+
+        const result = await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(result.status).toBe('failed');
+        expect(result.errors[0].message).toContain('API key auth but header/value are incomplete');
+      });
+
+      it('should add custom request headers', async () => {
+        axios.mockResolvedValue({ status: 200, data: {} });
+        db.getData.mockResolvedValue({ 'test-job': createHttpJob({
+          httpMethod: 'GET', httpUrl: 'https://api.example.com/data',
+          httpHeaders: [
+            { key: 'Content-Type', value: 'application/json' },
+            { key: 'X-Custom-Header', value: 'my-value' },
+          ],
+        }) });
+
+        await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        const { headers } = axios.mock.calls[0][0];
+        expect(headers['Content-Type']).toBe('application/json');
+        expect(headers['X-Custom-Header']).toBe('my-value');
+      });
+
+      it('should parse and attach JSON body for POST requests', async () => {
+        axios.mockResolvedValue({ status: 201, data: { id: 42 } });
+        db.getData.mockResolvedValue({ 'test-job': createHttpJob({
+          httpMethod: 'POST', httpUrl: 'https://api.example.com/items',
+          httpBody: '{"name":"test","value":42}',
+        }) });
+
+        await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(axios.mock.calls[0][0].data).toEqual({ name: 'test', value: 42 });
+      });
+
+      it('should not attach body for GET requests', async () => {
+        axios.mockResolvedValue({ status: 200, data: {} });
+        db.getData.mockResolvedValue({ 'test-job': createHttpJob({
+          httpMethod: 'GET', httpUrl: 'https://api.example.com/items',
+          httpBody: '{"ignored":true}',
+        }) });
+
+        await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(axios.mock.calls[0][0].data).toBeUndefined();
+      });
+
+      it('should use configured timeout', async () => {
+        axios.mockResolvedValue({ status: 200, data: {} });
+        db.getData.mockResolvedValue({ 'test-job': createHttpJob({
+          httpMethod: 'GET', httpUrl: 'https://api.example.com/data', httpTimeoutMs: 5000,
+        }) });
+
+        await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(axios.mock.calls[0][0].timeout).toBe(5000);
+      });
+
+      it('should use default timeout of 30000ms when not configured', async () => {
+        axios.mockResolvedValue({ status: 200, data: {} });
+        db.getData.mockResolvedValue({ 'test-job': createHttpJob({
+          httpMethod: 'GET', httpUrl: 'https://api.example.com/data',
+        }) });
+
+        await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(axios.mock.calls[0][0].timeout).toBe(30000);
+      });
+
+      it('should record HTTP response data as serialized JSON in stdout', async () => {
+        axios.mockResolvedValue({ status: 200, data: { status: 'healthy', uptime: 9999 } });
+        db.getData.mockResolvedValue({ 'test-job': createHttpJob({
+          httpMethod: 'GET', httpUrl: 'https://api.example.com/health',
+        }) });
+
+        const result = await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        const stdout = result.scriptOutputs['http-node'].stdout;
+        expect(stdout).toContain('healthy');
+        expect(stdout).toContain('9999');
+      });
+    });
+
+    describe('Wait Node', () => {
+      it('should delay for the configured number of seconds and complete successfully', async () => {
+        db.getData.mockResolvedValue({ 'test-job': createMockJob({
+          versions: [{
+            nodes: [
+              { id: 'start-node', type: 'start', data: {} },
+              { id: 'wait-node', type: 'wait', data: { waitSeconds: 0.01 } },
+              { id: 'end-node', type: 'end-success', data: {} },
+            ],
+            edges: [
+              { from: 'start-node', fromPort: 'out', to: 'wait-node' },
+              { from: 'wait-node', fromPort: 'out', to: 'end-node' },
+            ],
+          }],
+        }) });
+
+        const result = await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(result.finalStatus).toBe('success');
+        expect(result.visitedNodes).toContain('wait-node');
+      });
+
+      it('should record wait output with correct fields in scriptOutputs', async () => {
+        db.getData.mockResolvedValue({ 'test-job': createMockJob({
+          versions: [{
+            nodes: [
+              { id: 'start-node', type: 'start', data: {} },
+              { id: 'wait-node', type: 'wait', data: { waitSeconds: 0.01 } },
+              { id: 'end-node', type: 'end-success', data: {} },
+            ],
+            edges: [
+              { from: 'start-node', fromPort: 'out', to: 'wait-node' },
+              { from: 'wait-node', fromPort: 'out', to: 'end-node' },
+            ],
+          }],
+        }) });
+
+        const result = await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        const output = result.scriptOutputs['wait-node'];
+        expect(output).toBeDefined();
+        expect(output.exitCode).toBe(0);
+        expect(output.agent).toBe('wait');
+        expect(output.stdout).toContain('Waited');
+        expect(output.waitSeconds).toBe(0.01);
+        expect(output.startTime).toBeDefined();
+        expect(output.endTime).toBeDefined();
+      });
+
+      it('should use default of 5 seconds when waitSeconds is invalid', async () => {
+        db.getData.mockResolvedValue({ 'test-job': createMockJob({
+          versions: [{
+            nodes: [
+              { id: 'start-node', type: 'start', data: {} },
+              { id: 'wait-node', type: 'wait', data: { waitSeconds: -1 } },
+              { id: 'end-node', type: 'end-success', data: {} },
+            ],
+            edges: [
+              { from: 'start-node', fromPort: 'out', to: 'wait-node' },
+              { from: 'wait-node', fromPort: 'out', to: 'end-node' },
+            ],
+          }],
+        }) });
+
+        jest.useFakeTimers();
+        const execPromise = orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+        await jest.runAllTimersAsync();
+        jest.useRealTimers();
+
+        const result = await execPromise;
+
+        expect(result.scriptOutputs['wait-node'].waitSeconds).toBe(5);
+        expect(result.scriptOutputs['wait-node'].stdout).toContain('5 seconds');
+      });
+
+      it('should return success when wait node has no outgoing edges', async () => {
+        db.getData.mockResolvedValue({ 'test-job': createMockJob({
+          versions: [{
+            nodes: [
+              { id: 'start-node', type: 'start', data: {} },
+              { id: 'wait-node', type: 'wait', data: { waitSeconds: 0.01 } },
+            ],
+            edges: [
+              { from: 'start-node', fromPort: 'out', to: 'wait-node' },
+            ],
+          }],
+        }) });
+
+        const result = await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(result.finalStatus).toBe('success');
+      });
+
+      it('should throw when wait node has multiple outgoing connections', async () => {
+        db.getData.mockResolvedValue({ 'test-job': createMockJob({
+          versions: [{
+            nodes: [
+              { id: 'start-node', type: 'start', data: {} },
+              { id: 'wait-node', type: 'wait', data: { waitSeconds: 0.01 } },
+              { id: 'end-1', type: 'end-success', data: {} },
+              { id: 'end-2', type: 'end-success', data: {} },
+            ],
+            edges: [
+              { from: 'start-node', fromPort: 'out', to: 'wait-node' },
+              { from: 'wait-node', fromPort: 'out', to: 'end-1' },
+              { from: 'wait-node', fromPort: 'out', to: 'end-2' },
+            ],
+          }],
+        }) });
+
+        const result = await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(result.status).toBe('failed');
+        expect(result.errors[0].message).toContain('multiple outgoing connections');
+      });
+    });
+
+    describe('Notify Node', () => {
+      const createNotifyJob = (notifyData) => createMockJob({
+        versions: [{
+          nodes: [
+            { id: 'start-node', type: 'start', data: {} },
+            { id: 'notify-node', type: 'notify', data: notifyData },
+            { id: 'end-node', type: 'end-success', data: {} },
+          ],
+          edges: [
+            { from: 'start-node', fromPort: 'out', to: 'notify-node' },
+            { from: 'notify-node', fromPort: 'out', to: 'end-node' },
+          ],
+        }],
+      });
+
+      it('should send notification with correct title, body, and type', async () => {
+        db.getData.mockResolvedValue({ 'test-job': createNotifyJob({
+          notifyType: 'WARNING', notifyTitle: 'Backup Done', notifyBody: 'All backups completed.',
+        }) });
+
+        const result = await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(notifier.sendNotification).toHaveBeenCalledWith(
+          'Backup Done', 'All backups completed.', 'WARNING', undefined
+        );
+        expect(result.finalStatus).toBe('success');
+      });
+
+      it('should use INFORMATION as default notify type', async () => {
+        db.getData.mockResolvedValue({ 'test-job': createNotifyJob({
+          notifyTitle: 'Hello', notifyBody: 'World',
+        }) });
+
+        await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(notifier.sendNotification).toHaveBeenCalledWith(
+          'Hello', 'World', 'INFORMATION', undefined
+        );
+      });
+
+      it('should pass URL to sendNotification when notifyUrl is configured', async () => {
+        db.getData.mockResolvedValue({ 'test-job': createNotifyJob({
+          notifyType: 'INFORMATION', notifyTitle: 'Status',
+          notifyBody: 'Check the link', notifyUrl: '/dashboard',
+        }) });
+
+        await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(notifier.sendNotification).toHaveBeenCalledWith(
+          'Status', 'Check the link', 'INFORMATION', '/dashboard'
+        );
+      });
+
+      it('should record notification fields in scriptOutputs', async () => {
+        db.getData.mockResolvedValue({ 'test-job': createNotifyJob({
+          notifyType: 'ERROR', notifyTitle: 'Alert', notifyBody: 'Something failed',
+        }) });
+
+        const result = await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        const output = result.scriptOutputs['notify-node'];
+        expect(output).toBeDefined();
+        expect(output.exitCode).toBe(0);
+        expect(output.agent).toBe('notify');
+        expect(output.notifyType).toBe('ERROR');
+        expect(output.notifyTitle).toBe('Alert');
+        expect(output.notifyBody).toBe('Something failed');
+        expect(output.status).toBe('completed');
+      });
+
+      it('should throw when notification title is missing', async () => {
+        db.getData.mockResolvedValue({ 'test-job': createNotifyJob({
+          notifyType: 'INFORMATION', notifyTitle: '', notifyBody: 'Some message',
+        }) });
+
+        const result = await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(result.status).toBe('failed');
+        expect(result.errors[0].message).toContain('missing a title');
+      });
+
+      it('should throw when notification body is missing', async () => {
+        db.getData.mockResolvedValue({ 'test-job': createNotifyJob({
+          notifyType: 'INFORMATION', notifyTitle: 'Alert', notifyBody: '',
+        }) });
+
+        const result = await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(result.status).toBe('failed');
+        expect(result.errors[0].message).toContain('missing a message');
+      });
+
+      it('should continue execution with exitCode 1 when sendNotification throws', async () => {
+        notifier.sendNotification.mockRejectedValue(new Error('SMTP connection failed'));
+        db.getData.mockResolvedValue({ 'test-job': createNotifyJob({
+          notifyType: 'INFORMATION', notifyTitle: 'Alert', notifyBody: 'Message',
+        }) });
+
+        const result = await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(result.scriptOutputs['notify-node'].exitCode).toBe(1);
+        expect(result.scriptOutputs['notify-node'].status).toBe('failed');
+        expect(result.scriptOutputs['notify-node'].stderr).toContain('SMTP connection failed');
+        // Execution continues to end-node despite notification failure
+        expect(result.visitedNodes).toContain('end-node');
+      });
+
+      it('should return success when notify node has no outgoing edges', async () => {
+        db.getData.mockResolvedValue({ 'test-job': createMockJob({
+          versions: [{
+            nodes: [
+              { id: 'start-node', type: 'start', data: {} },
+              { id: 'notify-node', type: 'notify', data: { notifyTitle: 'Done', notifyBody: 'Finished' } },
+            ],
+            edges: [
+              { from: 'start-node', fromPort: 'out', to: 'notify-node' },
+            ],
+          }],
+        }) });
+
+        const result = await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(result.finalStatus).toBe('success');
+      });
+
+      it('should throw when notify node has multiple outgoing connections', async () => {
+        db.getData.mockResolvedValue({ 'test-job': createMockJob({
+          versions: [{
+            nodes: [
+              { id: 'start-node', type: 'start', data: {} },
+              { id: 'notify-node', type: 'notify', data: { notifyTitle: 'Alert', notifyBody: 'Msg' } },
+              { id: 'end-1', type: 'end-success', data: {} },
+              { id: 'end-2', type: 'end-success', data: {} },
+            ],
+            edges: [
+              { from: 'start-node', fromPort: 'out', to: 'notify-node' },
+              { from: 'notify-node', fromPort: 'out', to: 'end-1' },
+              { from: 'notify-node', fromPort: 'out', to: 'end-2' },
+            ],
+          }],
+        }) });
+
+        const result = await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(result.status).toBe('failed');
+        expect(result.errors[0].message).toContain('multiple outgoing connections');
+      });
+    });
+
+    describe('Split-Join Node', () => {
+      // Auto-signal helper: all sendCommand calls resolve with exitCode 0 after a short delay
+      const autoSignal = (exitCode = 0) => {
+        global.agentComms.sendCommand.mockImplementation((agentId, command, script, params, jobName) => {
+          setTimeout(() => {
+            orchestrationEngine.signalScriptCompletion(jobName, { exitCode, stdout: 'OK', stderr: '' });
+          }, 20);
+        });
+      };
+
+      it('should fan out to all parallel branches in split mode', async () => {
+        db.getData.mockResolvedValue({ 'test-job': createMockJob({
+          versions: [{
+            nodes: [
+              { id: 'start-node', type: 'start', data: {} },
+              { id: 'split-node', type: 'split-join', data: { mode: 'split' } },
+              { id: 'branch-1', type: 'execute', data: { script: 'a.sh', agent: 'agent1', parameters: '' } },
+              { id: 'branch-2', type: 'execute', data: { script: 'b.sh', agent: 'agent1', parameters: '' } },
+              { id: 'end-1', type: 'end-success', data: {} },
+              { id: 'end-2', type: 'end-success', data: {} },
+            ],
+            edges: [
+              { id: 'e1', from: 'start-node', fromPort: 'out', to: 'split-node' },
+              { id: 'e2', from: 'split-node', fromPort: 'out', to: 'branch-1' },
+              { id: 'e3', from: 'split-node', fromPort: 'out', to: 'branch-2' },
+              { id: 'e4', from: 'branch-1', fromPort: 'out', to: 'end-1' },
+              { id: 'e5', from: 'branch-2', fromPort: 'out', to: 'end-2' },
+            ],
+          }],
+        }) });
+        autoSignal(0);
+
+        const result = await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(result.finalStatus).toBe('success');
+        expect(result.visitedNodes).toContain('split-node');
+        expect(result.visitedNodes).toContain('branch-1');
+        expect(result.visitedNodes).toContain('branch-2');
+        expect(result.scriptOutputs['branch-1']).toBeDefined();
+        expect(result.scriptOutputs['branch-2']).toBeDefined();
+      });
+
+      it('should wait for all branches before releasing join node with waitAll strategy', async () => {
+        db.getData.mockResolvedValue({ 'test-job': createMockJob({
+          versions: [{
+            nodes: [
+              { id: 'start-node', type: 'start', data: {} },
+              { id: 'split-node', type: 'split-join', data: { mode: 'split' } },
+              { id: 'branch-1', type: 'execute', data: { script: 'a.sh', agent: 'agent1', parameters: '' } },
+              { id: 'branch-2', type: 'execute', data: { script: 'b.sh', agent: 'agent1', parameters: '' } },
+              { id: 'join-node', type: 'split-join', data: { mode: 'join', joinStrategy: 'waitAll' } },
+              { id: 'end-node', type: 'end-success', data: {} },
+            ],
+            edges: [
+              { id: 'e1', from: 'start-node', fromPort: 'out', to: 'split-node' },
+              { id: 'e2', from: 'split-node', fromPort: 'out', to: 'branch-1' },
+              { id: 'e3', from: 'split-node', fromPort: 'out', to: 'branch-2' },
+              { id: 'e4', from: 'branch-1', fromPort: 'out', to: 'join-node' },
+              { id: 'e5', from: 'branch-2', fromPort: 'out', to: 'join-node' },
+              { id: 'e6', from: 'join-node', fromPort: 'out', to: 'end-node' },
+            ],
+          }],
+        }) });
+        autoSignal(0);
+
+        const result = await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(result.finalStatus).toBe('success');
+        expect(result.visitedNodes).toContain('branch-1');
+        expect(result.visitedNodes).toContain('branch-2');
+        expect(result.visitedNodes).toContain('join-node');
+        expect(result.visitedNodes).toContain('end-node');
+        // Both execute branches must have produced output (both ran)
+        expect(result.scriptOutputs['branch-1']).toBeDefined();
+        expect(result.scriptOutputs['branch-2']).toBeDefined();
+      });
+
+      it('should release join on first branch arrival with waitAny strategy', async () => {
+        db.getData.mockResolvedValue({ 'test-job': createMockJob({
+          versions: [{
+            nodes: [
+              { id: 'start-node', type: 'start', data: {} },
+              { id: 'split-node', type: 'split-join', data: { mode: 'split' } },
+              { id: 'branch-1', type: 'execute', data: { script: 'fast.sh', agent: 'agent1', parameters: '' } },
+              { id: 'branch-2', type: 'execute', data: { script: 'slow.sh', agent: 'agent1', parameters: '' } },
+              { id: 'join-node', type: 'split-join', data: { mode: 'join', joinStrategy: 'waitAny' } },
+              { id: 'end-node', type: 'end-success', data: {} },
+            ],
+            edges: [
+              { id: 'e1', from: 'start-node', fromPort: 'out', to: 'split-node' },
+              { id: 'e2', from: 'split-node', fromPort: 'out', to: 'branch-1' },
+              { id: 'e3', from: 'split-node', fromPort: 'out', to: 'branch-2' },
+              { id: 'e4', from: 'branch-1', fromPort: 'out', to: 'join-node' },
+              { id: 'e5', from: 'branch-2', fromPort: 'out', to: 'join-node' },
+              { id: 'e6', from: 'join-node', fromPort: 'out', to: 'end-node' },
+            ],
+          }],
+        }) });
+
+        // branch-1 arrives at join first; branch-2 arrives second (after join is released)
+        let callCount = 0;
+        global.agentComms.sendCommand.mockImplementation((agentId, command, script, params, jobName) => {
+          callCount++;
+          const delay = callCount === 1 ? 10 : 50;
+          setTimeout(() => {
+            orchestrationEngine.signalScriptCompletion(jobName, { exitCode: 0, stdout: 'OK', stderr: '' });
+          }, delay);
+        });
+
+        const result = await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(result.finalStatus).toBe('success');
+        expect(result.visitedNodes).toContain('join-node');
+        expect(result.visitedNodes).toContain('end-node');
+      });
+
+      it('should return merged failure when any parallel branch fails', async () => {
+        db.getData.mockResolvedValue({ 'test-job': createMockJob({
+          versions: [{
+            nodes: [
+              { id: 'start-node', type: 'start', data: {} },
+              { id: 'split-node', type: 'split-join', data: { mode: 'split' } },
+              { id: 'branch-1', type: 'execute', data: { script: 'ok.sh', agent: 'agent1', parameters: '' } },
+              { id: 'branch-2', type: 'execute', data: { script: 'fail.sh', agent: 'agent1', parameters: '' } },
+              { id: 'end-node', type: 'end-failure', data: {} },
+            ],
+            edges: [
+              { id: 'e1', from: 'start-node', fromPort: 'out', to: 'split-node' },
+              { id: 'e2', from: 'split-node', fromPort: 'out', to: 'branch-1' },
+              { id: 'e3', from: 'split-node', fromPort: 'out', to: 'branch-2' },
+              { id: 'e4', from: 'branch-1', fromPort: 'out', to: 'end-node' },
+              { id: 'e5', from: 'branch-2', fromPort: 'out', to: 'end-node' },
+            ],
+          }],
+        }) });
+        autoSignal(1);
+
+        const result = await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(result.finalStatus).toBe('failure');
+      });
+
+      it('should throw when split node has no outgoing paths', async () => {
+        db.getData.mockResolvedValue({ 'test-job': createMockJob({
+          versions: [{
+            nodes: [
+              { id: 'start-node', type: 'start', data: {} },
+              { id: 'split-node', type: 'split-join', data: { mode: 'split' } },
+            ],
+            edges: [
+              { id: 'e1', from: 'start-node', fromPort: 'out', to: 'split-node' },
+            ],
+          }],
+        }) });
+
+        const result = await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(result.status).toBe('failed');
+        expect(result.errors[0].message).toContain('no outgoing paths');
+      });
+
+      it('should throw when join node has multiple outgoing connections', async () => {
+        db.getData.mockResolvedValue({ 'test-job': createMockJob({
+          versions: [{
+            nodes: [
+              { id: 'start-node', type: 'start', data: {} },
+              { id: 'split-node', type: 'split-join', data: { mode: 'split' } },
+              { id: 'branch-1', type: 'execute', data: { script: 'a.sh', agent: 'agent1', parameters: '' } },
+              { id: 'join-node', type: 'split-join', data: { mode: 'join' } },
+              { id: 'end-1', type: 'end-success', data: {} },
+              { id: 'end-2', type: 'end-success', data: {} },
+            ],
+            edges: [
+              { id: 'e1', from: 'start-node', fromPort: 'out', to: 'split-node' },
+              { id: 'e2', from: 'split-node', fromPort: 'out', to: 'branch-1' },
+              { id: 'e3', from: 'branch-1', fromPort: 'out', to: 'join-node' },
+              { id: 'e4', from: 'join-node', fromPort: 'out', to: 'end-1' },
+              { id: 'e5', from: 'join-node', fromPort: 'out', to: 'end-2' },
+            ],
+          }],
+        }) });
+        autoSignal(0);
+
+        const result = await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(result.status).toBe('failed');
+        expect(result.errors[0].message).toContain('multiple outgoing connections');
+      });
+
+      it('should throw when split-join node has an invalid mode', async () => {
+        db.getData.mockResolvedValue({ 'test-job': createMockJob({
+          versions: [{
+            nodes: [
+              { id: 'start-node', type: 'start', data: {} },
+              { id: 'split-node', type: 'split-join', data: { mode: 'invalid' } },
+            ],
+            edges: [
+              { id: 'e1', from: 'start-node', fromPort: 'out', to: 'split-node' },
+            ],
+          }],
+        }) });
+
+        const result = await orchestrationEngine.executeJob('test-job', false, 'test-exec1');
+
+        expect(result.status).toBe('failed');
+        expect(result.errors[0].message).toContain('invalid mode');
       });
     });
   });

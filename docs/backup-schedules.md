@@ -222,6 +222,66 @@ You might also want to try and create a script of your own, edit a script, add m
 
 ---
 
+## Script Testing
+
+Before adding a script to a schedule or orchestration, you can run it interactively from the Script Editor to verify it behaves correctly. Script tests execute on a real agent with real output streamed live to your browser — no job history entry is created.
+
+### Opening the Test Modal
+
+With a script open in the Script Editor, click the **Test** button in the toolbar (blue, next to Save). This opens the Script Test panel. The panel shows:
+
+- **File** — The script filename, or `Unsaved editor buffer` if the script hasn't been saved yet
+- **Description** — Parsed from the script's `#start-params` / `#end-params` block, if present
+- **Source** — Whether the test will run the saved file or the current editor contents
+- **Exec ID** — Assigned once a test run starts
+- **Status** — Current state of the test run
+
+> **Note:** You can test scripts that haven't been saved yet. The current editor contents are sent to the agent for execution.
+
+### Running a Test
+
+1. Select an **Agent** from the dropdown. Offline agents are shown but disabled.
+2. Optionally enter **Parameters** in the parameters field (space-separated, same format as a scheduled job).
+   - The **Documented Parameters** box above the field shows the parameter help text parsed from the script header.
+3. Click **Run Test**.
+
+The live output from the script streams into the output area in real time. The status indicator shows:
+
+| Status | Meaning |
+|--------|---------|
+| Starting | Command sent to agent, waiting for acknowledgement |
+| Running | Script is executing on the agent |
+| Completed | Script exited with return code 0 |
+| Failed (N) | Script exited with non-zero return code N |
+| Terminating | Termination requested, waiting for agent confirmation |
+| Terminated | Script was stopped before completion |
+
+### Terminating a Running Test
+
+Click the red **Terminate** button while a test is running to send a termination signal to the agent. The output area will show any final output and the status will change to **Terminated** once the agent confirms.
+
+### Result Retention
+
+When a test completes (success or failure), the result is retained for **30 minutes** so you can re-open the modal and see the output again without re-running the test. The retention expiry time is shown below the output area.
+
+Re-opening the test modal while a retained result exists will automatically reload that result. Clicking **Run Test** again will discard the retained result and start a fresh run.
+
+### One Test at a Time Per Script
+
+Only one active test can exist per script at a time. If you try to run the same script simultaneously from two browser sessions, the second request will be blocked and shown the already-running execution instead. This prevents accidental concurrent runs of the same script on the same agent.
+
+### Unsaved vs Saved Scripts
+
+| | Saved script | Unsaved editor buffer |
+|--|--|--|
+| Identified by | Script filename | Hash of the current content |
+| Run Test sends | The saved file contents | The current editor contents |
+| Result retained against | Script filename | Content hash |
+
+If you edit the script after running a test, the new content will have a different hash and will not be blocked by the previous retained result.
+
+---
+
 ## Related Documentation
 
 - [Installation](./installation.md): Setting up Orchelium
