@@ -289,7 +289,7 @@ class Users {
     body += `To set your password and activate your account, click the link below:\n`;
     body += `${hostname}/invite/${inviteToken}/${lowerUsername}\n\n`;
     body += `This link expires in 48 hours.\n`;
-    this.emailer.sendEmail('Orchelium - You have been invited', body);
+    this.emailer.sendEmail('Orchelium - You have been invited', body, email);
 
     return { user, inviteToken };
   }
@@ -308,7 +308,7 @@ class Users {
     body += `A new invite link has been generated for your Orchelium account at ${hostname}\n\n`;
     body += `${hostname}/invite/${user.inviteToken}/${user.username}\n\n`;
     body += `This link expires in 48 hours.\n`;
-    this.emailer.sendEmail('Orchelium - New Invite Link', body);
+    this.emailer.sendEmail('Orchelium - New Invite Link', body, user.email);
     return user.inviteToken;
   }
 
@@ -471,7 +471,8 @@ class Users {
       `Your password for account [${username}] has been updated.\n\n` +
       `If this was not you, please reset your password immediately:\n` +
       `${this.emailer.getHostName()}/forgot.html`;
-    this.emailer.sendEmail('Orchelium - Password Changed', body);
+    // user may be null if not found; fall back to global emailTo in that case
+    this.emailer.sendEmail('Orchelium - Password Changed', body, user ? user.email : undefined);
   }
 
   async generateResetToken(username) {
@@ -490,7 +491,7 @@ class Users {
           `Somebody has requested to reset your password. If this was not you, please ignore.\n` +
           `If you want to continue, click the following link:\n\n` +
           `${this.emailer.getHostName()}/reset/${token}/${username}`;
-        this.emailer.sendEmail('Orchelium - Reset Password', body);
+        this.emailer.sendEmail('Orchelium - Reset Password', body, user.email);
       }
       return token;
     } catch (error) {
