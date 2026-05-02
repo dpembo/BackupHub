@@ -13,7 +13,7 @@ describe('Running Module', () => {
   let running;
   let mockDb;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.clearAllMocks();
 
     // Set up global mocks
@@ -40,6 +40,7 @@ describe('Running Module', () => {
     global.moment = require('moment-timezone');
 
     running = require('../../running.js');
+    await running.deleteAll();
   });
 
   afterEach(() => {
@@ -171,6 +172,33 @@ describe('Running Module', () => {
 
       running.removeItem('test-job');
       expect(mockDb.putData).toHaveBeenCalledWith('JOB_RUNNING', expect.any(Array));
+    });
+  });
+
+  describe('removeItemsByAgent()', () => {
+    it('should remove all running items for a specific agent', () => {
+      running.add({ jobName: 'job-1', startTime: new Date().toISOString(), agentName: 'agent-a' });
+      running.add({ jobName: 'job-2', startTime: new Date().toISOString(), agentName: 'agent-b' });
+      running.add({ jobName: 'job-3', startTime: new Date().toISOString(), agentName: 'agent-a' });
+      mockDb.putData.mockClear();
+
+      const removed = running.removeItemsByAgent('agent-a');
+      const items = running.getItems();
+
+      expect(removed).toBe(2);
+      expect(items.length).toBe(1);
+      expect(items[0].agentName).toBe('agent-b');
+      expect(mockDb.putData).toHaveBeenCalledWith('JOB_RUNNING', expect.any(Array));
+    });
+
+    it('should return 0 and not persist when no items match agent', () => {
+      running.add({ jobName: 'job-1', startTime: new Date().toISOString(), agentName: 'agent-a' });
+      mockDb.putData.mockClear();
+
+      const removed = running.removeItemsByAgent('agent-x');
+
+      expect(removed).toBe(0);
+      expect(mockDb.putData).not.toHaveBeenCalled();
     });
   });
 

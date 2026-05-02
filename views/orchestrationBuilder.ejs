@@ -1494,6 +1494,55 @@ function isSelected(inValue,compareValue){
       };
     }
 
+    function normalizeAutoLayoutBounds(nodeIds, nodeDims) {
+      const minPadding = Math.max(60, Math.floor(CANVAS.expandPadding / 2));
+      let minLeft = Number.POSITIVE_INFINITY;
+      let minTop = Number.POSITIVE_INFINITY;
+      let maxRight = Number.NEGATIVE_INFINITY;
+      let maxBottom = Number.NEGATIVE_INFINITY;
+
+      nodeIds.forEach(id => {
+        const node = nodes[id];
+        if (!node) return;
+
+        const dim = nodeDims[id] || getNodeDimensions(node);
+        const left = node.x - (dim.width / 2);
+        const top = node.y - (dim.height / 2);
+        const right = node.x + (dim.width / 2);
+        const bottom = node.y + (dim.height / 2);
+
+        minLeft = Math.min(minLeft, left);
+        minTop = Math.min(minTop, top);
+        maxRight = Math.max(maxRight, right);
+        maxBottom = Math.max(maxBottom, bottom);
+      });
+
+      if (!Number.isFinite(minLeft) || !Number.isFinite(minTop)) return;
+
+      const shiftX = minLeft < minPadding ? (minPadding - minLeft) : 0;
+      const shiftY = minTop < minPadding ? (minPadding - minTop) : 0;
+
+      if (shiftX || shiftY) {
+        nodeIds.forEach(id => {
+          if (!nodes[id]) return;
+          nodes[id].x += shiftX;
+          nodes[id].y += shiftY;
+        });
+        maxRight += shiftX;
+        maxBottom += shiftY;
+      }
+
+      const targetWidth = roundUpToStep(
+        maxRight + Math.max(CANVAS.expandPadding, minPadding),
+        CANVAS.expandStep
+      );
+      const targetHeight = roundUpToStep(
+        maxBottom + Math.max(CANVAS.expandPadding, minPadding),
+        CANVAS.expandStep
+      );
+      updateCanvasSizeIfNeeded(targetWidth, targetHeight);
+    }
+
     function autoLayoutOrchestration() {
       const nodeIds = Object.keys(nodes);
       if (!nodeIds.length) return;
@@ -1770,6 +1819,8 @@ function isSelected(inValue,compareValue){
           shiftNodeSetX(falseExclusive, correction);
         }
       });
+
+      normalizeAutoLayoutBounds(nodeIds, nodeDims);
 
       renderAllNodes();
       shrinkCanvasToFitNodes();

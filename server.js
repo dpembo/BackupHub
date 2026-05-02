@@ -96,6 +96,7 @@ scheduler = require ("./scheduler.js");
 orchestration = require("./orchestration.js");
 orchestrationEngine = require("./orchestrationEngine.js");
 scriptTestManager = require('./scriptTestManager.js');
+agentMessageProcessor = require('./agentMessageProcessor.js');
 //const moment = require('moment-timezone');
 
 agentComms = require ("./communications/agentCommunication.js");
@@ -3394,11 +3395,16 @@ app.get('/rest/agentquery',User.isAuthenticated, User.requirePermission(PERMISSI
 app.get('/agentEdit.html',User.isAuthenticated, User.requirePermission(PERMISSIONS.AGENTS_EDIT), (request, response) => {
   var msg = request.query.agentId;
   var agentObj=agents.getAgent(msg);
+  var scriptsMeta = refreshScripts();
+  var scripts = [];
+  for (var i = 0; i < scriptsMeta.length; i++) {
+    scripts.push(scriptsMeta[i].data.filename);
+  }
   response.render('agentEdit', {
     subject: 'Agent Edit',
     name: 'Control/AgentEdit',
     agent: agentObj,
-    //scripts: scripts,
+    scripts: scripts,
     csrf: request.csrfToken(),
   });
 });
@@ -3753,6 +3759,7 @@ app.use((req, res, next) => {
 
 const pingRuntimeCheck = setInterval(pingRuntimes, pingInterval * 1000); // 60 seconds * 1000 milliseconds
 const offlineCheck     = setInterval(markOffline, (pingInterval * failedPingOffline+1) * 1000);
+const staleReconcileSummaryCheck = setInterval(logStaleReconcileSummary, 60 * 60 * 1000);
 //const reestablishConn  = setInterval(mqttTransport.startMqttConnectionProcess,30*1000);
 
 
@@ -3808,6 +3815,17 @@ function markOffline()
         //webSocketServer.forceCloseRemove(key);
       }
     //}
+  }
+}
+
+function logStaleReconcileSummary()
+{
+  try {
+    const reconciledCount = agentMessageProcessor.getAndResetStaleReconcileCount();
+    logger.info(`[AGENT] Stale running queue reconciliations in last hour: ${reconciledCount}`);
+  }
+  catch(err) {
+    logger.warn(`[AGENT] Unable to emit stale reconciliation summary: ${err.message}`);
   }
 }
 

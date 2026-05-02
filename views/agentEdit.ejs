@@ -142,7 +142,7 @@
               <select name="agentcommandselect" onchange="commandChange(this)">
                 <option value="" disabled selected>Default Command File</option>
                 <option value="custom">Custom - Input custom Command</option>
-                <% for (i=0;i<scripts.length;i++) { %>
+                <% for (let i = 0; i < (typeof scripts !== 'undefined' && Array.isArray(scripts) ? scripts.length : 0); i++) { %>
                 <option value="<%=scripts[i]%>"><%=scripts[i]%></option>
                 <% } %>
               </select>

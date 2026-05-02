@@ -2,6 +2,7 @@ const status_topic = 'orchelium/agent/status';
 const command_topic = 'orchelium/agent/command';
 const EventEmitter = require('events');
 const metricResultEmitter = new EventEmitter();
+let staleReconcileCount = 0;
 
 // Serialize DB log writes per key so concurrent log chunks cannot overwrite
 // each other (for example, two first chunks both seeing NotFound).
@@ -95,8 +96,20 @@ async function processMessage(topic, message,protocol) {
         logger.debug("--------------------------------------");
         agentStats.set(obj.name,obj.data);
         logger.debug("--------------------------------------");
-        const agentRunningCount = running.getRunningCountForAgent(obj.name);
-        const agentConcurrencyLimit = agents.getConcurrency(obj.name);
+        let agentRunningCount = running.getRunningCountForAgent(obj.name);
+        const knownAgent = agents.getAgent(obj.name);
+        let agentReportedStatus = null;
+
+        try {
+          if (obj.data) {
+            const liveData = typeof obj.data === 'string' ? JSON.parse(obj.data) : obj.data;
+            if (liveData && liveData.agentStatus) {
+              agentReportedStatus = String(liveData.agentStatus).toLowerCase();
+            }
+          }
+        } catch (parseErr) {
+          logger.debug(`[AGENT] Unable to parse pong data for [${obj.name}]: ${parseErr.message}`);
+        }
         
         // Defensive check: log warning if we have running items but they lack agentName
         const allRunningItems = running.getItems();
@@ -104,8 +117,28 @@ async function processMessage(topic, message,protocol) {
         if (itemsWithoutAgent.length > 0) {
           logger.warn(`[CONCURRENCY] WARNING: Found ${itemsWithoutAgent.length} running items without agentName - concurrency enforcement may be bypassed`);
         }
-        
-        agents.updateAgentStatus(obj.name, agentRunningCount > 0 ? "running" : "online", "Ping response returned", null, null, null, message, protocol);
+
+        // Reconcile stale server-side running queue entries when the runtime explicitly
+        // reports it is not running. This avoids long-lived phantom runs after reconnects.
+        if (agentRunningCount > 0 &&
+            knownAgent && knownAgent.status !== 'running' &&
+            agentReportedStatus && agentReportedStatus !== 'running' &&
+            typeof running.removeItemsByAgent === 'function') {
+          const removedCount = running.removeItemsByAgent(obj.name);
+          if (removedCount > 0) {
+            staleReconcileCount += removedCount;
+            logger.warn(`[AGENT] Reconciled ${removedCount} stale running item(s) for [${obj.name}] after pong reported agentStatus=[${agentReportedStatus}]`);
+          }
+          agentRunningCount = running.getRunningCountForAgent(obj.name);
+        }
+
+        // Keep heartbeat updates from promoting online -> running based only on queue count.
+        // Running state should come from explicit "running" status messages from the agent.
+        const nextStatus = (knownAgent && knownAgent.status === 'running') ? 'running' : 'online';
+        if (nextStatus === 'online' && agentRunningCount > 0) {
+          logger.warn(`[AGENT] Agent [${obj.name}] has [${agentRunningCount}] running queue item(s) but current status is [${knownAgent ? knownAgent.status : 'unknown'}]; keeping status online until an explicit running update is received`);
+        }
+        agents.updateAgentStatus(obj.name, nextStatus, "Ping response returned", null, null, null, message, protocol);
   
       }
 
@@ -636,5 +669,12 @@ async function processMessage(topic, message,protocol) {
     return logEvent.name + "_" + logEvent.jobName + "_" + type;
   }
 
+  function getAndResetStaleReconcileCount()
+  {
+    const count = staleReconcileCount;
+    staleReconcileCount = 0;
+    return count;
+  }
 
-  module.exports = { updateLogRecord, processMessage, waitForMetricResult }
+
+  module.exports = { updateLogRecord, processMessage, waitForMetricResult, getAndResetStaleReconcileCount }
