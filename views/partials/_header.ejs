@@ -1,29 +1,5 @@
 <script src="/js/utils.js"></script>
 
-<%
-// Helper: returns true if the current user has permission (or is superAdmin)
-function hasPerm(p) {
-  if (!locals.currentUser) return false;
-  if (locals.currentUser.isSuperAdmin) return true;
-  if (!Array.isArray(locals.currentUser.permissions)) return false;
-  if (p === 'settings.access') {
-    const legacySettingsPerms = [
-      'settings.server',
-      'settings.websocket',
-      'settings.mqtt',
-      'settings.alerts',
-      'settings.icons',
-      'settings.templates',
-      'settings.webhooks',
-      'settings.backup',
-    ];
-    return locals.currentUser.permissions.includes('settings.access')
-      || locals.currentUser.permissions.some((perm) => legacySettingsPerms.includes(perm));
-  }
-  return locals.currentUser.permissions.includes(p);
-}
-%>
-
 <style>
   .active-nav-link {
     background-color: rgba(255, 255, 255, 0.3);

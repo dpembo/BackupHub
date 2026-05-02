@@ -39,7 +39,7 @@
 
   <% if (locals.message) { %>
     <div class="card-panel <%= locals.messageType === 'error' ? 'red' : 'green' %> lighten-4">
-      <span class="<%= locals.messageType === 'error' ? 'red' : 'green' %>-text"><%= message %></span>
+      <span class="<%= locals.messageType === 'error' ? 'red' : 'green' %>-text"><%= locals.message %></span>
     </div>
   <% } %>
 

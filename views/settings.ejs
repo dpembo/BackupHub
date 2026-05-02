@@ -1,24 +1,4 @@
 <% 
-const hasPerm = (p) => {
-  if (!locals.currentUser) return false;
-  if (locals.currentUser.isSuperAdmin) return true;
-  if (!Array.isArray(locals.currentUser.permissions)) return false;
-  if (p === 'settings.access') {
-    const legacySettingsPerms = [
-      'settings.server',
-      'settings.websocket',
-      'settings.mqtt',
-      'settings.alerts',
-      'settings.icons',
-      'settings.templates',
-      'settings.webhooks',
-      'settings.backup',
-    ];
-    return locals.currentUser.permissions.includes('settings.access')
-      || locals.currentUser.permissions.some((perm) => legacySettingsPerms.includes(perm));
-  }
-  return locals.currentUser.permissions.includes(p);
-};
 
 function isChecked(inValue,compareValue){
   if(compareValue===undefined||compareValue==null)return"";

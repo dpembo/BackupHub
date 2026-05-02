@@ -202,6 +202,26 @@ function removeItemByExecutionId(executionId)
     }
 }
 
+function removeItemsByAgent(agentName)
+{
+    logger.info(`Removing running items for agent [${agentName}]`);
+    if (!agentName) {
+        logger.warn('removeItemsByAgent called without agentName');
+        return 0;
+    }
+
+    const beforeCount = historyItems.length;
+    historyItems = historyItems.filter(item => item.agentName !== agentName);
+    const removedCount = beforeCount - historyItems.length;
+
+    if (removedCount > 0) {
+        logger.warn(`Removed ${removedCount} running item(s) for agent [${agentName}]`);
+        updateDb();
+    }
+
+    return removedCount;
+}
+
 /**
  * Delete all running items
  * @returns {Promise} resolves after all items are deleted and database is updated
@@ -216,4 +236,4 @@ async function deleteAll()
     return { success: true, deletedCount: deletedCount };
 }
 
-module.exports = { init, add, getItems, getItemsUsingTZ, getItemByName, getItemByExecutionId, searchItemWithName, getItem, createItem, getRunningCountForAgent, removeItem, removeItemByExecutionId, deleteAll};
+module.exports = { init, add, getItems, getItemsUsingTZ, getItemByName, getItemByExecutionId, searchItemWithName, getItem, createItem, getRunningCountForAgent, removeItem, removeItemByExecutionId, removeItemsByAgent, deleteAll};

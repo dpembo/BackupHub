@@ -26,6 +26,7 @@ jest.mock('../../running.js', () => ({
   add: jest.fn(),
   removeItem: jest.fn(),
   removeItemByExecutionId: jest.fn(),
+  removeItemsByAgent: jest.fn(),
   removeItemByName: jest.fn(),
   getItemByName: jest.fn(),
   getItemByExecutionId: jest.fn(),
@@ -82,6 +83,9 @@ describe('Agent Message Processor - Notification Logic', () => {
     global.running = running;
     global.history = history;
     global.hist = history; // agentMessageProcessor uses 'hist' instead of 'history'
+    global.agentStats = {
+      set: jest.fn(),
+    };
 
     // Mock module functions
     db.getData = jest.fn();
@@ -99,6 +103,7 @@ describe('Agent Message Processor - Notification Logic', () => {
     running.add = jest.fn();
     running.removeItem = jest.fn();
     running.removeItemByExecutionId = jest.fn();
+    running.removeItemsByAgent = jest.fn().mockReturnValue(0);
     running.removeItemByName = jest.fn();
     running.getItemByName = jest.fn().mockReturnValue({ startTime: new Date().toISOString() });
     running.getItemByExecutionId = jest.fn().mockReturnValue({ startTime: new Date().toISOString() });
@@ -115,6 +120,8 @@ describe('Agent Message Processor - Notification Logic', () => {
       delete require.cache[require.resolve('../../agentMessageProcessor.js')];
       agentMessageProcessor = require('../../agentMessageProcessor.js');
     }
+    // Reset cross-test counter state
+    agentMessageProcessor.getAndResetStaleReconcileCount();
   });
 
   afterEach(() => {
@@ -126,6 +133,105 @@ describe('Agent Message Processor - Notification Logic', () => {
     delete global.running;
     delete global.history;
     delete global.hist;
+    delete global.agentStats;
+  });
+
+  describe('pong status handling', () => {
+    it('should keep agent online on pong when queue has stale running items', async () => {
+      agentsModule.getAgent.mockReturnValue({ name: 'test-agent', status: 'online' });
+      running.getRunningCountForAgent.mockReturnValue(1);
+      running.getItems.mockReturnValue([{ jobName: 'old-job', executionId: 'abc', agentName: 'test-agent' }]);
+
+      const message = JSON.stringify({
+        name: 'test-agent',
+        status: 'pong',
+        data: '{"cpu":10}',
+      });
+
+      await agentMessageProcessor.processMessage('orchelium/agent/status', message, 'websocket');
+
+      expect(agentsModule.updateAgentStatus).toHaveBeenCalledWith(
+        'test-agent',
+        'online',
+        'Ping response returned',
+        null,
+        null,
+        null,
+        message,
+        'websocket'
+      );
+    });
+
+    it('should keep agent running on pong when agent is already running', async () => {
+      agentsModule.getAgent.mockReturnValue({ name: 'test-agent', status: 'running' });
+      running.getRunningCountForAgent.mockReturnValue(1);
+      running.getItems.mockReturnValue([{ jobName: 'active-job', executionId: 'xyz', agentName: 'test-agent' }]);
+
+      const message = JSON.stringify({
+        name: 'test-agent',
+        status: 'pong',
+        data: '{"cpu":5}',
+      });
+
+      await agentMessageProcessor.processMessage('orchelium/agent/status', message, 'websocket');
+
+      expect(agentsModule.updateAgentStatus).toHaveBeenCalledWith(
+        'test-agent',
+        'running',
+        'Ping response returned',
+        null,
+        null,
+        null,
+        message,
+        'websocket'
+      );
+    });
+
+    it('should reconcile stale running queue when pong reports non-running agentStatus', async () => {
+      agentsModule.getAgent.mockReturnValue({ name: 'test-agent', status: 'online' });
+      running.getRunningCountForAgent
+        .mockReturnValueOnce(1)
+        .mockReturnValueOnce(0);
+      running.getItems.mockReturnValue([{ jobName: 'old-job', executionId: 'abc', agentName: 'test-agent' }]);
+      running.removeItemsByAgent.mockReturnValue(1);
+
+      const message = JSON.stringify({
+        name: 'test-agent',
+        status: 'pong',
+        data: '{"agentStatus":"idle","cpuPct":7}',
+      });
+
+      await agentMessageProcessor.processMessage('orchelium/agent/status', message, 'websocket');
+
+      expect(running.removeItemsByAgent).toHaveBeenCalledWith('test-agent');
+      expect(agentMessageProcessor.getAndResetStaleReconcileCount()).toBe(1);
+      expect(agentsModule.updateAgentStatus).toHaveBeenCalledWith(
+        'test-agent',
+        'online',
+        'Ping response returned',
+        null,
+        null,
+        null,
+        message,
+        'websocket'
+      );
+    });
+
+    it('should not reconcile queue when pong reports running agentStatus', async () => {
+      agentsModule.getAgent.mockReturnValue({ name: 'test-agent', status: 'online' });
+      running.getRunningCountForAgent.mockReturnValue(1);
+      running.getItems.mockReturnValue([{ jobName: 'active-job', executionId: 'xyz', agentName: 'test-agent' }]);
+
+      const message = JSON.stringify({
+        name: 'test-agent',
+        status: 'pong',
+        data: '{"agentStatus":"running","cpuPct":12}',
+      });
+
+      await agentMessageProcessor.processMessage('orchelium/agent/status', message, 'websocket');
+
+      expect(running.removeItemsByAgent).not.toHaveBeenCalled();
+    });
   });
 
   describe('eta_submission with job failures', () => {
