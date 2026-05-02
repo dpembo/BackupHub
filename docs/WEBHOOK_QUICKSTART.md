@@ -8,19 +8,59 @@
 
 To create a job that can be triggered by webhooks, you need to:
 
-1. **Create a Job** (with a script)
-2. **Create a Webhook** (for that job)
-3. **Test** the webhook trigger
+1. **Create a Scripe** (shell script)
+2. **Create a Job** (using the script)
+3. **Create a Webhook** (for that job)
+4. **Test** the webhook trigger
 
 ---
 
-## Step 1: Create a Job
+## Step 1: Create a Script
+
+### Where to click
+
+1. **Open Orchelium** - Navigate to `http://<server-or-ip>:8082`
+2. Look for the **"Script List & Editor"** in the main navigation
+3. Click it
+4. Look for a **"+"** button
+5. Click it
+6. Copy this script into the Script Editor
+
+```bash
+#!/bin/sh
+#start-params
+#<b>webhook example</b>
+#<br /><b>Parameters</b><br />
+#No Parameters
+#end-params
+echo "=========================================="
+echo "Webhook Test Job Triggered!"
+echo "=========================================="
+echo ""
+echo "Current Time: $(date)"
+echo ""
+echo "Environment Variables from Webhook:"
+echo "Trigger Type: $ORCHELIUM_TRIGGER_TYPE"
+echo "Execution ID: $ORCHELIUM_EXECUTION_ID"
+echo "Full Trigger Context:"
+echo "$ORCHELIUM_TRIGGER_CONTEXT" | jq . 2>/dev/null || echo "$ORCHELIUM_TRIGGER_CONTEXT"
+echo ""
+echo "Job completed successfully!"
+echo "=========================================="
+```
+
+7. Press Save and give the script a name, e.g. 
+
+```wehbook_example.sh```
+
+
+## Step 2: Create a Job
 
 ### Where to Click
 
-1. **Open Orchelium** - Navigate to `http://localhost:8082`
-2. Look for **"Schedules"** or **"Jobs"** in the main navigation
-3. Look for a **"+"** button or **"Add Schedule"** button
+1. Look for **"Jobs"** in the main navigation
+2. Click it
+3. Look for a **"+"** button
 4. Click it
 
 ### The Job Creation Form
@@ -44,34 +84,14 @@ Job Name: webhook-test
 Description: Test job for webhook triggers
 Icon: [select something like "cloud_download" or "sync"]
 Agent: [select your connected agent]
-Script: (see below)
-```
-
-**Copy this script into the Script field:**
-
-```bash
-#!/bin/bash
-echo "=========================================="
-echo "Webhook Test Job Triggered!"
-echo "=========================================="
-echo ""
-echo "Current Time: $(date)"
-echo ""
-echo "Environment Variables from Webhook:"
-echo "Trigger Type: $ORCHELIUM_TRIGGER_TYPE"
-echo "Execution ID: $ORCHELIUM_EXECUTION_ID"
-echo "Full Trigger Context:"
-echo "$ORCHELIUM_TRIGGER_CONTEXT" | jq . 2>/dev/null || echo "$ORCHELIUM_TRIGGER_CONTEXT"
-echo ""
-echo "Job completed successfully!"
-echo "=========================================="
+Script: [select the script you just created]
 ```
 
 ### Save the Job
 
 1. Click **"Save"** or **"Create"** button
 2. Job should appear in the list
-3. You can test run it manually first (optional) by clicking **"Run Now"** or similar button
+3. You can test run it manually first (optional) by clicking **"Run"** button
 
 ### Verification
 
@@ -143,8 +163,9 @@ Save it somewhere safe (notepad, password manager, etc.)
 2. Look at the Webhooks table - your webhook should appear:
 
 ```
+
 | Name               | Description                | Status   | Triggers | Last Triggered |
-|--------------------|-----------------------------|----------|----------|----------------|
+|--------------------|----------------------------|----------|----------|----------------|
 | My Test Webhook    | Webhook for testing...     | ● Active | 0        | Never          |
 ```
 

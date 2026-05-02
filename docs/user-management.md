@@ -2,7 +2,7 @@
 
 Orchelium supports multiple users with role-based access control. Access to features is governed by a set of granular permissions that can be assigned per user. One **Super Admin** account always exists and has unrestricted access to everything.
 
----
+***
 
 ## Contents
 
@@ -21,7 +21,7 @@ Orchelium supports multiple users with role-based access control. Access to feat
   - [Permission Reference](#permission-reference)
 - [Related Documentation](#related-documentation)
 
----
+***
 
 ## First Access
 
@@ -33,13 +33,13 @@ When you first access Orchelium after installation, you are prompted to create t
 
 This account becomes the Super Admin — it cannot be deactivated, deleted, or have its permissions modified. All subsequent users must be invited by a user with the `users.manage` permission.
 
----
+***
 
 ## Login
 
 Access Orchelium at `http://<your-server>:<port>/login.html` (default port `8082`). Enter your username and password to log in.
 
----
+***
 
 ## Forgotten Password
 
@@ -52,7 +52,7 @@ If you forget your password:
 
 > **Note:** Password reset emails require SMTP to be configured in [Settings](./settings-config.md).
 
----
+***
 
 ## User Types and Statuses
 
@@ -76,7 +76,7 @@ All other accounts are regular users. Their access is controlled entirely by the
 | **Invited** | The user has been invited but has not yet set a password. The invite link is still valid (within 48 hours). |
 | **Inactive** | The user account exists but has been deactivated, or the invite expired before being accepted. |
 
----
+***
 
 ## Managing Users
 
@@ -133,7 +133,7 @@ To permanently remove a user:
 
 Deleted users are removed immediately and cannot be recovered. The Super Admin account cannot be deleted.
 
----
+***
 
 ## Permissions
 
@@ -221,7 +221,7 @@ The table below lists all available permissions.
 
 > **Note:** The Super Admin bypasses all permission checks and always has full access regardless of the permission list.
 
----
+***
 
 ## Related Documentation
 
