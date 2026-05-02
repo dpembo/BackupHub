@@ -580,10 +580,9 @@ function addDateSuffix(date) {
                 <td><span><%=scripts[i].data.filename%></span></td>
                 <td><span><%=scripts[i].data.metaDescription%></span></td>
                 <%
-                var dispDate = scripts[i].data.lastUpdated.toISOString();
+                var dispDate = '';
                   try{
-                    dispDate = dispDate.replace('T',' ');
-                    dispDate = dispDate.substring(0,dispDate.lastIndexOf("."));
+                    dispDate = moment.tz(scripts[i].data.lastUpdated, serverConfig.server.timezone || 'UTC').format('YYYY-MM-DD HH:mm:ss');
                   } catch (err){
                     //ignore
                   }

@@ -6,7 +6,7 @@
       </div>
     
       <div class="container white-text"><span style="float:right">
-        <span>Orchelium Server Time: <span class="orange-text text-lighten-3"><%=new Date().toISOString()%></span>&nbsp;&nbsp;&nbsp;&nbsp;</span>
+        <span>Orchelium Server Time: <span class="orange-text text-lighten-3"><%=moment().tz(serverConfig.server.timezone || 'UTC').format('YYYY-MM-DD HH:mm:ss')%></span>&nbsp;<span class="orange-text text-lighten-5" style="font-size:0.85em;opacity:0.75">(<%=serverConfig.server.timezone || 'UTC'%>)</span>&nbsp;&nbsp;&nbsp;</span>
       </div>
     </div>
   </footer>

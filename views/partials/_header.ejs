@@ -11,7 +11,18 @@
   }
 
   #dropdown1{
-    width: 125px !important;
+    width: 190px !important;
+    max-height: 520px !important;
+  }
+
+  #dropdown1 a.menu-entry {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  #dropdown1 a.menu-entry .material-icons {
+    font-size: 18px;
   }
 </style>
 
@@ -21,17 +32,19 @@
       <span class="logoimg" title="Orchelium Home"></span>
     </a>
     <ul id="dropdown1" class="dropdown-content">
-      <li><a href="/about.html">About</a></li>
+      <li><a class="menu-entry" href="/about.html"><span class="material-icons">info</span>About</a></li>
+      <li><a class="menu-entry" target="_blank" href="/docs.html"><span class="material-icons">menu_book</span>Docs</a></li>
       <li class="divider"></li>
-      <li><a href="/profile.html">User Info</a></li>
+      <li><a class="menu-entry" href="/profile.html"><span class="material-icons">account_circle</span>User Info</a></li>
+      <li class="divider"></li>
       <% if (hasPerm('settings.access')) { %>
-      <li><a href="/settings.html">Settings</a></li>
+      <li><a class="menu-entry" href="/settings.html"><span class="material-icons">settings</span>Settings</a></li>
       <% } %>
       <% if (hasPerm('users.manage')) { %>
-      <li><a href="/users.html">User Management</a></li>
+      <li><a class="menu-entry" href="/users.html"><span class="material-icons">manage_accounts</span>User Management</a></li>
       <% } %>
       <li class="divider"></li>
-      <li><a href="/logout.html">Logout</a></li>
+      <li><a class="menu-entry" href="/logout.html"><span class="material-icons">logout</span>Logout</a></li>
     </ul>
         
     <ul class="right hide-on-med-and-down">
@@ -100,6 +113,7 @@
       <% } %>
       <li class="divider"></li>
       <li><a href="/about.html" title="About" style="color:#ffffff"><span title="About" style="font-size:24pt" class="material-icons vertMid">info</span>&nbsp;About</a></li>
+      <li><a target="_blank" href="/docs.html" title="Docs" style="color:#ffffff"><span title="Docs" style="font-size:24pt" class="material-icons vertMid">menu_book</span>&nbsp;Docs</a></li>
       <li><a href="/logout.html" title="Logout" style="color:#ffffff"><span title="Logout" style="font-size:24pt" class="material-icons vertMid">logout</span>&nbsp;Logout</a></li>
 
       

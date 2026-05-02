@@ -126,6 +126,11 @@ textarea{
   color: #f8f8f2;
 }
 
+.dropdown-content li > a,
+.dropdown-content li > a .material-icons {
+  color: var(--text-primary) !important;
+}
+
 /* For elements with borders */
 .logView,
 .scriptInfo,

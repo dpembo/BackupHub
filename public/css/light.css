@@ -870,6 +870,11 @@ div#refreshLabel {
   overflow-y: auto; /* Add scrollbar if content overflows the height */
 }
 
+.dropdown-content li > a,
+.dropdown-content li > a .material-icons {
+  color: var(--text-primary) !important;
+}
+
 /* __________________________________________________________________________ */
 /* Agent info */
 
