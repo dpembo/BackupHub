@@ -207,7 +207,7 @@ if (Array.isArray(historyList)) {
               </td>
               <td>
                 <% var runType="schedule"; var runDesc="Scheduled Execution";%>
-                <% var modeColor = parseInt(historyList[i].returnCode)!=0 ? "#d32f2f" : "#000000"; %>
+                <% var modeColor = parseInt(historyList[i].returnCode)!=0 ? "#d32f2f" : "var(--text-primary)"; %>
                 <% 
                 if(historyList[i].manual!==undefined && historyList[i].manual==true){
                   runType="play_arrow";runDesc="Manual Execution";
@@ -302,7 +302,7 @@ if (Array.isArray(historyList)) {
                   </td>
                   <td>
                     <% var runType="crop_16_9"; var runDesc="execution node";%>
-                    <% var childModeColor = parseInt(childNode.returnCode)!=0 ? "#d32f2f" : "#000000"; %>
+                    <% var childModeColor = parseInt(childNode.returnCode)!=0 ? "#d32f2f" : "var(--text-primary)"; %>
                     <span title="<%=runDesc%>" class="material-icons" style="color:<%=childModeColor%>;"><%=runType%></span>
                   </td>
                   <% 
@@ -368,7 +368,7 @@ if (Array.isArray(historyList)) {
             </td>
             <td>
               <% var runType="schedule"; var runDesc="Scheduled Execution";%>
-              <% var modeColor = parseInt(historyList[i].returnCode)!=0 ? "#d32f2f" : "#000000"; %>
+              <% var modeColor = parseInt(historyList[i].returnCode)!=0 ? "#d32f2f" : "var(--text-primary)"; %>
               <% 
               if(historyList[i].manual!==undefined && historyList[i].manual==true){
                 runType="play_arrow";runDesc="Manual Execution";
