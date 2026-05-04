@@ -1954,10 +1954,6 @@
         arrowMarker = 'url(#arrowhead-blue)';
       }
 
-      if (edge.executed && edge.concurrent) {
-        edgeColor = '#009688';
-      }
-
       // Determine node types to calculate proper port positions
       const fromIsStart = fromNode.type === 'start';
       const fromIsEnd = fromNode.type === 'end-success' || fromNode.type === 'end-failure';
