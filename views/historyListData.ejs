@@ -163,7 +163,7 @@ if (Array.isArray(historyList)) {
           currentGroup = groupValue;
           %>
           <% if (isNewGroup) { %>
-            <tr class="group-header">
+            <tr class="group-header" valign="top">
               <td colspan="7" onclick="toggleGroup('group-<%=groupId%>')">
                 <span class="material-icons expand-icon" id="icon-<%= groupId %>">expand_more</span>
                 <strong><%= groupValue %></strong>
@@ -189,13 +189,13 @@ if (Array.isArray(historyList)) {
               // Safe version for CSS class names (# is invalid in class names)
               const safeCompositeId = (historyList[i].jobId + '-' + execId).replace(/[^a-zA-Z0-9-_]/g, '-');
             %>
-            <tr class="toggle-row group-<%=groupId%> orch-parent <% if(parseInt(historyList[i].returnCode)!=0){%>errorHighlight<%}%>" style="display:none;" data-orch-id="<%=compositeId%>" data-safe-id="<%=safeCompositeId%>">
-              <td>
+            <tr class="toggle-row group-<%=groupId%> orch-parent <% if(parseInt(historyList[i].returnCode)!=0){%>errorHighlight<%}%>" style="display:none;" valign="top" data-orch-id="<%=compositeId%>" data-safe-id="<%=safeCompositeId%>">
+              <td style="vertical-align: top;">
                 <span class="material-icons vertMid" style="color:<%=historyList[i].color || '#000000'%>;font-size:24pt;cursor:pointer;" id="orch-icon-<%=safeCompositeId%>" onclick="event.stopPropagation(); toggleOrchestrationGroup('<%=safeCompositeId%>')" title="Orchestration"><%=historyList[i].icon || 'schema'%></span>
                 <%if(historyList[i].icon){%><span class="material-icons icon-indicator" style="color: #000000; font-size: 14pt;left: -17px !important;top: 22px !important;" title="Orchestration">schema</span><%}%>
                 <span class="material-icons vertMid" style="color: <%=historyList[i].color || '#000000'%>;font-size:24pt; cursor: pointer; display: block; padding-left: 30px; top: -10px; position: relative; cursor:pointer;" id="orch-expand-<%=safeCompositeId%>" onclick="event.stopPropagation(); toggleOrchestrationGroup('<%=safeCompositeId%>')" title="Show/Hide Details">expand_more</span>
               </td>
-              <td>
+              <td style="vertical-align: top;">
                 <strong><%=historyList[i].jobName%></strong>
                 <br/>
                 <% if (historyList[i].description) { %>
@@ -205,7 +205,7 @@ if (Array.isArray(historyList)) {
                 <% } %>
                 <span style="font-size: 0.85em; color: var(--text-muted); display: block; margin-top: 3px;"><%=historyList[i].children ? historyList[i].children.length : 0%> nodes executed</span>
               </td>
-              <td>
+              <td style="vertical-align: top;">
                 <% var runType="schedule"; var runDesc="Scheduled Execution";%>
                 <% var modeColor = parseInt(historyList[i].returnCode)!=0 ? "#d32f2f" : "var(--text-primary)"; %>
                 <% 
@@ -248,7 +248,10 @@ if (Array.isArray(historyList)) {
                     //ignore
                   }
               %>
-              <td><%=dispDate%> (<%=(diffDisp)%>)</td>
+              <td style="vertical-align: top;">
+                <span><%=dispDate%></span>
+                <span style="font-size: 0.85em; color: inherit; display: block;">(<%=(diffDisp)%>)</span>
+              </td>
               <% 
                 // Calculate runtime from children
                 var totalRunTime = 0;
@@ -258,20 +261,20 @@ if (Array.isArray(historyList)) {
                   });
                 }
               %>
-              <td><%=displaySecs(totalRunTime)%></td>
+              <td style="vertical-align: top;"><%=displaySecs(totalRunTime)%></td>
               <% 
                 // Success percentage (pre-calculated on server for orchestrations, regular calculation for other jobs)
                 var successPct = historyList[i].successPercentage !== undefined ? historyList[i].successPercentage : hist.getSuccessPercentage(historyList[i].jobName);
               %>
-              <td><span><%=successPct%>%</span></td>
-              <td>
+              <td style="vertical-align: top;"><span><%=successPct%>%</span></td>
+              <td style="vertical-align: top;">
                 <% if(parseInt(historyList[i].returnCode)==0){%>
                   <span title="Success" class="successIcons material-icons">check_circle</span>
                 <% } else {%>
                   <span title="Failure" class="errorIcons material-icons">flag_circle</span>
                 <% } %>
               </td>
-              <td>
+              <td style="vertical-align: top;">
                 <% if(parseInt(historyList[i].returnCode)==0){%>
                 <% classVal="tableIconButton";} else {%>
                 <% classVal="tableIconButtonError";}%>
@@ -292,15 +295,15 @@ if (Array.isArray(historyList)) {
             <!-- ORCHESTRATION CHILD NODES -->
             <% if (historyList[i].children && historyList[i].children.length > 0) { %>
               <% historyList[i].children.forEach(function(childNode, childIdx) { %>
-                <tr class="toggle-row group-<%=groupId%> orch-child-<%=safeCompositeId%> <% if(parseInt(childNode.returnCode)!=0){%>errorHighlight<%}%>" style="display:none; padding-left: 40px;">
-                  <td style="padding-left: 40px;">
+                <tr class="toggle-row group-<%=groupId%> orch-child-<%=safeCompositeId%> <% if(parseInt(childNode.returnCode)!=0){%>errorHighlight<%}%>" style="display:none; padding-left: 40px;" valign="top">
+                  <td style="padding-left: 40px; vertical-align: top;">
                         <% var childArrowColor = parseInt(childNode.returnCode)!=0 ? "#d32f2f" : "#000000"; %>
                         <span title="subnode execution" class="material-icons vertMid" style="color:<%=childArrowColor%>;font-size:16pt">subdirectory_arrow_right</span>
                   </td>
-                  <td>
+                  <td style="vertical-align: top;">
                     <span style="font-size: 0.9em; color: var(--text-muted);"></span><%=childNode.jobName%>
                   </td>
-                  <td>
+                  <td style="vertical-align: top;">
                     <% var runType="crop_16_9"; var runDesc="execution node";%>
                     <% var childModeColor = parseInt(childNode.returnCode)!=0 ? "#d32f2f" : "var(--text-primary)"; %>
                     <span title="<%=runDesc%>" class="material-icons" style="color:<%=childModeColor%>;"><%=runType%></span>
@@ -320,17 +323,20 @@ if (Array.isArray(historyList)) {
                         //ignore
                       }
                   %>
-                  <td><%=dispDate%> (<%=(diffDisp)%>)</td>
-                  <td><%=displaySecs(childNode.runTime)%></td>
-                  <td>-</td>
-                  <td>
+                  <td style="vertical-align: top;">
+                    <span><%=dispDate%></span>
+                    <span style="font-size: 0.85em; color: inherit; display: block;">(<%=(diffDisp)%>)</span>
+                  </td>
+                  <td style="vertical-align: top;"><%=displaySecs(childNode.runTime)%></td>
+                  <td style="vertical-align: top;">-</td>
+                  <td style="vertical-align: top;">
                     <% if(parseInt(childNode.returnCode)==0){%>
                       <span title="Success - Exit code <%=childNode.returnCode%>" class="successIcons material-icons">check_circle</span>
                     <% } else {%>
                       <span title="Failure - Exit code: <%=childNode.returnCode%>" class="errorIcons material-icons">flag_circle</span>
                     <% } %>
                   </td>
-                  <td>
+                  <td style="vertical-align: top;">
                     <% var childLogClass = "tableIconButton"; %>
                     <% if(parseInt(childNode.returnCode)!=0){ childLogClass = "tableIconButtonError"; } %>
                     <% var childIcon = childNode.icon || "crop_16_9"; %>
@@ -351,9 +357,9 @@ if (Array.isArray(historyList)) {
             <% } %>
           <% } else { %>
           <!-- REGULAR JOB ITEM (non-orchestration) -->
-          <tr class="toggle-row group-<%=groupId%> <%if(deleted){%>deleted<%}%> <% if(parseInt(historyList[i].returnCode)!=0){%>errorHighlight<%}%>" style="display:none;">
-            <td><span class="material-icons vertMid" style="color:<%=historyList[i].color%>;font-size:24pt"><%=historyList[i].icon%></span></td>
-            <td>
+          <tr class="toggle-row group-<%=groupId%> <%if(deleted){%>deleted<%}%> <% if(parseInt(historyList[i].returnCode)!=0){%>errorHighlight<%}%>" style="display:none;" valign="top">
+            <td style="vertical-align: top;"><span class="material-icons vertMid" style="color:<%=historyList[i].color%>;font-size:24pt"><%=historyList[i].icon%></span></td>
+            <td style="vertical-align: top;">
               <% if(itemInternal==true){%>
                 <strong><%=historyList[i].jobName.substr(historyList[i].jobName.lastIndexOf("||")+2)%></strong>
               <% } else {%> 
@@ -366,7 +372,7 @@ if (Array.isArray(historyList)) {
                 <span style="font-size: 0.85em; color: #999; font-style: italic;">No Description</span>
               <% } %>
             </td>
-            <td>
+            <td style="vertical-align: top;">
               <% var runType="schedule"; var runDesc="Scheduled Execution";%>
               <% var modeColor = parseInt(historyList[i].returnCode)!=0 ? "#d32f2f" : "var(--text-primary)"; %>
               <% 
@@ -410,12 +416,15 @@ if (Array.isArray(historyList)) {
                   //ignore
                 }
             %>
-            <td><%=dispDate%> (<%=(diffDisp)%>)</td>
-            <td><%=displaySecs(historyList[i].runTime)%></td>
+            <td style="vertical-align: top;">
+              <span><%=dispDate%></span>
+              <span style="font-size: 0.85em; color: inherit; display: block;">(<%=(diffDisp)%>)</span>
+            </td>
+            <td style="vertical-align: top;"><%=displaySecs(historyList[i].runTime)%></td>
             <% successPct = hist.getSuccessPercentage(historyList[i].jobName)
             %>
-            <td><span><%=successPct%>%</span></td>
-            <td>
+            <td style="vertical-align: top;"><span><%=successPct%>%</span></td>
+            <td style="vertical-align: top;">
               <% if(parseInt(historyList[i].returnCode)==0){%>
                 <span title="Success - Return code <%=historyList[i].returnCode%>" class="<%=icons%> material-icons">check_circle</span>
                 <%
@@ -430,7 +439,7 @@ if (Array.isArray(historyList)) {
               }
               %>
             </td>
-            <td>
+            <td style="vertical-align: top;">
               <pre style="display:none" id="logdetail<%=i%>"><%=historyList[i].log%></pre>
               <%
                var logclass="";

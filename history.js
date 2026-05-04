@@ -181,7 +181,7 @@ function getItemsUsingTZ() {
     var adjustedItems = JSON.parse(itemsStr);
 
     for(var i=0;i<adjustedItems.length;i++){
-        adjustedItems[i].runDate = dateTimeUtils.displayFormatDate(new Date(adjustedItems[i].runDate),false,serverConfig.server.timezone,'YYYY-MM-DDTHH:mm:ss.SSS',false);
+        adjustedItems[i].runDate = dateTimeUtils.displayFormatDate(new Date(adjustedItems[i].runDate),false,serverConfig.server.timezone,'YYYY-MM-DD HH:mm:ss.SSS',false);
     }
     return adjustedItems;
 

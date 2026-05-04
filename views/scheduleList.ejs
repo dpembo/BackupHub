@@ -323,6 +323,10 @@ if (Array.isArray(schedules)) {
     .scheduleTable th .scheduleSortIconPlaceholder {
       visibility: hidden;
     }
+
+    .scheduleTable tbody td {
+      vertical-align: top !important;
+    }
   </style>
 </head>
 <body>
@@ -476,8 +480,33 @@ if (Array.isArray(schedules)) {
                     N/A
                   <% } %>
                 </td>
-                <td><%= schedules[i].nextRunDate %></td>
-                <td><%= schedules[i].lastUpdated %></td>
+
+                <%
+                  var nextRunDisplay = schedules[i].nextRunDate || '';
+                  if (typeof nextRunDisplay === 'string') {
+                    nextRunDisplay = nextRunDisplay.replace('T', ' ');
+                  }
+                  var nextRunMain = nextRunDisplay;
+                  var nextRunMeta = '';
+                  if (typeof nextRunDisplay === 'string') {
+                    var nextRunMatch = nextRunDisplay.match(/^(.*)\s(\([^\)]*\))$/);
+                    if (nextRunMatch) {
+                      nextRunMain = nextRunMatch[1];
+                      nextRunMeta = nextRunMatch[2];
+                    }
+                  }
+                  var lastUpdatedDisplay = schedules[i].lastUpdated || '';
+                  if (typeof lastUpdatedDisplay === 'string') {
+                    lastUpdatedDisplay = lastUpdatedDisplay.replace('T', ' ');
+                  }
+                %>
+                <td>
+                  <span><%= nextRunMain %></span>
+                  <% if (nextRunMeta) { %>
+                    <span style="font-size: 0.85em; color: inherit; display: block;"><%= nextRunMeta %></span>
+                  <% } %>
+                </td>
+                <td><%= lastUpdatedDisplay %></td>
                 <% var pct = schedules[i].successPercentage;
                 if(!isNaN(pct))pct=pct+"%";
                 else pct="n/a";

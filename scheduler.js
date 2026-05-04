@@ -414,7 +414,7 @@ function getNextRunDate(schedule) {
     var formattedDate;
     if (targetTimeZone !== undefined) {
         // Convert to target timezone and apply the provided format or default to ISO format
-        formattedDate = moment.tz(inDate, targetTimeZone).format(format || 'YYYY-MM-DDTHH:mm:ss');
+        formattedDate = moment.tz(inDate, targetTimeZone).format(format || 'YYYY-MM-DD HH:mm:ss');
     } else {
         // Use the provided format or default to ISO without timezone adjustment
         formattedDate = format ? moment(inDate).format(format) : inDate.toISOString().split('.')[0];
