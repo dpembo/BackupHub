@@ -1065,6 +1065,7 @@ class WebSocketHandler {
     this.connectionTimeout = options.connectionTimeout || 5000;
     this.processMessageCallback = processMessageCallback;
     this.reconnectTimeoutId = null;
+    this.connectionGeneration = 0;
     this.retryManager = new RetryBackoffManager(this.agentId, 'WebSocket');
   }
 
@@ -1085,6 +1086,15 @@ class WebSocketHandler {
       const connId = `${encodeURIComponent(this.agentId)}`;
       const connectUrl = `ws://${this.server}:${this.port}?name=${connId}`;
 
+      // Close and discard any existing client so its stale events don't corrupt state
+      if (this.client) {
+        try { this.client.close(); } catch (e) {}
+        this.client = null;
+      }
+
+      // Generation counter: event handlers from old connect() calls are ignored
+      const generation = ++this.connectionGeneration;
+
       const options = {
         WebSocket: websocket,
         connectionTimeout: this.connectionTimeout,
@@ -1092,11 +1102,11 @@ class WebSocketHandler {
         reconnectInterval: 1000
       };
 
-      debug(DEBUG_LEVEL.TRACE, `Initiating WebSocket connection for [${connId}]`);
-      debug(DEBUG_LEVEL.TRACE, `Initiating WebSocket connection for [${connId}]`);
+      debug(DEBUG_LEVEL.TRACE, `Initiating WebSocket connection for [${connId}] (gen ${generation})`);
       this.client = new ReconnectingWebSocket(connectUrl, [], options);
 
       this.client.addEventListener('open', () => {
+        if (generation !== this.connectionGeneration) return;
         this.isConnected = true;
         this.isConnecting = false;
         this.retryManager.reset();
@@ -1106,6 +1116,7 @@ class WebSocketHandler {
       });
 
       this.client.addEventListener('close', () => {
+        if (generation !== this.connectionGeneration) return;
         this.isConnected = false;
         this.isConnecting = false;
         if (!this.isReconnecting) {
@@ -1114,6 +1125,7 @@ class WebSocketHandler {
       });
 
       this.client.addEventListener('error', (err) => {
+        if (generation !== this.connectionGeneration) return;
         this.isConnected = false;
         this.isConnecting = false;
         debug(DEBUG_LEVEL.TRACE, `WebSocket error: ${err.message}`);
@@ -1124,6 +1136,7 @@ class WebSocketHandler {
       });
 
       this.client.addEventListener('message', (event) => {
+        if (generation !== this.connectionGeneration) return;
         const message = `"${event.data}"`;
         debug(DEBUG_LEVEL.TRACE, `Received message on [${connId}]: ${message}`);
         this.processMessageCallback(message);
@@ -1131,6 +1144,7 @@ class WebSocketHandler {
 
       // Use a timeout to handle initial connection failures
       const connectionTimeoutId = setTimeout(() => {
+        if (generation !== this.connectionGeneration) return;
         if (!this.isConnected && this.isConnecting) {
           this.isConnecting = false;
           debug(DEBUG_LEVEL.WARN, `WebSocket [${connId}] initial connection timeout`);
