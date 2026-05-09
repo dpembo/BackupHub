@@ -1525,17 +1525,31 @@
       // Canvas configuration - calculate height dynamically based on node positions
       const containerWidth = document.getElementById('diagramContainer').offsetWidth || 900;
       
-      // Calculate minimum height needed to fit all nodes
+      // Calculate bounds needed to fit all nodes (including trigger badge above start node)
+      let minY = Infinity;
       let maxY = 0;
       nodes.forEach(node => {
         if (node.y !== undefined) {
           const nodeBottomEdge = node.y + (node.type === 'start' || node.type === 'end-success' || node.type === 'end-failure' ? 28 : 35) + 40; // node extent + label space + padding
           maxY = Math.max(maxY, nodeBottomEdge);
+
+          // For start nodes, account for the trigger badge drawn above the circle
+          if (node.type === 'start') {
+            const badgeHeight = 18;
+            const badgeTopY = node.y - 28 - badgeHeight - 6; // circleRadius + badgeHeight + gap
+            minY = Math.min(minY, badgeTopY);
+          } else {
+            minY = Math.min(minY, node.y - 35);
+          }
         }
       });
+
+      // Add top padding; if minY is negative or too small, shift the viewBox up
+      const topPadding = 16;
+      const viewBoxTop = Math.min(0, minY - topPadding);
       
       // Ensure minimum height and add bottom padding
-      const calculatedHeight = Math.max(600, maxY + 60);
+      const calculatedHeight = Math.max(600, maxY + 60 - viewBoxTop);
       
       const CANVAS = {
         width: containerWidth,
@@ -1549,7 +1563,7 @@
       const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
       svg.setAttribute('width', CANVAS.width);
       svg.setAttribute('height', CANVAS.height);
-      svg.setAttribute('viewBox', `0 0 ${CANVAS.width} ${CANVAS.height}`);
+      svg.setAttribute('viewBox', `0 ${viewBoxTop} ${CANVAS.width} ${CANVAS.height}`);
       svg.setAttribute('style', 'border: 1px solid var(--border-color); background: var(--surface-color); border-radius: 4px;');
 
       // Create layers
@@ -2322,6 +2336,24 @@
           const statusColor = httpStatus >= 200 && httpStatus < 300 ? '#2e7d32' : '#d32f2f';
           httpStatusHtml = `<span style="font-weight: bold; color: ${statusColor};">${httpStatus}</span>`;
         }
+
+        // Format headers
+        const httpHeaders = node.data?.httpHeaders;
+        let headersHtml = '<span style="color: var(--text-muted);">None</span>';
+        if (Array.isArray(httpHeaders) && httpHeaders.length > 0) {
+          headersHtml = httpHeaders
+            .map(h => `<div style="font-family: 'Courier New', monospace; font-size: 12px;">${escapeHtml(h.key)}: ${escapeHtml(h.value)}</div>`)
+            .join('');
+        } else if (typeof httpHeaders === 'string' && httpHeaders.trim()) {
+          headersHtml = `<pre style="font-family: 'Courier New', monospace; font-size: 12px; margin: 0; white-space: pre-wrap; word-break: break-all;">${escapeHtml(httpHeaders.trim())}</pre>`;
+        }
+
+        // Format body
+        const httpBody = node.data?.httpBody || '';
+        const bodyHtml = httpBody.trim()
+          ? `<pre style="font-family: 'Courier New', monospace; font-size: 12px; margin: 0; white-space: pre-wrap; word-break: break-all; max-height: 150px; overflow-y: auto;">${escapeHtml(httpBody.trim())}</pre>`
+          : '<span style="color: var(--text-muted);">None</span>';
+
         httpDetailsHtml = `
           <div class="detail-item">
             <div class="detail-label">Method</div>
@@ -2338,6 +2370,26 @@
           <div class="detail-item">
             <div class="detail-label">Auth Type</div>
             <div class="detail-value">${authLabel}</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Headers</div>
+            <div class="detail-value">${headersHtml}</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Body</div>
+            <div class="detail-value">${bodyHtml}</div>
+          </div>`;
+      }
+
+      // Script-specific details
+      let scriptDetailsHtml = '';
+      if (node.type === 'execute' && !isHttpNode) {
+        const scriptPath = node.data?.script || '';
+        const scriptName = scriptPath ? scriptPath.split('/').pop() : 'N/A';
+        scriptDetailsHtml = `
+          <div class="detail-item">
+            <div class="detail-label">Script</div>
+            <div class="detail-value" style="font-family: 'Courier New', monospace; word-break: break-all;" title="${escapeHtml(scriptPath)}">${escapeHtml(scriptName)}</div>
           </div>`;
       }
 
@@ -2473,6 +2525,7 @@
           </div>
           ${exitCodeHtml}
           ${httpDetailsHtml}
+          ${scriptDetailsHtml}
           ${waitDetailsHtml}
           ${notifyDetailsHtml}
           ${isHttpNode || isWaitNode || isNotifyNode ? '' : `<div class="detail-item">

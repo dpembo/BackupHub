@@ -525,6 +525,11 @@ function isSelected(inValue,compareValue){
             <label>Node Type</label>
             <p id="prop-type" style="margin: 5px 0; font-size: 13px; color: #333;"></p>
           </div>
+
+          <div id="prop-action-name-section" class="properties-section" style="display: none;">
+            <label for="prop-action-name">Name (optional)</label>
+            <input type="text" id="prop-action-name" placeholder="Custom display name...">
+          </div>
           
           <div id="prop-execute" style="display: none;">
             <div class="properties-section">
@@ -1922,12 +1927,16 @@ function isSelected(inValue,compareValue){
         if (!Array.isArray(node.data.httpHeaders)) node.data.httpHeaders = [];
         if (typeof node.data.httpBody !== 'string') node.data.httpBody = '';
         if (!node.icon || node.icon === 'settings') node.icon = 'http';
-        if (!node.label || node.label === 'Execute' || node.label.startsWith('Execute:')) {
+        if (node.data.actionName) {
+          node.label = node.data.actionName;
+        } else if (!node.label || node.label === 'Execute' || node.label.startsWith('Execute:')) {
           node.label = `HTTP ${node.data.httpMethod}`;
         }
       } else {
         if (!node.icon || node.icon === 'http') node.icon = 'settings';
-        if (!node.label || node.label === 'Execute' || node.label.startsWith('HTTP ')) {
+        if (node.data.actionName) {
+          node.label = node.data.actionName;
+        } else if (!node.label || node.label === 'Execute' || node.label.startsWith('HTTP ')) {
           node.label = node.data.script ? `Execute: ${node.data.script.split('/').pop()}` : 'Execute Script';
         }
       }
@@ -1939,7 +1948,9 @@ function isSelected(inValue,compareValue){
       const waitSeconds = parseFloat(node.data.waitSeconds);
       node.data.waitSeconds = Number.isFinite(waitSeconds) && waitSeconds > 0 ? waitSeconds : 5;
       if (!node.icon || node.icon === 'device_hub') node.icon = 'schedule';
-      if (!node.label || node.label === 'Wait') {
+      if (node.data.actionName) {
+        node.label = node.data.actionName;
+      } else if (!node.label || node.label === 'Wait') {
         node.label = `Wait ${node.data.waitSeconds}s`;
       }
     }
@@ -1952,7 +1963,9 @@ function isSelected(inValue,compareValue){
       if (typeof node.data.notifyBody !== 'string') node.data.notifyBody = '';
       if (typeof node.data.notifyUrl !== 'string') node.data.notifyUrl = '';
       if (!node.icon || node.icon === 'device_hub') node.icon = 'notifications';
-      if (!node.label || node.label === 'Notify') {
+      if (node.data.actionName) {
+        node.label = node.data.actionName;
+      } else if (!node.label || node.label === 'Notify') {
         node.label = node.data.notifyTitle ? `Notify: ${node.data.notifyTitle}` : 'Notify';
       }
     }
@@ -2850,6 +2863,9 @@ function isSelected(inValue,compareValue){
       document.getElementById('prop-wait').style.display = node.type === 'wait' ? 'block' : 'none';
       document.getElementById('prop-notify').style.display = node.type === 'notify' ? 'block' : 'none';
       document.getElementById('prop-end').style.display = node.type.startsWith('end') ? 'block' : 'none';
+
+      const isActionType = node.type === 'execute' || node.type === 'wait' || node.type === 'notify';
+      document.getElementById('prop-action-name-section').style.display = isActionType ? 'block' : 'none';
       
       if (node.type === 'execute') {
         ensureExecuteDefaults(node);
@@ -2879,7 +2895,9 @@ function isSelected(inValue,compareValue){
         const authApiKeySection = document.getElementById('prop-http-auth-apikey-section');
 
         const updateExecuteNodeLabelIcon = () => {
-          if ((node.data.executeType || 'script') === 'http') {
+          if (node.data.actionName) {
+            node.label = node.data.actionName;
+          } else if ((node.data.executeType || 'script') === 'http') {
             node.icon = 'http';
             const method = (node.data.httpMethod || 'GET').toUpperCase();
             const shortUrl = (node.data.httpUrl || '').trim();
@@ -2912,6 +2930,18 @@ function isSelected(inValue,compareValue){
         };
 
         executeTypeSelect.value = node.data.executeType || 'script';
+
+        // Wire up action name field
+        const actionNameField = document.getElementById('prop-action-name');
+        actionNameField.value = node.data.actionName || '';
+        actionNameField.oninput = function() {
+          node.data.actionName = this.value.trim();
+          updateExecuteNodeLabelIcon();
+        };
+        actionNameField.onchange = function() {
+          node.data.actionName = this.value.trim();
+          updateExecuteNodeLabelIcon();
+        };
         
         // Build script select options
         scriptSelect.innerHTML = '<option value="">Select a script...</option>';
@@ -3071,8 +3101,20 @@ function isSelected(inValue,compareValue){
           const safeSeconds = Number.isFinite(seconds) && seconds > 0 ? seconds : 5;
           node.data.waitSeconds = safeSeconds;
           node.icon = 'schedule';
-          node.label = `Wait ${safeSeconds}s`;
+          node.label = node.data.actionName || `Wait ${safeSeconds}s`;
           renderNode(selectedNode);
+        };
+
+        // Wire up action name field
+        const actionNameField = document.getElementById('prop-action-name');
+        actionNameField.value = node.data.actionName || '';
+        actionNameField.oninput = function() {
+          node.data.actionName = this.value.trim();
+          updateWaitLabel();
+        };
+        actionNameField.onchange = function() {
+          node.data.actionName = this.value.trim();
+          updateWaitLabel();
         };
 
         waitSecondsField.value = node.data.waitSeconds || 5;
@@ -3095,8 +3137,20 @@ function isSelected(inValue,compareValue){
         const updateNotifyLabel = () => {
           node.icon = 'notifications';
           const title = (node.data.notifyTitle || '').trim();
-          node.label = title ? `Notify: ${title}` : 'Notify';
+          node.label = node.data.actionName || (title ? `Notify: ${title}` : 'Notify');
           renderNode(selectedNode);
+        };
+
+        // Wire up action name field
+        const actionNameField = document.getElementById('prop-action-name');
+        actionNameField.value = node.data.actionName || '';
+        actionNameField.oninput = function() {
+          node.data.actionName = this.value.trim();
+          updateNotifyLabel();
+        };
+        actionNameField.onchange = function() {
+          node.data.actionName = this.value.trim();
+          updateNotifyLabel();
         };
 
         notifyTypeField.value = node.data.notifyType || 'INFORMATION';
