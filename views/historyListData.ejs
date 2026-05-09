@@ -117,7 +117,7 @@ if (Array.isArray(historyList)) {
             else groupValue = historyList[i].jobName;
             groupId = groupValue.replace(/[^a-zA-Z0-9]/g, '');
           } else if (sort === 'runDate') {
-            groupValue = (historyList[i].runDate.split("T")[0]); // Group by date, excluding time
+            groupValue = (historyList[i].runDate.split(/[T ]/)[0]); // Group by date, excluding time
             groupId = groupValue.replace(/[^a-zA-Z0-9]/g, '');
 
           } else if (sort === 'runTime') {
