@@ -1066,6 +1066,8 @@ class WebSocketHandler {
     this.processMessageCallback = processMessageCallback;
     this.reconnectTimeoutId = null;
     this.connectionGeneration = 0;
+    this.heartbeatIntervalId = null;
+    this.lastActivityTime = null;
     this.retryManager = new RetryBackoffManager(this.agentId, 'WebSocket');
   }
 
@@ -1111,6 +1113,8 @@ class WebSocketHandler {
         this.isConnecting = false;
         this.retryManager.reset();
         this.isReconnecting = false;
+        this.lastActivityTime = Date.now();
+        this._startHeartbeat(generation);
         debug(DEBUG_LEVEL.INFO, `WebSocket server connected [${this.agentId}]`);
         resolve(this.client);
       });
@@ -1137,6 +1141,7 @@ class WebSocketHandler {
 
       this.client.addEventListener('message', (event) => {
         if (generation !== this.connectionGeneration) return;
+        this.lastActivityTime = Date.now();
         const message = `"${event.data}"`;
         debug(DEBUG_LEVEL.TRACE, `Received message on [${connId}]: ${message}`);
         this.processMessageCallback(message);
@@ -1155,6 +1160,36 @@ class WebSocketHandler {
         }
       }, this.connectionTimeout);
     });
+  }
+
+  _startHeartbeat(generation) {
+    if (this.heartbeatIntervalId) {
+      clearInterval(this.heartbeatIntervalId);
+      this.heartbeatIntervalId = null;
+    }
+    const HEARTBEAT_INTERVAL_MS = 30 * 1000;  // check every 30s
+    const HEARTBEAT_STALE_MS = 90 * 1000;     // stale if no activity for 90s
+    this.heartbeatIntervalId = setInterval(() => {
+      if (generation !== this.connectionGeneration) {
+        clearInterval(this.heartbeatIntervalId);
+        this.heartbeatIntervalId = null;
+        return;
+      }
+      if (!this.isConnected) return;
+      const elapsed = Date.now() - this.lastActivityTime;
+      if (elapsed > HEARTBEAT_STALE_MS) {
+        debug(DEBUG_LEVEL.WARN, `[WebSocket] ${this.agentId} - No activity for ${Math.round(elapsed / 1000)}s, connection appears stale. Forcing reconnect.`);
+        clearInterval(this.heartbeatIntervalId);
+        this.heartbeatIntervalId = null;
+        this.isConnected = false;
+        this.isConnecting = false;
+        try { this.client.close(); } catch (e) {}
+        if (!this.isReconnecting) {
+          this.triggerReconnect();
+        }
+      }
+    }, HEARTBEAT_INTERVAL_MS);
+    activeIntervals.push(this.heartbeatIntervalId);
   }
 
   triggerReconnect() {
@@ -1200,6 +1235,10 @@ class WebSocketHandler {
   }
 
   disconnect() {
+    if (this.heartbeatIntervalId) {
+      clearInterval(this.heartbeatIntervalId);
+      this.heartbeatIntervalId = null;
+    }
     if (this.reconnectTimeoutId) {
       clearTimeout(this.reconnectTimeoutId);
       this.reconnectTimeoutId = null;
