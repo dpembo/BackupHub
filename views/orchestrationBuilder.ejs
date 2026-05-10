@@ -313,6 +313,50 @@ function isSelected(inValue,compareValue){
       padding: 20px 24px 8px 24px;
     }
 
+    /* ── Canvas Context Menu ─────────────────────────────────────── */
+    #canvas-context-menu {
+      position: fixed;
+      background: var(--surface-color, #fff);
+      border: 1px solid var(--border-color, #ddd);
+      border-radius: 6px;
+      box-shadow: 0 4px 18px rgba(0,0,0,0.16);
+      z-index: 9999;
+      min-width: 195px;
+      padding: 4px 0;
+      user-select: none;
+      display: none;
+    }
+    #canvas-context-menu.visible { display: block; }
+    .ctx-menu-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 16px;
+      cursor: pointer;
+      font-size: 13px;
+      color: var(--text-primary, #333);
+      transition: background 0.1s;
+    }
+    .ctx-menu-item:hover:not(.ctx-disabled) { background: var(--surface-secondary, #f0f0f0); }
+    .ctx-menu-item.ctx-disabled {
+      color: var(--text-muted, #bbb);
+      cursor: default;
+    }
+    .ctx-menu-item .material-icons {
+      font-size: 17px;
+      color: var(--text-muted, #666);
+    }
+    .ctx-menu-item.ctx-disabled .material-icons { color: var(--border-color, #ccc); }
+    .ctx-menu-item.ctx-danger { color: #f44336; }
+    .ctx-menu-item.ctx-danger .material-icons { color: #f44336; }
+    .ctx-menu-item.ctx-danger.ctx-disabled { color: var(--text-muted, #bbb); }
+    .ctx-menu-item.ctx-danger.ctx-disabled .material-icons { color: var(--border-color, #ccc); }
+    .ctx-menu-separator {
+      height: 1px;
+      background: var(--border-color, #e0e0e0);
+      margin: 4px 0;
+    }
+
   </style>
   <link rel="stylesheet" href="/css/spectrum/spectrum.min.css">
   <script src="/js/spectrum/spectrum.min.js"></script>
@@ -804,7 +848,37 @@ function isSelected(inValue,compareValue){
       <a href="#!" onclick="discardOrchestrationChanges()" class="waves-effect waves-red btn-flat" style="color: #f44336; font-weight: 600;">Discard &amp; Exit</a>
     </div>
   </div>
-  
+
+  <!-- Canvas Right-click Context Menu -->
+  <div id="canvas-context-menu">
+    <div class="ctx-menu-item ctx-danger" id="ctx-delete" onclick="ctxMenuDelete()">
+      <i class="material-icons">delete</i> Delete
+    </div>
+    <div class="ctx-menu-item" id="ctx-clone" onclick="ctxMenuClone()">
+      <i class="material-icons">content_copy</i> Clone
+    </div>
+    <div class="ctx-menu-separator"></div>
+    <div class="ctx-menu-item" id="ctx-undo" onclick="ctxMenuUndo()">
+      <i class="material-icons">undo</i> Undo
+    </div>
+    <div class="ctx-menu-item" id="ctx-redo" onclick="ctxMenuRedo()">
+      <i class="material-icons">redo</i> Redo
+    </div>
+    <div class="ctx-menu-separator"></div>
+    <div class="ctx-menu-item" onclick="ctxMenuZoomIn()">
+      <i class="material-icons">zoom_in</i> Zoom In
+    </div>
+    <div class="ctx-menu-item" onclick="ctxMenuZoomOut()">
+      <i class="material-icons">zoom_out</i> Zoom Out
+    </div>
+    <div class="ctx-menu-item" onclick="ctxMenuZoomReset()">
+      <i class="material-icons">youtube_searched_for</i> Reset Zoom
+    </div>
+    <div class="ctx-menu-item" onclick="ctxMenuAutoLayout()">
+      <i class="material-icons">auto_fix_high</i> Auto Layout
+    </div>
+  </div>
+
   <script>
     // SVG-based orchestration builder with labeled exit ports for conditions
     
@@ -977,6 +1051,13 @@ function isSelected(inValue,compareValue){
       svg.addEventListener('click', onSVGClick);
       svg.addEventListener('mousemove', onSVGMouseMove);
       svg.addEventListener('mouseup', onSVGMouseUp);
+      svg.addEventListener('contextmenu', onSVGContextMenu);
+
+      // Hide context menu on any click or new contextmenu elsewhere
+      document.addEventListener('click', hideContextMenu);
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') hideContextMenu();
+      });
     }
 
     function getCanvasPointFromEvent(e) {
@@ -2526,6 +2607,7 @@ function isSelected(inValue,compareValue){
       hitArea.setAttribute('stroke', 'transparent');
       hitArea.setAttribute('stroke-width', '14');
       hitArea.setAttribute('fill', 'none');
+      hitArea.setAttribute('data-edge-id', edge.id);
       hitArea.style.cursor = 'pointer';
       hitArea.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -2725,7 +2807,177 @@ function isSelected(inValue,compareValue){
       updatePropertiesPanel();
       renderAllNodes();
     }
-    
+
+    // ── Context Menu ─────────────────────────────────────────────────────────
+
+    let _ctxMenuNodeId = null;
+    let _ctxMenuEdgeId = null;
+
+    function _ctxGetClickTarget(e) {
+      let el = e.target;
+      while (el && el !== svg) {
+        if (el.hasAttribute && el.hasAttribute('data-node-id')) {
+          return { type: 'node', id: el.getAttribute('data-node-id') };
+        }
+        if (el.hasAttribute && el.hasAttribute('data-edge-id')) {
+          return { type: 'edge', id: el.getAttribute('data-edge-id') };
+        }
+        el = el.parentElement;
+      }
+      return { type: 'canvas' };
+    }
+
+    function onSVGContextMenu(e) {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const target = _ctxGetClickTarget(e);
+      _ctxMenuNodeId = null;
+      _ctxMenuEdgeId = null;
+
+      if (target.type === 'node') {
+        _ctxMenuNodeId = target.id;
+        // Select and highlight the node so context is clear
+        selectedNodes.clear();
+        selectedNodes.add(_ctxMenuNodeId);
+        selectedNode = _ctxMenuNodeId;
+        selectedEdge = null;
+        updatePropertiesPanel();
+        renderAllNodes();
+      } else if (target.type === 'edge') {
+        _ctxMenuEdgeId = target.id;
+        // Select the edge visually
+        selectedEdge = target.id;
+        selectedNode = null;
+        selectedNodes.clear();
+        updatePropertiesPanel();
+        renderAllNodes();
+      }
+
+      const node = _ctxMenuNodeId ? nodes[_ctxMenuNodeId] : null;
+      const isStartNode = node && node.type === 'start';
+      const isOnNode = target.type === 'node';
+      const isOnEdge = target.type === 'edge';
+      const isOnCanvas = target.type === 'canvas';
+
+      // Delete: disabled on blank canvas only
+      _ctxSetDisabled('ctx-delete', isOnCanvas);
+      // Clone: disabled unless on a non-start node
+      _ctxSetDisabled('ctx-clone', !isOnNode || isStartNode);
+      // Undo/Redo: reflect stack state
+      _ctxSetDisabled('ctx-undo', undoStack.length <= 1);
+      _ctxSetDisabled('ctx-redo', redoStack.length === 0);
+
+      const menu = document.getElementById('canvas-context-menu');
+      // Briefly show off-screen to measure height
+      menu.style.visibility = 'hidden';
+      menu.style.left = '0px';
+      menu.style.top = '0px';
+      menu.classList.add('visible');
+      const menuW = menu.offsetWidth || 195;
+      const menuH = menu.offsetHeight || 290;
+      menu.style.visibility = '';
+
+      const vpW = window.innerWidth;
+      const vpH = window.innerHeight;
+      let left = e.clientX;
+      let top = e.clientY;
+
+      // Flip up if near the bottom of the viewport
+      if (top + menuH > vpH - 8) top = Math.max(0, top - menuH);
+      // Clamp to right edge (don't let it overflow horizontally)
+      if (left + menuW > vpW - 8) left = Math.max(0, vpW - menuW - 8);
+
+      menu.style.left = left + 'px';
+      menu.style.top = top + 'px';
+    }
+
+    function _ctxSetDisabled(id, disabled) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.classList.toggle('ctx-disabled', disabled);
+    }
+
+    function hideContextMenu() {
+      const menu = document.getElementById('canvas-context-menu');
+      if (menu) menu.classList.remove('visible');
+    }
+
+    function ctxMenuDelete() {
+      hideContextMenu();
+      if (_ctxMenuNodeId) {
+        selectedNode = _ctxMenuNodeId;
+        deleteSelectedNode();
+      } else if (_ctxMenuEdgeId) {
+        selectedEdge = _ctxMenuEdgeId;
+        deleteSelectedEdge();
+      }
+    }
+
+    function ctxMenuClone() {
+      hideContextMenu();
+      if (!_ctxMenuNodeId) return;
+      const source = nodes[_ctxMenuNodeId];
+      if (!source || source.type === 'start') return;
+
+      nodeIdCounter++;
+      const newId = 'node_' + nodeIdCounter;
+      const cloned = JSON.parse(JSON.stringify(source));
+      cloned.id = newId;
+      cloned.x = source.x + 60;
+      cloned.y = source.y + 60;
+      nodes[newId] = cloned;
+
+      // Select the cloned node so the user can immediately configure it
+      selectedNodes.clear();
+      selectedNodes.add(newId);
+      selectedNode = newId;
+      selectedEdge = null;
+
+      renderNode(newId);
+      expandCanvasForNode(newId);
+      updateStats();
+      updatePropertiesPanel();
+      renderAllNodes();
+      commitHistorySnapshot();
+      M.toast({ html: 'Node cloned' });
+    }
+
+    function ctxMenuUndo() {
+      hideContextMenu();
+      undoGraphChange();
+    }
+
+    function ctxMenuRedo() {
+      hideContextMenu();
+      redoGraphChange();
+    }
+
+    function ctxMenuZoomIn() {
+      hideContextMenu();
+      zoomLevel = Math.min(zoomLevel + 0.1, 3);
+      applyZoom();
+    }
+
+    function ctxMenuZoomOut() {
+      hideContextMenu();
+      zoomLevel = Math.max(zoomLevel - 0.1, 0.5);
+      applyZoom();
+    }
+
+    function ctxMenuZoomReset() {
+      hideContextMenu();
+      zoomLevel = 1;
+      applyZoom();
+    }
+
+    function ctxMenuAutoLayout() {
+      hideContextMenu();
+      autoLayoutOrchestration();
+    }
+
+    // ── End Context Menu ─────────────────────────────────────────────────────
+
     function createEdge(fromId, toId, fromPort) {
       const fromNode = nodes[fromId];
       const allowMultiple = Boolean(fromNode && fromNode.type === 'split-join' && (fromNode.data?.mode || 'split') === 'split');
