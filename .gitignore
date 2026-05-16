@@ -138,6 +138,10 @@ dist
 commands/
 data/
 scripts/
+
+# Installed plugins (directory tracked via plugins/.gitkeep)
+plugins/*
+!plugins/.gitkeep
 INTERNAL.md
 add-dev-assets-to-repo.sh
 backupApp2.code-workspace

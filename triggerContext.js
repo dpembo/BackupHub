@@ -181,23 +181,83 @@ function getValue(context, path) {
 }
 
 /**
- * Substitute template placeholders with context values
- * Supports #{context.metric.value}, #{context.condition.threshold}, etc.
+ * Resolve a dot-path with optional [n] array indexing against an object.
+ * e.g. resolvePath(obj, 'items[0].name') or resolvePath(obj, 'stats.total_size')
+ * Unresolved paths return null.
+ * @param {object} obj - Object to resolve against
+ * @param {string} path - Dot-path string, may include [n] array indices
+ * @returns {any} Resolved value or null
+ */
+function resolvePath(obj, path) {
+  if (obj === null || obj === undefined || !path) return null;
+  // Tokenise: split on '.' then expand [n] segments within each token
+  const tokens = path.split('.').flatMap(segment => {
+    const parts = [];
+    let rest = segment;
+    const arrayRe = /^([^\[]*)(\[(\d+)\])(.*)$/;
+    let m;
+    while ((m = arrayRe.exec(rest)) !== null) {
+      if (m[1]) parts.push(m[1]);
+      parts.push(m[3]);
+      rest = m[4];
+    }
+    if (rest) parts.push(rest);
+    return parts;
+  });
+  return tokens.reduce((cur, key) => (cur !== null && cur !== undefined ? cur[key] : null), obj) ?? null;
+}
+
+/**
+ * Substitute template placeholders with context values.
+ * Supports:
+ *   #{context.metric.value}  — trigger context fields
+ *   #{webhook.payload.*}     — webhook payload shorthand
+ *   #{metric.*}              — metric shorthand
+ *   #{nodes.<alias>.<path>}  — workflow node output context
  * @param {string} template - Template string with placeholders
  * @param {object} context - Trigger context
+ * @param {object} [nodeOutputs] - Optional map of node alias -> nodeOutput record
  * @returns {string} Substituted string
  */
-function substituteTemplate(template, context) {
+function substituteTemplate(template, context, nodeOutputs) {
   if (!template || typeof template !== 'string') return template;
-  
-  return template.replace(/#{context\.([^}]+)}/g, (match, path) => {
+
+  // Resolve #{nodes.<alias>.<path>} from nodeOutputs
+  let result = template.replace(/#{nodes\.([a-z0-9_]+)\.([^}]+)}/g, (match, alias, path) => {
+    if (!nodeOutputs || !nodeOutputs[alias]) {
+      logger.warn(`[TEMPLATE] Node alias '${alias}' not found in nodeOutputs`);
+      return '';
+    }
+    const nodeOutput = nodeOutputs[alias];
+    // Meta fields take precedence
+    const metaFields = ['exitCode', 'stdout', 'stderr', 'status', 'startTime', 'endTime', 'type'];
+    if (metaFields.includes(path)) {
+      const val = nodeOutput[path];
+      return val !== null && val !== undefined ? String(val) : '';
+    }
+    // Otherwise resolve into parsedOutput
+    if (nodeOutput.parsedOutput === null || nodeOutput.parsedOutput === undefined) {
+      logger.warn(`[TEMPLATE] Node '${alias}' has no parsedOutput, cannot resolve '${path}'`);
+      return '';
+    }
+    const val = resolvePath(nodeOutput.parsedOutput, path);
+    if (val === null) {
+      logger.warn(`[TEMPLATE] Path '${path}' not found in parsedOutput of node '${alias}'`);
+      return '';
+    }
+    return typeof val === 'object' ? JSON.stringify(val) : String(val);
+  });
+
+  // Resolve legacy #{context.*} placeholders
+  result = result.replace(/#{context\.([^}]+)}/g, (match, path) => {
     const value = getValue(context, path);
     if (value !== null && value !== undefined) {
-      // Use JSON.stringify for objects, String() for primitives
       return typeof value === 'object' ? JSON.stringify(value) : String(value);
     }
     return match;
   });
+
+  return result;
 }
 
 /**
@@ -327,6 +387,7 @@ module.exports = {
   contextToEnvVars,
   isValidTriggerContext,
   getValue,
+  resolvePath,
   substituteTemplate,
   SAMPLE_TEMPLATES
 };

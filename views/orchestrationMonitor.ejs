@@ -2211,6 +2211,7 @@
       const isHttpNode = node.type === 'execute' && node.data?.executeType === 'http';
       const isWaitNode = node.type === 'wait';
       const isNotifyNode = node.type === 'notify';
+      const isPluginNode = node.type === 'plugin';
       const nodeExecution = executionData.execution;
       const statusInfo = getNodeStatusInfo(nodeId);
 
@@ -2391,6 +2392,19 @@
             <div class="detail-label">Script</div>
             <div class="detail-value" style="font-family: 'Courier New', monospace; word-break: break-all;" title="${escapeHtml(scriptPath)}">${escapeHtml(scriptName)}</div>
           </div>`;
+      } else if (isPluginNode) {
+        const pluginName = node.data?.pluginName || '';
+        const inputKeys = Object.keys(node.data || {}).filter(k => k.startsWith('plugin_input_'));
+        const inputRows = inputKeys.map(k => {
+          const label = k.replace('plugin_input_', '');
+          const val = node.data[k];
+          return `<div class="detail-item"><div class="detail-label">${escapeHtml(label)}</div><div class="detail-value" style="font-family:'Courier New',monospace;word-break:break-all;">${escapeHtml(String(val ?? ''))}</div></div>`;
+        }).join('');
+        scriptDetailsHtml = `
+          <div class="detail-item">
+            <div class="detail-label">Plugin</div>
+            <div class="detail-value" style="font-family: 'Courier New', monospace;">${escapeHtml(pluginName)}</div>
+          </div>${inputRows}`;
       }
 
       // Condition evaluation details (for condition nodes)
@@ -2421,10 +2435,21 @@
           
           const conditionDisplay = `${escapeHtml(conditionEval.type)} ${operatorDisplay} ${escapeHtml(String(conditionEval.value))}`;
           
-          conditionHtml = `<div class="detail-item">
-            <div class="detail-label">CONDITION</div>
-            <div class="detail-value">${conditionDisplay}</div>
-          </div>
+          const actualValueHtml = conditionEval.actualValue !== null && conditionEval.actualValue !== undefined
+            ? `<div class="detail-item">
+                <div class="detail-label">Actual Value</div>
+                <div class="detail-value" style="font-family: monospace;">${escapeHtml(String(conditionEval.actualValue))}</div>
+              </div>
+              <div class="detail-item">
+                <div class="detail-label">Threshold</div>
+                <div class="detail-value" style="font-family: monospace;">${escapeHtml(String(conditionEval.value))}</div>
+              </div>`
+            : `<div class="detail-item">
+                <div class="detail-label">CONDITION</div>
+                <div class="detail-value">${conditionDisplay}</div>
+              </div>`;
+
+          conditionHtml = `${actualValueHtml}
           <div class="detail-item">
             <div class="detail-label">Result</div>
             <div class="detail-value" style="display: flex; align-items: center; gap: 6px;">

@@ -301,7 +301,7 @@ if (Array.isArray(historyList)) {
                         <span title="subnode execution" class="material-icons vertMid" style="color:<%=childArrowColor%>;font-size:16pt">subdirectory_arrow_right</span>
                   </td>
                   <td style="vertical-align: top;">
-                    <span style="font-size: 0.9em; color: var(--text-muted);"></span><%=childNode.jobName%>
+                    <span style="font-size: 0.9em; color: var(--text-muted);"></span><% if (childNode.nodeAlias) { %><%=childNode.nodeAlias%><% } else { var nodeIdMatch = childNode.jobName.match(/Node \[(.+?)\]$/); %><%=(nodeIdMatch ? nodeIdMatch[1] : childNode.jobName)%><% } %>
                   </td>
                   <td style="vertical-align: top;">
                     <% var runType="crop_16_9"; var runDesc="execution node";%>

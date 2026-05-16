@@ -81,6 +81,7 @@ nodemailer = require('nodemailer');
 notifier = require ("./notify.js");
 const backupManager = require('./backupManager.js');
 const importExportManager = require('./utils/importExportManager.js');
+const pluginManager = require('./pluginManager.js');
 
 serverConfig = confighandler.initServerConfig({});
 serverConfig = confighandler.loadConfigJson("./data/server-config.json");
@@ -4278,6 +4279,14 @@ app.get('/rest/orchestration/scripts', User.isAuthenticated, User.requirePermiss
 }));
 
 /**
+ * Get list of available plugins for orchestration
+ */
+app.get('/rest/orchestration/plugins', User.isAuthenticated, User.requirePermission(PERMISSIONS.ORCHESTRATIONS_VIEW), asyncHandler(async (req, res) => {
+  const plugins = await orchestration.getAvailablePlugins();
+  res.json(plugins);
+}));
+
+/**
  * Get list of available agents for orchestration execution
  */
 app.get('/rest/orchestration/agents', User.isAuthenticated, User.requirePermission(PERMISSIONS.ORCHESTRATIONS_VIEW), asyncHandler(async (req, res) => {
@@ -4470,6 +4479,65 @@ app.delete('/rest/history/:index', User.isAuthenticated, User.requirePermission(
   items.splice(index, 1);
   await hist.updateDb();
   res.json({ success: true });
+}));
+
+// =========================
+// PLUGIN MANAGER PAGE
+// =========================
+
+app.get('/plugins.html', User.isAuthenticated, User.requirePermission(PERMISSIONS.PLUGINS_MANAGE), asyncHandler(async (req, res) => {
+  res.render('pluginManager', { version, user: req.session.user, csrf: req.csrfToken() });
+}));
+
+// =========================
+// PLUGIN MANAGER REST API
+// =========================
+
+// GET /rest/plugins/registry — fetch remote registry merged with local install status
+app.get('/rest/plugins/registry', User.isAuthenticated, User.requirePermission(PERMISSIONS.PLUGINS_MANAGE), asyncHandler(async (req, res) => {
+  const pluginRegistry = require('./pluginRegistry.js');
+  const remoteRegistry = await pluginManager.fetchRemoteRegistry(serverConfig.pluginRegistry);
+  const installed = pluginRegistry.getRegistry();
+
+  const rawBase   = (serverConfig.pluginRegistry && serverConfig.pluginRegistry.url || '').replace(/\/registry\.json$/, '');
+  const sourceBase = (remoteRegistry.source || '').replace(/\/$/, '');
+  const plugins = remoteRegistry.plugins.map(p => {
+    const local = installed[p.name];
+    return {
+      ...p,
+      installed:        !!local,
+      installedVersion: local ? (local.version || null) : null,
+      updateAvailable:  !!(local && local.version && p.version && local.version !== p.version),
+      iconUrl:          rawBase && p.path ? `${rawBase}/${p.path}/icon.svg` : null,
+      docsUrl:          sourceBase && p.path ? `${sourceBase}/blob/main/${p.path}/docs.md` : null,
+    };
+  });
+
+  res.json({ success: true, plugins, registryVersion: remoteRegistry.registryVersion, updated: remoteRegistry.updated });
+}));
+
+// POST /rest/plugins/install/:name — download and install a plugin from the registry
+app.post('/rest/plugins/install/:name', User.isAuthenticated, User.requirePermission(PERMISSIONS.PLUGINS_MANAGE), express.json(), asyncHandler(async (req, res) => {
+  const pluginName    = req.params.name;
+  const registryEntry = req.body && req.body.registryEntry;
+
+  if (!registryEntry || typeof registryEntry !== 'object') {
+    return res.status(400).json({ success: false, message: 'Request body must include registryEntry' });
+  }
+
+  await pluginManager.installPlugin(pluginName, registryEntry, serverConfig.pluginRegistry);
+  await require('./pluginRegistry.js').reload();
+  logger.info(`[PLUGIN MANAGER] Plugin installed: ${pluginName} by ${req.session.user && req.session.user.username}`);
+  res.json({ success: true, message: `Plugin '${pluginName}' installed successfully` });
+}));
+
+// DELETE /rest/plugins/:name — uninstall a plugin
+app.delete('/rest/plugins/:name', User.isAuthenticated, User.requirePermission(PERMISSIONS.PLUGINS_MANAGE), asyncHandler(async (req, res) => {
+  const pluginName = req.params.name;
+  await pluginManager.uninstallPlugin(pluginName);
+  await require('./pluginRegistry.js').reload();
+  logger.info(`[PLUGIN MANAGER] Plugin uninstalled: ${pluginName} by ${req.session.user && req.session.user.username}`);
+  res.json({ success: true, message: `Plugin '${pluginName}' uninstalled successfully` });
 }));
 
 // =========================
@@ -5019,8 +5087,13 @@ var server = app.listen(port, async function () {
     
     await orchestration.init();
     logger.info('Orchestration module initialized successfully');
-    
-    // Migrate to versioned format if needed
+
+    try {
+      await require('./pluginRegistry.js').init();
+      logger.info('Plugin registry initialized successfully');
+    } catch (pluginInitErr) {
+      logger.warn(`Plugin registry initialization failed (non-fatal): ${pluginInitErr.message}`);
+    }
     try {
       const migratedCount = await orchestration.migrateToVersionedFormat();
       if (migratedCount > 0) {
