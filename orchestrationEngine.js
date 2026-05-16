@@ -142,6 +142,64 @@ function serializeHttpData(data) {
   }
 }
 
+/**
+ * Parse stdout to extract structured JSON output.
+ * Tries full parse first, then scans for an embedded JSON object block.
+ * @param {string} stdout - Raw stdout string
+ * @returns {object|null} Parsed object or null
+ */
+function parseNodeOutput(stdout) {
+  if (!stdout || typeof stdout !== 'string') return null;
+  const trimmed = stdout.trim();
+  // 1. Full parse
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (parsed !== null && typeof parsed === 'object') return parsed;
+  } catch (_e) { /* not full JSON */ }
+  // 2. Scan for embedded JSON object block
+  const match = trimmed.match(/\{[\s\S]*\}/);
+  if (match) {
+    try {
+      const parsed = JSON.parse(match[0]);
+      if (parsed !== null && typeof parsed === 'object') return parsed;
+    } catch (_e) { /* not valid JSON block */ }
+  }
+  return null;
+}
+
+/**
+ * Write a JOB_HISTORY entry for a non-script action node (http, notify, wait).
+ * Script nodes are handled by agentMessageProcessor.js on agent callback.
+ * @param {object} executionLog - Current execution log
+ * @param {string} nodeId - Node ID (opaque)
+ * @param {string} nodeAlias - Human-readable alias for display
+ * @param {object} output - scriptOutputs record for this node
+ */
+function writeNodeHistory(executionLog, nodeId, nodeAlias, output) {
+  try {
+    const history = require('./history.js');
+    const nodeJobName = `Orchestration [${executionLog.jobId}] Execution [${executionLog.executionId}] Node [${nodeId}]`;
+    const startTime = output.startTime || new Date().toISOString();
+    const endTime = output.endTime || startTime;
+    const runTimeSecs = Math.max(0, Math.round((new Date(endTime).getTime() - new Date(startTime).getTime()) / 1000));
+    const logMessage = [output.stdout, output.stderr].filter(Boolean).join('\n\n');
+
+    const histItem = history.createHistoryItem(
+      nodeJobName,
+      startTime,
+      output.exitCode ?? 0,
+      runTimeSecs,
+      logMessage,
+      executionLog.manual || false,
+      executionLog.executionId,
+      executionLog.rerunFrom || null,
+      nodeAlias
+    );
+    history.add(histItem);
+  } catch (err) {
+    logger.warn(`[ORCHESTRATION] Failed to write node history for [${nodeId}]: ${err.message}`);
+  }
+}
 
 /**
  * Execute an orchestration job
@@ -165,13 +223,14 @@ async function executeJob(jobId, isManual = false, executionId = null, onNodeCom
     currentNode: null,
     visitedNodes: [],
     scriptOutputs: {},
+    nodeOutputs: {},  // Workflow context: alias -> { type, exitCode, stdout, stderr, parsedOutput, ... }
     conditionEvaluations: {},
-    nodeMetrics: {},  // NEW: Unified timing for all node types
+    nodeMetrics: {},  // Unified timing for all node types
     errors: [],
     finalStatus: null,
     manual: isManual,  // Track whether this was a manual execution
     triggerContext: triggerContextParam || null,  // Store trigger context for template substitution and logging
-    rerunFrom: rerunFrom || null  // NEW: Track if this is a rerun of a failed execution
+    rerunFrom: rerunFrom || null  // Track if this is a rerun of a failed execution
   };
 
   try {
@@ -208,6 +267,10 @@ async function executeJob(jobId, isManual = false, executionId = null, onNodeCom
     if (!startNode) {
       throw new Error('No start node found in orchestration');
     }
+
+    // When true, any non-zero exit code immediately terminates the orchestration
+    // instead of following the next edge toward an end node.
+    const terminateOnError = !!startNode.data?.terminateOnError;
 
     // Build maps for node and edge traversal.
     const nodeMap = {};
@@ -392,7 +455,7 @@ async function executeJob(jobId, isManual = false, executionId = null, onNodeCom
           const applyTemplate = (value) => {
             if (typeof value !== 'string') return value;
             if (!value.includes('#{')) return value;
-            return triggerContext.substituteTemplate(value, getTemplateContext());
+            return triggerContext.substituteTemplate(value, getTemplateContext(), executionLog.nodeOutputs);
           };
 
           const url = applyTemplate(rawUrl);
@@ -456,7 +519,7 @@ async function executeJob(jobId, isManual = false, executionId = null, onNodeCom
             const responseBody = serializeHttpData(httpErr?.response?.data);
             const responseStatus = httpErr?.response?.status;
 
-            executionLog.scriptOutputs[currentNode.id] = {
+            const httpErrOutput = {
               script: `HTTP ${method} ${url}`,
               parameters: '',
               agent: 'http',
@@ -470,8 +533,24 @@ async function executeJob(jobId, isManual = false, executionId = null, onNodeCom
               httpUrl: url,
               httpStatus: responseStatus || null
             };
+            executionLog.scriptOutputs[currentNode.id] = httpErrOutput;
+            const httpErrAlias = currentNode.data?.alias || currentNode.id;
+            executionLog.nodeOutputs[httpErrAlias] = {
+              type: 'execute',
+              exitCode: 1,
+              stdout: httpErrOutput.stdout,
+              stderr: httpErrOutput.stderr,
+              parsedOutput: parseNodeOutput(httpErrOutput.stdout),
+              startTime: failureTime,
+              endTime: failureTime,
+              status: 'failed'
+            };
+            writeNodeHistory(executionLog, currentNode.id, httpErrAlias, httpErrOutput);
 
             markNodeCompleted(currentNode, nodeStartTime, 'failed', { exitCode: 1 });
+            if (terminateOnError) {
+              throw new Error(`Orchestration terminated: HTTP execute node [${currentNode.id}] failed: ${httpErr?.message || 'request error'}`);
+            }
             const outgoing = getOutgoingEdges(currentNode.id, 'out');
             if (outgoing.length === 0) {
               return 'failure';
@@ -487,7 +566,7 @@ async function executeJob(jobId, isManual = false, executionId = null, onNodeCom
           const exitCode = responseStatus >= 200 && responseStatus < 300 ? 0 : 1;
           const completedAt = new Date().toISOString();
 
-          executionLog.scriptOutputs[currentNode.id] = {
+          const httpOutput = {
             script: `HTTP ${method} ${url}`,
             parameters: '',
             agent: 'http',
@@ -501,9 +580,26 @@ async function executeJob(jobId, isManual = false, executionId = null, onNodeCom
             httpUrl: url,
             httpStatus: responseStatus
           };
+          executionLog.scriptOutputs[currentNode.id] = httpOutput;
+          const httpAlias = currentNode.data?.alias || currentNode.id;
+          executionLog.nodeOutputs[httpAlias] = {
+            type: 'execute',
+            exitCode,
+            stdout: responseBody,
+            stderr: httpOutput.stderr,
+            parsedOutput: parseNodeOutput(responseBody),
+            startTime: completedAt,
+            endTime: completedAt,
+            status: exitCode === 0 ? 'success' : 'failed'
+          };
+          writeNodeHistory(executionLog, currentNode.id, httpAlias, httpOutput);
 
           const status = exitCode === 0 ? 'success' : 'failed';
           markNodeCompleted(currentNode, nodeStartTime, status, { exitCode });
+
+          if (terminateOnError && exitCode !== 0) {
+            throw new Error(`Orchestration terminated: HTTP execute node [${currentNode.id}] failed with exit code ${exitCode}`);
+          }
 
           const outgoing = getOutgoingEdges(currentNode.id, 'out');
           if (outgoing.length === 0) {
@@ -539,7 +635,7 @@ async function executeJob(jobId, isManual = false, executionId = null, onNodeCom
             logger.debug('[ORCHESTRATION] No trigger context - using default test context for template substitution');
           }
 
-          parameters = triggerContext.substituteTemplate(parameters, contextForSubstitution);
+          parameters = triggerContext.substituteTemplate(parameters, contextForSubstitution, executionLog.nodeOutputs);
           logger.debug(`[ORCHESTRATION] Applied template substitution to parameters. Result: [${parameters}]`);
         }
 
@@ -598,7 +694,7 @@ async function executeJob(jobId, isManual = false, executionId = null, onNodeCom
                 : `Failed to read script [${fullScriptPath}]: ${readErr.message}`;
 
               const failureTime = new Date().toISOString();
-              executionLog.scriptOutputs[currentNode.id] = {
+              const scriptReadErrOutput = {
                 script: scriptPath,
                 parameters,
                 agent: agentId,
@@ -608,6 +704,18 @@ async function executeJob(jobId, isManual = false, executionId = null, onNodeCom
                 stderr: scriptReadMessage,
                 startTime: failureTime,
                 endTime: failureTime
+              };
+              executionLog.scriptOutputs[currentNode.id] = scriptReadErrOutput;
+              const scriptReadAlias = currentNode.data?.alias || currentNode.id;
+              executionLog.nodeOutputs[scriptReadAlias] = {
+                type: 'execute',
+                exitCode: 1,
+                stdout: scriptReadMessage,
+                stderr: scriptReadMessage,
+                parsedOutput: null,
+                startTime: failureTime,
+                endTime: failureTime,
+                status: 'failed'
               };
 
               logger.error(`[ORCHESTRATION] ${scriptReadMessage}`);
@@ -661,6 +769,18 @@ async function executeJob(jobId, isManual = false, executionId = null, onNodeCom
             endTime: result.endTime
           };
 
+          const scriptAlias = currentNode.data?.alias || currentNode.id;
+          executionLog.nodeOutputs[scriptAlias] = {
+            type: 'execute',
+            exitCode: result.exitCode || 0,
+            stdout: result.stdout || '',
+            stderr: result.stderr || '',
+            parsedOutput: parseNodeOutput(result.stdout || ''),
+            startTime: result.startTime,
+            endTime: result.endTime,
+            status: (result.exitCode || 0) === 0 ? 'success' : 'failed'
+          }; 
+
           if (result.stderr && (result.stderr.includes('offline') || result.stderr.includes('not found'))) {
             logger.error(`Execute step failed for node [${currentNode.id}]: ${result.stderr}`);
           } else {
@@ -669,6 +789,10 @@ async function executeJob(jobId, isManual = false, executionId = null, onNodeCom
 
           const status = result.exitCode === 0 ? 'success' : 'failed';
           markNodeCompleted(currentNode, nodeStartTime, status, { exitCode: result.exitCode || 0 });
+
+          if (terminateOnError && (result.exitCode || 0) !== 0) {
+            throw new Error(`Orchestration terminated: execute node [${currentNode.id}] failed with exit code ${result.exitCode || 0}`);
+          }
 
           const outgoing = getOutgoingEdges(currentNode.id, 'out');
           if (outgoing.length === 0) {
@@ -702,30 +826,59 @@ async function executeJob(jobId, isManual = false, executionId = null, onNodeCom
         let result = false;
 
         try {
-          const lastScriptNode = pathContext.lastScriptNodeId;
+          // Resolve which node's output to inspect
+          // sourceNodeAlias (new): explicit alias reference
+          // fallback: pathContext.lastScriptNodeId (legacy behaviour)
+          const sourceAlias = currentNode.data.sourceNodeAlias;
+          let sourceOutput = null;
+          let sourceNodeId = null;
+
+          if (sourceAlias && executionLog.nodeOutputs[sourceAlias]) {
+            sourceOutput = executionLog.nodeOutputs[sourceAlias];
+            // Also find corresponding nodeId for metrics lookup
+            sourceNodeId = Object.keys(nodeMap).find(id => nodeMap[id].data?.alias === sourceAlias) || null;
+          } else {
+            // Legacy fallback: use lastScriptNodeId from path context
+            sourceNodeId = pathContext.lastScriptNodeId;
+            if (sourceNodeId && executionLog.scriptOutputs[sourceNodeId]) {
+              const so = executionLog.scriptOutputs[sourceNodeId];
+              sourceOutput = {
+                exitCode: so.exitCode,
+                stdout: so.stdout,
+                stderr: so.stderr,
+                parsedOutput: parseNodeOutput(so.stdout || '')
+              };
+            }
+          }
+
+          let actualValue = null;  // The value actually read from the data (for display in monitor)
 
           if (conditionType === 'return_code') {
-            if (lastScriptNode && executionLog.scriptOutputs[lastScriptNode]) {
-              const exitCode = executionLog.scriptOutputs[lastScriptNode].exitCode || 0;
+            if (sourceOutput !== null) {
+              const exitCode = sourceOutput.exitCode ?? 0;
+              actualValue = exitCode;
               result = evaluateNumericCondition(exitCode, operator, parseInt(conditionValue));
             }
           } else if (conditionType === 'output_contains') {
-            if (lastScriptNode && executionLog.scriptOutputs[lastScriptNode]) {
-              const output = executionLog.scriptOutputs[lastScriptNode].stdout || '';
+            if (sourceOutput !== null) {
+              const output = sourceOutput.stdout || '';
+              actualValue = output.length > 200 ? output.substring(0, 200) + '…' : output;
               const contains = output.includes(conditionValue);
               result = (operator === '!=' || operator === '!=') ? !contains : contains;
             }
           } else if (conditionType === 'regex_match') {
-            if (lastScriptNode && executionLog.scriptOutputs[lastScriptNode]) {
+            if (sourceOutput !== null) {
               try {
-                const output = executionLog.scriptOutputs[lastScriptNode].stdout || '';
+                const output = sourceOutput.stdout || '';
                 const regex = new RegExp(conditionValue);
                 const matches = output.match(regex);
                 result = matches !== null;
+                actualValue = matches ? matches[0] : null;
                 if (operator.includes('!=') || operator === '!=') {
                   result = !result;
                 } else if (operator !== '==' && operator !== '!') {
                   const matchCount = matches ? matches.length : 0;
+                  actualValue = matchCount;
                   result = evaluateNumericCondition(matchCount, operator, parseInt(conditionValue));
                 }
               } catch (regexErr) {
@@ -733,9 +886,32 @@ async function executeJob(jobId, isManual = false, executionId = null, onNodeCom
               }
             }
           } else if (conditionType === 'execution_time') {
-            if (lastScriptNode && executionLog.nodeMetrics[lastScriptNode]) {
-              const nodeMetric = executionLog.nodeMetrics[lastScriptNode];
+            const lookupNodeId = sourceNodeId || pathContext.lastScriptNodeId;
+            if (lookupNodeId && executionLog.nodeMetrics[lookupNodeId]) {
+              const nodeMetric = executionLog.nodeMetrics[lookupNodeId];
+              actualValue = nodeMetric.duration;
               result = evaluateNumericCondition(nodeMetric.duration, operator, parseFloat(conditionValue));
+            }
+          } else if (conditionType === 'json_value') {
+            if (sourceOutput !== null) {
+              const conditionPath = currentNode.data.conditionPath || '';
+              const resolvedVal = triggerContext.resolvePath(sourceOutput.parsedOutput, conditionPath);
+              if (resolvedVal !== null && resolvedVal !== undefined) {
+                actualValue = typeof resolvedVal === 'object' ? JSON.stringify(resolvedVal) : resolvedVal;
+                const numVal = parseFloat(resolvedVal);
+                if (!isNaN(numVal) && !isNaN(parseFloat(conditionValue))) {
+                  result = evaluateNumericCondition(numVal, operator, parseFloat(conditionValue));
+                } else {
+                  const strVal = typeof resolvedVal === 'object' ? JSON.stringify(resolvedVal) : String(resolvedVal);
+                  if (operator === '==' || operator === '===') {
+                    result = strVal === String(conditionValue);
+                  } else if (operator === '!=' || operator === '!==') {
+                    result = strVal !== String(conditionValue);
+                  } else {
+                    result = strVal.includes(conditionValue);
+                  }
+                }
+              }
             }
           }
 
@@ -743,6 +919,7 @@ async function executeJob(jobId, isManual = false, executionId = null, onNodeCom
             type: conditionType,
             operator,
             value: conditionValue,
+            actualValue,
             result
           };
 
@@ -778,7 +955,7 @@ async function executeJob(jobId, isManual = false, executionId = null, onNodeCom
         await new Promise(resolve => setTimeout(resolve, waitMs));
         const completedAt = new Date().toISOString();
 
-        executionLog.scriptOutputs[currentNode.id] = {
+        const waitOutput = {
           script: `WAIT ${waitSeconds}s`,
           parameters: '',
           agent: 'wait',
@@ -790,6 +967,19 @@ async function executeJob(jobId, isManual = false, executionId = null, onNodeCom
           endTime: completedAt,
           waitSeconds
         };
+        executionLog.scriptOutputs[currentNode.id] = waitOutput;
+        const waitAlias = currentNode.data?.alias || currentNode.id;
+        executionLog.nodeOutputs[waitAlias] = {
+          type: 'wait',
+          exitCode: 0,
+          stdout: waitOutput.stdout,
+          stderr: '',
+          parsedOutput: null,
+          startTime: startedAt,
+          endTime: completedAt,
+          status: 'success'
+        };
+        writeNodeHistory(executionLog, currentNode.id, waitAlias, waitOutput);
 
         markNodeCompleted(currentNode, nodeStartTime, 'success', { exitCode: 0 });
 
@@ -828,7 +1018,7 @@ async function executeJob(jobId, isManual = false, executionId = null, onNodeCom
         const applyTemplate = (value) => {
           if (typeof value !== 'string') return value;
           if (!value.includes('#{')) return value;
-          return triggerContext.substituteTemplate(value, getTemplateContext());
+          return triggerContext.substituteTemplate(value, getTemplateContext(), executionLog.nodeOutputs);
         };
 
         const notifyType = String(currentNode.data?.notifyType || 'INFORMATION').toUpperCase();
@@ -856,13 +1046,14 @@ async function executeJob(jobId, isManual = false, executionId = null, onNodeCom
         }
 
         const completedAt = new Date().toISOString();
-        executionLog.scriptOutputs[currentNode.id] = {
+        const notifyStdout = exitCode === 0 ? `Notification sent: ${notifyType} - ${notifyTitle}` : '';
+        const notifyOutput = {
           script: `NOTIFY ${notifyType} ${notifyTitle}`,
           parameters: '',
           agent: 'notify',
           status: exitCode === 0 ? 'completed' : 'failed',
           exitCode,
-          stdout: exitCode === 0 ? `Notification sent: ${notifyType} - ${notifyTitle}` : '',
+          stdout: notifyStdout,
           stderr,
           startTime: startedAt,
           endTime: completedAt,
@@ -871,8 +1062,25 @@ async function executeJob(jobId, isManual = false, executionId = null, onNodeCom
           notifyBody,
           notifyUrl: notifyUrl || ''
         };
+        executionLog.scriptOutputs[currentNode.id] = notifyOutput;
+        const notifyAlias = currentNode.data?.alias || currentNode.id;
+        executionLog.nodeOutputs[notifyAlias] = {
+          type: 'notify',
+          exitCode,
+          stdout: notifyStdout,
+          stderr,
+          parsedOutput: null,
+          startTime: startedAt,
+          endTime: completedAt,
+          status: exitCode === 0 ? 'success' : 'failed'
+        };
+        writeNodeHistory(executionLog, currentNode.id, notifyAlias, notifyOutput);
 
         markNodeCompleted(currentNode, nodeStartTime, exitCode === 0 ? 'success' : 'failed', { exitCode });
+
+        if (terminateOnError && exitCode !== 0) {
+          throw new Error(`Orchestration terminated: notify node [${currentNode.id}] failed with exit code ${exitCode}`);
+        }
 
         const outgoing = getOutgoingEdges(currentNode.id, 'out');
         if (outgoing.length === 0) {
@@ -916,6 +1124,141 @@ async function executeJob(jobId, isManual = false, executionId = null, onNodeCom
         }
 
         throw new Error(`Split-join node [${currentNode.id}] has invalid mode [${mode}]`);
+      }
+
+      if (currentNode.type === 'plugin') {
+        const pluginName = currentNode.data?.pluginName;
+        if (!pluginName) {
+          throw new Error(`Plugin node [${currentNode.id}] has no pluginName configured`);
+        }
+
+        const agentId = currentNode.data?.agent;
+        if (!agentId) {
+          throw new Error(`Plugin node [${currentNode.id}] has no agent configured`);
+        }
+
+        const pluginRegistry = require('./pluginRegistry.js');
+        const plugin = pluginRegistry.getPlugin(pluginName);
+        if (!plugin) {
+          throw new Error(`Plugin '${pluginName}' not found in registry`);
+        }
+
+        // Build input values map from node data, applying #{} template substitution
+        const pluginInputValues = {};
+        const tcForPlugin = executionLog.triggerContext || {
+          type: 'manual',
+          timestamp: new Date().toISOString(),
+          executionId: executionLog.executionId,
+          webhook: { payload: { data: 'test' } },
+          metric: { value: 0 },
+          condition: { threshold: 0 }
+        };
+
+        for (const inputDef of plugin.inputs) {
+          let val = currentNode.data?.[`plugin_input_${inputDef.name}`] ?? currentNode.data?.pluginInputs?.[inputDef.name];
+          // Apply default from plugin definition when value is absent or empty string
+          if ((val === undefined || val === null || val === '') && inputDef.default !== undefined) {
+            val = inputDef.default;
+          }
+          val = val ?? '';
+          if (typeof val === 'string' && val.includes('#{')) {
+            val = triggerContext.substituteTemplate(val, tcForPlugin, executionLog.nodeOutputs);
+          }
+          pluginInputValues[inputDef.name] = val;
+        }
+
+        const pluginExec = pluginRegistry.buildPluginExecution(plugin, pluginInputValues);
+        const jobName = `Orchestration [${jobId}] Execution [${executionLog.executionId}] Node [${currentNode.id}]`;
+        const pluginAlias = currentNode.data?.alias || currentNode.id;
+
+        try {
+          const agents = require('./agents.js');
+          const agent = agents.getAgent(agentId);
+
+          let result;
+          const offlineCheckTime = new Date().toISOString();
+
+          if (!agent) {
+            result = { exitCode: 1, stdout: '', stderr: `Agent [${agentId}] not found in system`, startTime: offlineCheckTime, endTime: offlineCheckTime };
+          } else if (agent.status === 'offline') {
+            result = { exitCode: 1, stdout: '', stderr: `Agent [${agentId}] is currently offline. Execution skipped.`, startTime: offlineCheckTime, endTime: offlineCheckTime };
+          } else {
+            try { await db.deleteData(`${agent.name}_${jobName}_log`); } catch (_e) {}
+
+            let scriptContent;
+            if (pluginExec.mode === 'template') {
+              // Inline shell command from template
+              scriptContent = pluginExec.scriptContent;
+            } else {
+              // Read the plugin command script from disk
+              try {
+                scriptContent = await fs.readFile(pluginExec.scriptPath, 'utf8');
+              } catch (readErr) {
+                throw new Error(`Plugin '${pluginName}' command script not found at ${pluginExec.scriptPath}: ${readErr.message}`);
+              }
+              // Prepend the injected INPUT_JSON variable so the agent sanitizer
+              // never touches the JSON (commandParams is left empty)
+              if (pluginExec.injectedEnv) {
+                scriptContent = `${pluginExec.injectedEnv}\n${scriptContent}`;
+              }
+            }
+
+            const contextEnvVars = executionLog.triggerContext ? triggerContext.contextToEnvVars(executionLog.triggerContext) : {};
+            // Always pass empty string for parameters — inputs are embedded in scriptContent
+            const sendCommandArgs = [agentId, 'execute/orchestrationScript', scriptContent, '', jobName, undefined, isManual, executionLog.executionId];
+            if (executionLog.triggerContext) sendCommandArgs.push(executionLog.triggerContext, contextEnvVars);
+            agentComms.sendCommand(...sendCommandArgs);
+
+            const actualStartTime = new Date().toISOString();
+            result = await waitForScriptCompletion(jobName, 300000);
+            result.startTime = actualStartTime;
+            result.endTime = new Date().toISOString();
+          }
+
+          const pluginOutput = {
+            script: `PLUGIN ${pluginName}`,
+            parameters: pluginExec.parameters,
+            agent: agentId,
+            status: (result.exitCode || 0) === 0 ? 'completed' : 'failed',
+            exitCode: result.exitCode || 0,
+            stdout: result.stdout || '',
+            stderr: result.stderr || '',
+            startTime: result.startTime,
+            endTime: result.endTime
+          };
+          executionLog.scriptOutputs[currentNode.id] = pluginOutput;
+          executionLog.nodeOutputs[pluginAlias] = {
+            type: 'plugin',
+            pluginName,
+            exitCode: pluginOutput.exitCode,
+            stdout: pluginOutput.stdout,
+            stderr: pluginOutput.stderr,
+            parsedOutput: parseNodeOutput(pluginOutput.stdout),
+            startTime: pluginOutput.startTime,
+            endTime: pluginOutput.endTime,
+            status: pluginOutput.status === 'completed' ? 'success' : 'failed'
+          };
+
+          const pluginStatus = pluginOutput.exitCode === 0 ? 'success' : 'failed';
+          markNodeCompleted(currentNode, nodeStartTime, pluginStatus, { exitCode: pluginOutput.exitCode });
+
+          if (terminateOnError && pluginOutput.exitCode !== 0) {
+            throw new Error(`Orchestration terminated: plugin node [${currentNode.id}] (${pluginOutput.script}) failed with exit code ${pluginOutput.exitCode}`);
+          }
+
+          const outgoing = getOutgoingEdges(currentNode.id, 'out');
+          if (outgoing.length === 0) return pluginOutput.exitCode === 0 ? 'success' : 'failure';
+          if (outgoing.length > 1) throw new Error(`Plugin node [${currentNode.id}] has multiple outgoing connections. Use split-join node in split mode.`);
+          return executePath(outgoing[0].to, { ...pathContext, lastScriptNodeId: currentNode.id }, outgoing[0]);
+
+        } catch (err) {
+          wsBrowser.emitOrchestrationEvent(jobId, executionLog.executionId, 'orchestrationNodeCompleted', {
+            nodeId: currentNode.id, nodeType: currentNode.type, status: 'failed',
+            exitCode: executionLog.scriptOutputs[currentNode.id]?.exitCode || 1
+          });
+          executionLog.errors.push({ node: currentNode.id, message: err.message });
+          throw err;
+        }
       }
 
       if (currentNode.type === 'end-success') {

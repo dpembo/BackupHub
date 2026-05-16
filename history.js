@@ -154,7 +154,7 @@ function searchItemWithName(searchTerm)
     return null;
 }
 
-function createHistoryItem(jobName, runDate, returnCode, runTime, log, isManual, executionId = null, rerunFrom = null) {
+function createHistoryItem(jobName, runDate, returnCode, runTime, log, isManual, executionId = null, rerunFrom = null, nodeAlias = null) {
     logger.debug("Creating history item [" + jobName + "]");
     if(isManual===undefined)isManual=false;
     var item = {};
@@ -165,10 +165,13 @@ function createHistoryItem(jobName, runDate, returnCode, runTime, log, isManual,
     item.log = log;
     item.manual = isManual;
     if (executionId) {
-      item.executionId = executionId;  // NEW: Orchestration execution ID for grouping
+      item.executionId = executionId;  // Orchestration execution ID for grouping
     }
     if (rerunFrom) {
-      item.rerunFrom = rerunFrom;  // NEW: Track when this job was re-run from a previous failed execution
+      item.rerunFrom = rerunFrom;  // Track when this job was re-run from a previous failed execution
+    }
+    if (nodeAlias) {
+      item.nodeAlias = nodeAlias;  // Human-readable alias for workflow context display
     }
     logger.debug("History Item:\n" + JSON.stringify(item));
     return item;

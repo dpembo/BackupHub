@@ -347,6 +347,15 @@ module.exports = {
   saveJob,
   deleteJob,
   getAvailableScripts,
+  getAvailablePlugins: async function getAvailablePlugins() {
+    try {
+      const pluginRegistry = require('./pluginRegistry.js');
+      return pluginRegistry.getPluginsForClient();
+    } catch (err) {
+      logger.warn(`Error getting available plugins: ${err.message}`);
+      return [];
+    }
+  },
   executeJob: require('./orchestrationEngine').executeJob,
   getExecutionHistory: require('./orchestrationEngine').getExecutionHistory,
   saveExecutionResult: require('./orchestrationEngine').saveExecutionResult

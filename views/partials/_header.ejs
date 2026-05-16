@@ -40,6 +40,9 @@
       <% if (hasPerm('settings.access')) { %>
       <li><a class="menu-entry" href="/settings.html"><span class="material-icons">settings</span>Settings</a></li>
       <% } %>
+      <% if (hasPerm('plugins.manage')) { %>
+      <li><a class="menu-entry" href="/plugins.html"><span class="material-icons">extension</span>Plugin Manager</a></li>
+      <% } %>
       <% if (hasPerm('users.manage')) { %>
       <li><a class="menu-entry" href="/users.html"><span class="material-icons">manage_accounts</span>User Management</a></li>
       <% } %>
@@ -107,6 +110,9 @@
       <li><a href="/profile.html" title="User Info" style="color:#ffffff"><span title="User Info" style="font-size:24pt" class="material-icons vertMid">account_circle</span>&nbsp;User Profile</a></li>
       <% if (hasPerm('settings.access')) { %>
       <li><a href="/settings.html" title="Settings" style="color:#ffffff"><span title="Settings" style="font-size:24pt" class="material-icons vertMid">settings</span>&nbsp;Settings</a></li>
+      <% } %>
+      <% if (hasPerm('plugins.manage')) { %>
+      <li><a href="/plugins.html" title="Plugin Manager" style="color:#ffffff"><span title="Plugin Manager" style="font-size:24pt" class="material-icons vertMid">extension</span>&nbsp;Plugin Manager</a></li>
       <% } %>
       <% if (hasPerm('users.manage')) { %>
       <li><a href="/users.html" title="User Management" style="color:#ffffff"><span title="User Management" style="font-size:24pt" class="material-icons vertMid">manage_accounts</span>&nbsp;User Management</a></li>

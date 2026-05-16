@@ -47,6 +47,8 @@ const PERMISSIONS = {
   SETTINGS_WEBHOOKS:         'settings.webhooks',
   SETTINGS_BACKUP:           'settings.backup',
 
+  PLUGINS_MANAGE:            'plugins.manage',
+
   USERS_MANAGE:              'users.manage',
 };
 

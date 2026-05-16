@@ -20,7 +20,7 @@ async function sendNotification(agentId, error) {
     if(serverConfig.server.connectionEnabled!="true")return;
     await notifier.sendNotification(
         `Agent [${agentId}] Disconnect`,
-        `Agent [${agentId}] disconnected from BackupHub Server [${serverConfig.server.hostname}] Error [${JSON.stringify(error)}]`,
+        `Agent [${agentId}] disconnected from Orchelium Server [${serverConfig.server.hostname}] Error [${JSON.stringify(error)}]`,
         "WARNING",
         "/agentstatus.html"
     );
@@ -31,7 +31,7 @@ async function sendInfoNotificationMessage(agentId, duration) {
     if(serverConfig.server.connectionEnabled!="true")return;
     await notifier.sendNotification(
         `Agent [${agentId}] Reconnect`,
-        `Agent [${agentId}] reconnected to BackupHub Server [${serverConfig.server.hostname}] after ${Math.round(duration / 1000)} seconds`,
+        `Agent [${agentId}] reconnected to Orchelium Server [${serverConfig.server.hostname}] after ${Math.round(duration / 1000)} seconds`,
         "INFORMATION",
         "/agentstatus.html"
     );
