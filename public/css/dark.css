@@ -591,3 +591,44 @@ div#loginPanel h1{
 .loginimg{
   background-image: url('/images/orchelium-light.png');
 }
+
+/* ── Plugin Manager ──────────────────────────────────────────── */
+.plugin-filter-list {
+  border: 1px solid var(--border-color) !important;
+  background: var(--surface-color) !important;
+}
+
+.plugin-filter-divider {
+  height: 1px;
+  background: var(--border-color) !important;
+  margin: 4px 0;
+}
+
+.cat-item {
+  color: var(--text-primary);
+}
+.cat-item:hover {
+  background: rgba(239, 108, 0, 0.15) !important;
+}
+.cat-item.active {
+  background: rgba(239, 108, 0, 0.2) !important;
+  color: #ffb74d !important;
+}
+.cat-item.active .material-icons {
+  color: #ffb74d !important;
+}
+.cat-item .material-icons {
+  color: var(--text-muted);
+}
+
+/* Security notice banner */
+.plugin-security-notice {
+  background: rgba(239, 108, 0, 0.12) !important;
+  border-color: rgba(239, 108, 0, 0.4) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Plugin card description text */
+.plugin-card-desc {
+  color: var(--text-muted) !important;
+}

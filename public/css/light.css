@@ -1220,3 +1220,25 @@ tr.group-header td {
   background-color: #263238;
   padding-top: 0px;
 }
+
+/* ── Plugin Manager ──────────────────────────────────────────── */
+.plugin-filter-list {
+  border: 1px solid #e0e0e0;
+  background: #fff;
+}
+
+.plugin-filter-divider {
+  height: 1px;
+  background: #ececec;
+  margin: 4px 0;
+}
+
+.plugin-security-notice {
+  background: #fff3e0;
+  border-color: #ef6c00;
+  color: #333;
+}
+
+.plugin-card-desc {
+  color: #555;
+}
