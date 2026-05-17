@@ -1,191 +1,136 @@
 
 ![Orchelium Logo](./public/images/orchelium-light.png)
 
-# Orcheliuim
-
+# Orchelium
 
 ![GitHub Repo stars](https://img.shields.io/github/stars/dpembo/orchelium?style=flat)
-
 ![GitHub License](https://img.shields.io/github/license/dpembo/orchelium)
-
 ![GitHub Issues](https://img.shields.io/github/issues/dpembo/orchelium)
 
-*A lightweight automation and orchestration platform for home labs, NAS devices, and small server fleets.*
+**Backup Orchestration for Home Labs.**
 
-Orchelium started as a simple backup scheduler. It has since evolved into a distributed automation engine with real‑time orchestration, multi‑agent execution, and a clean web UI for managing scripts, workflows, and triggers across your entire environment.
-
-Whether you're running a Proxmox cluster, a handful of Linux servers, or a mixed home‑lab setup, Orchelium gives you a central place to automate, monitor, and coordinate your tasks.
+Centralised, unified backup workflows across Proxmox, NAS servers, ZFS pools, containers, databases, and cloud storage — from one visual interface.
 
 ---
 
-## 📘 Table of Contents
-- Key Features
-- Quick Start
-- Documentation
-- Roadmap
-- Contributing
-- Support
-- License
+## The Problem
+
+Every system in your home lab has its own backup schedule, its own script, its own log. Proxmox backups buried in datacenter config. ZFS snapshots managed per-pool. rsync cron jobs scattered across a dozen machines. Restic and Borg jobs you haven't verified in months. No unified dashboard, no central alert, no single place to know whether last night's backups actually worked.
+
+Orchelium fixes this.
 
 ---
 
-## ⭐ Key Features
+## Key Features
 
-### 🧠 Orchestrations (Visual Automation Engine)
-Design multi‑step workflows using a visual node editor:
-- Parallel or sequential execution
-- Conditional logic
-- Branching flows
-- Real‑time step‑by‑step monitoring
+### Backup-First Orchestration
+Orchelium was built specifically for the challenges of home-lab backup workflows:
+
+- **Proxmox** — snapshot, backup, and verify VMs and LXC containers across multiple hosts
+- **ZFS** — create snapshots, send to remote pools, prune, and verify integrity in one chain
+- **Restic & Borg** — run, check, prune, and verify; structured output lets downstream nodes react automatically
+- **rsync & rclone** — sync between local paths, remote hosts, or cloud storage (S3, Backblaze B2, and more)
+- **Databases** — native plugins for MySQL, PostgreSQL, and SQLite
+- **Pre/post scripts** — quiesce VMs, mount pools, dump databases, then clean up — all in the workflow chain
+- **Backup verification** — chain a verify step after every backup; failures block downstream steps and trigger alerts
+- **Failure alerts** — instant notifications via Discord, Telegram, or email
+
+### Visual Workflow Builder
+Design multi-step backup pipelines using a drag-and-drop node editor:
+- Sequential or parallel execution
+- Conditional branching
+- Real-time step-by-step monitoring
 - Live log streaming from every node
 
-Perfect for complex backup pipelines, maintenance routines, or multi‑server tasks.
+### Plugin Ecosystem
+19+ official plugins covering backup, databases, file sync, storage, containers, and system tools. Install in one click from the Plugin Manager. Browse the catalog at [orchelium.com/plugins](https://orchelium.com/plugins/).
 
----
+### Multi-Agent Architecture
+Lightweight agents run on any Linux machine — Proxmox hosts, NAS servers, VMs, Docker hosts:
+- Encrypted WebSocket or MQTT transport
+- Real-time status and heartbeat
+- Live log streaming
+- Auto-reconnect
 
-### ⏱ Advanced Scheduler
-Trigger jobs using:
-- Cron‑style schedules
+### Advanced Scheduler
+Trigger workflows from:
+- Cron-style schedules
 - Threshold rules (CPU, disk, memory)
-- Webhooks
+- Webhooks (Home Assistant, GitHub Actions, Proxmox hooks, any HTTP source)
 - Agent online/offline events
 
-This turns Orchelium into a general automation platform, not just a backup runner.
-
 ---
 
-### 🖥 Modern Agent System
-Lightweight agents run on any Linux machine and support:
-- Encrypted communication
-- WebSocket or MQTT transport
-- Real‑time status reporting
-- Live log streaming
-- Automatic reconnect and heartbeat
-
-Agents are simple to deploy and require minimal configuration.
-
----
-
-### ⚡ Real‑Time Web UI
-The interface updates instantly:
-- Watch orchestrations run live
-- View job logs as they stream
-- Track agent status and metrics
-- Manage scripts, schedules, and webhooks
-
-It feels like a modern automation dashboard — because it is.
-
----
-
-### 📦 Script Templates & Library
-Orchelium includes (but not limited to) ready‑to‑use templates for:
-- Proxmox VM backups
-- Rsync jobs
-- MySQL/MariaDB dumps
-- File pruning
-- Threshold checks
-- System maintenance tasks
-
-You can also create and store your own reusable scripts, and host your oewn template servder
-
----
-
-### 🔌 Webhooks & Integrations
-Trigger jobs or orchestrations from:
-- Home Assistant
-- GitHub Actions
-- Proxmox hooks
-- Monitoring systems
-- Any service that can send an HTTP request
-
-Orchelium also exposes REST endpoints for external control.
-
----
-
-### 🗄 Structured Data Layer
-Powered by LevelDB with dedicated stores for:
-- Core configuration
-- Agents
-- Job history
-- User accounts
-- Metrics
-
-Fast, reliable, and easy to back up.
-
----
-
-## 🚀 Quick Start
+## Quick Start
 
 ### Run the Hub
-``docker run -p 8082:8082 ghcr.io/dpembo/orchelium/hub
-``
 
-Then open your browser at:
-``
-http://localhost:8082
-``
+```bash
+docker run -d \
+  --name orchelium \
+  -p 3000:3000 \
+  -v orchelium-data:/app/data \
+  ghcr.io/dpembo/orchelium:latest
+```
 
----
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ### Install an Agent
-From the UI, generate an agent registration command, then run it on any Linux machine.
 
-Agents automatically:
-- Register with the Hub
-- Authenticate using shared secrets
-- Stream logs and status
-- Execute jobs and orchestrations
+Generate a registration command from the UI, then run it on any Linux machine. Agents register automatically, authenticate, and begin streaming status and logs immediately.
 
 ---
 
-## 📚 Documentation
-User documentation is available here:
-https://github.com/dpembo/orchelium/blob/main/docs/README.MD
+## Plugin Ecosystem
 
-Full documentation is available at:
+Official plugins are maintained in a separate repository:
 
-https://deepwiki.com/dpembo/orchleium
+**[dpembo/orchelium-plugins](https://github.com/dpembo/orchelium-plugins)**
 
-This includes:
-- Architecture overview
-- Orchestration examples
-- Agent deployment
-- Script templates
-- API reference
-- Troubleshooting
+Plugins use a simple `plugin.yaml` + shell script format and are easy to write. See the [Plugin Developer Guide](./docs/Developers/Engine_Updates/PLUGIN_DEVELOPER_GUIDE.md) to contribute.
 
 ---
 
-## 🛠 Roadmap
-Planned features include:
-- Plugin system for custom nodes
-- Windows agent
-- Extended Metrics dashboard
-- Multi‑Hub federation
-- Orchelium Cloud relay mode
+## Documentation
+
+Full documentation: [docs/](./docs/README.MD)
+
+| Guide | Description |
+|---|---|
+| [Installation](./docs/installation.md) | Deploy the hub and agents |
+| [Orchestrations](./docs/orchestrations.md) | Build and run workflows |
+| [Plugin Manager](./docs/plugins.md) | Install and manage plugins |
+| [REST API](./docs/REST_API_REFERENCE.md) | Automate via HTTP |
+| [Webhooks](./docs/WEBHOOK_USER_GUIDE.md) | Trigger jobs from external systems |
+| [Backup Schedules](./docs/backup-schedules.md) | Scheduling reference |
+
+Extended docs also available at [deepwiki.com/dpembo/orchelium](https://deepwiki.com/dpembo/orchelium).
 
 ---
 
-## 🤝 Contributing
-Contributions are welcome!
-Whether it’s bug reports, feature ideas, or pull requests — everything helps.
+## Related Repositories
+
+| Repo | Description |
+|---|---|
+| [dpembo/orchelium-plugins](https://github.com/dpembo/orchelium-plugins) | Official plugin registry (19+ plugins) |
+| [dpembo/orchelium-website](https://github.com/dpembo/orchelium-website) | orchelium.com marketing site |
 
 ---
 
-## ⭐ Support the Project
-If Orchelium is useful to you:
-- Star the repo
-- Share it with your home‑lab friends
-- Open issues with ideas or feedback
+## Contributing
+
+Contributions are welcome — bug reports, feature ideas, pull requests, and new plugins. See [CONTRIBUTING.md](./CONTRIBUTING.md) (coming soon) or open an issue to start a discussion.
 
 ---
-
-
-
-## License
-This project is licensed under the MIT License. See the [LICENSE](https://github.com/dpembo/orchelium/blob/main/LICENSE) file for details.
-
 
 ## Support
-For issues or feature requests, open an issue on [GitHub Issues](https://github.com/dpembo/orchelium/issues).
-For general inquiries, please use GitHub Discussions or open an issue.
+
+- [GitHub Issues](https://github.com/dpembo/orchelium/issues) — bugs and feature requests
+- [GitHub Discussions](https://github.com/dpembo/orchelium/discussions) — general questions and ideas
+
+---
+
+## License
+
+Apache License 2.0 — see [LICENSE](./LICENSE) for details.
+
