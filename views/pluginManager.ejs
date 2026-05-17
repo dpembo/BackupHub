@@ -24,7 +24,7 @@
   </div>
 
   <!-- Security notice -->
-  <div class="card-panel orange lighten-5" style="margin-bottom:16px; border-left:4px solid #ef6c00;">
+  <div class="card-panel plugin-security-notice" style="margin-bottom:16px; border-left:4px solid #ef6c00;">
     <span class="orange-text text-darken-3">
       <span class="material-icons tiny" style="vertical-align:middle;">security</span>
       <strong>Security notice:</strong> Plugins execute shell scripts on your connected agents.
@@ -35,7 +35,7 @@
   <div class="row">
     <!-- Left sidebar: filters -->
     <div class="col s12 m3 l3">
-      <ul id="categoryList" style="list-style:none;padding:0;margin:0;border:1px solid #e0e0e0;border-radius:4px;background:#fff;">
+      <ul id="categoryList" class="plugin-filter-list" style="list-style:none;padding:0;margin:0;border-radius:4px;">
         <li class="cat-item active" data-category="">
           <span class="cat-item-inner">
             <span class="material-icons tiny">apps</span>
@@ -64,7 +64,7 @@
           </span>
           <span class="cat-badge cat-badge-grey" id="badgeNotInstalled"></span>
         </li>
-        <li style="height:1px;background:#ececec;margin:4px 0;"></li>
+        <li class="plugin-filter-divider"></li>
         <!-- Category items injected by JS -->
       </ul>
     </div>
@@ -340,7 +340,7 @@
               </div>
               <div>${statusBadge}</div>
             </div>
-            <p style="font-size:0.85rem;color:#555;margin:0 0 8px 0;">${escHtml(plugin.description || '')}</p>
+            <p class="plugin-card-desc" style="font-size:0.85rem;margin:0 0 8px 0;">${escHtml(plugin.description || '')}</p>
             <div>${tags}</div>
           </div>
           <div class="card-action" style="padding:8px 16px;">
