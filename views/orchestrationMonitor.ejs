@@ -2677,11 +2677,24 @@
         }
       }
 
-      const wasAtBottom = logArea.scrollTop + logArea.clientHeight >= logArea.scrollHeight - 5;
-      logArea.value = outputContent;
-      if (wasAtBottom) {
-        logArea.scrollTop = logArea.scrollHeight;
+      // --- Flicker fix: append only new log lines ---
+      if (!logArea._lastLog) logArea._lastLog = '';
+      let lastLog = logArea._lastLog;
+      if (outputContent.startsWith(lastLog)) {
+        // Only append the new part
+        const newPart = outputContent.substring(lastLog.length);
+        if (newPart.length > 0) {
+          const wasAtBottom = logArea.scrollTop + logArea.clientHeight >= logArea.scrollHeight - 5;
+          logArea.value += newPart;
+          if (wasAtBottom) logArea.scrollTop = logArea.scrollHeight;
+        }
+      } else {
+        // Log was reset or truncated, replace all
+        const wasAtBottom = logArea.scrollTop + logArea.clientHeight >= logArea.scrollHeight - 5;
+        logArea.value = outputContent;
+        if (wasAtBottom) logArea.scrollTop = logArea.scrollHeight;
       }
+      logArea._lastLog = outputContent;
 
       return true;
     }
