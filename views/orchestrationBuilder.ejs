@@ -921,7 +921,6 @@ When unchecked (default), execution continues through the graph to a Success or 
         </div>
         <div id="delete-node-extra-info"></div>
       </div>
-      <p style="font-size: 0.85em; color: #f44336; margin-top: 15px;"><i class="material-icons" style="vertical-align: middle; font-size: 16px;">warning</i> This action cannot be undone. All connections to this node will also be removed.</p>
     </div>
     <div class="modal-footer">
       <a href="#!" class="modal-close waves-effect waves-green btn-flat">Cancel</a>
@@ -3768,6 +3767,31 @@ When unchecked (default), execution continues through the graph to a Success or 
       } else if (node.type === 'plugin') {
         const pluginName = node.data?.pluginName || '';
         document.getElementById('prop-plugin-name-display').textContent = pluginName;
+
+        // --- PATCH: Update label when custom name is changed ---
+        const actionNameField = document.getElementById('prop-action-name');
+        const aliasDisplay = document.getElementById('prop-alias-display');
+        actionNameField.value = node.data.actionName || '';
+        if (aliasDisplay) aliasDisplay.textContent = node.data.alias ? `#{nodes.${node.data.alias}.*}` : '';
+        actionNameField.oninput = function() {
+          node.data.actionName = this.value.trim();
+          if (node.data.actionName) {
+            const newAlias = ensureUniqueAlias(normalizeAlias(node.data.actionName), selectedNode);
+            if (newAlias && newAlias !== node.data.alias) {
+              renameAliasReferences(node.data.alias, newAlias);
+              node.data.alias = newAlias;
+            }
+          }
+          if (aliasDisplay) aliasDisplay.textContent = node.data.alias ? `#{nodes.${node.data.alias}.*}` : '';
+          // Update label for plugin node
+          node.label = node.data.actionName || pluginName || 'Plugin';
+          renderNode(selectedNode);
+        };
+        actionNameField.onchange = function() {
+          node.data.actionName = this.value.trim();
+          node.label = node.data.actionName || pluginName || 'Plugin';
+          renderNode(selectedNode);
+        };
 
         // Populate agent selector
         const agentSel = document.getElementById('prop-plugin-agent');

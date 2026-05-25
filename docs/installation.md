@@ -25,11 +25,12 @@ docker run \
   --name Orchelium \
   -e TZ=Europe/London \
   -p 8082:8082 \
-  -p 49981:49981 \  
-  --restart unless-stopped \ 
+  -p 49981:49981 \
+  --restart unless-stopped \
   -v /custom/Orchelium/data:/usr/src/app/data \
-  -v /custom/Orchelium/scripts:/usr/src/app/scripts \ 
+  -v /custom/Orchelium/scripts:/usr/src/app/scripts \
   -v /custom/Orchelium/logs:/usr/src/app/logs \
+  -v /container-fs/backup-control/plugins:/usr/src/app/plugins \
   ghcr.io/dpembo/orchelium/hub:latest
 ```
 
