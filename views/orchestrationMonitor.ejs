@@ -1208,25 +1208,21 @@
               // --- Flicker fix: append only new log lines ---
               if (!logArea._lastLog) logArea._lastLog = '';
               let lastLog = logArea._lastLog;
-              console.debug('[LOG STREAM] lastLog.length:', lastLog.length, '| log.length:', log.length);
               if (log.startsWith(lastLog)) {
                 // Only append the new part
                 const newPart = log.substring(lastLog.length);
                 if (newPart.length > 0) {
-                  console.debug('[LOG STREAM] Appending newPart:', JSON.stringify(newPart));
                   const wasAtBottom = logArea.scrollTop + logArea.clientHeight >= logArea.scrollHeight - 5;
                   logArea.value += newPart;
                   if (wasAtBottom) logArea.scrollTop = logArea.scrollHeight;
                 }
               } else {
                 // Log was reset or truncated, replace all
-                console.debug('[LOG STREAM] Replacing logArea.value. New log:', JSON.stringify(log));
                 const wasAtBottom = logArea.scrollTop + logArea.clientHeight >= logArea.scrollHeight - 5;
                 logArea.value = log;
                 if (wasAtBottom) logArea.scrollTop = logArea.scrollHeight;
               }
               logArea._lastLog = log;
-              console.debug('[LOG STREAM] logArea.value.length after update:', logArea.value.length);
             }
             // Show spinner while live streaming
             const logSpinner = document.getElementById('logRefreshIndicator');
@@ -2684,29 +2680,24 @@
       // --- Flicker fix: append only new log lines ---
       if (!logArea._lastLog) logArea._lastLog = '';
       let lastLog = logArea._lastLog;
-      console.debug('[LOG INPLACE] lastLog.length:', lastLog.length, '| outputContent.length:', outputContent.length);
       if (outputContent.length === 0) {
-        console.debug('[LOG INPLACE] Skipping update: outputContent is empty, preserving current log.');
         return true;
       }
       if (outputContent.startsWith(lastLog)) {
         // Only append the new part
         const newPart = outputContent.substring(lastLog.length);
         if (newPart.length > 0) {
-          console.debug('[LOG INPLACE] Appending newPart:', JSON.stringify(newPart));
           const wasAtBottom = logArea.scrollTop + logArea.clientHeight >= logArea.scrollHeight - 5;
           logArea.value += newPart;
           if (wasAtBottom) logArea.scrollTop = logArea.scrollHeight;
         }
       } else {
         // Log was reset or truncated, replace all
-        console.debug('[LOG INPLACE] Replacing logArea.value. New outputContent:', JSON.stringify(outputContent));
         const wasAtBottom = logArea.scrollTop + logArea.clientHeight >= logArea.scrollHeight - 5;
         logArea.value = outputContent;
         if (wasAtBottom) logArea.scrollTop = logArea.scrollHeight;
       }
       logArea._lastLog = outputContent;
-      console.debug('[LOG INPLACE] logArea.value.length after update:', logArea.value.length);
 
       return true;
     }
