@@ -1313,7 +1313,8 @@ app.post('/settings.html', validateCsrf, User.isAuthenticated, User.requirePermi
     webHookUrl,iconslist,
     minDisconnectDurationForNotification,
     templateEnabled,templateServer,
-    connectionEnabled,loginSuccessEnabled,loginFailEnabled,jobFailEnabled
+    connectionEnabled,loginSuccessEnabled,loginFailEnabled,jobFailEnabled,
+    pluginRegistryUrl,pluginGithubApiBase,pluginGithubToken
     
   } = req.body;
 
@@ -1324,6 +1325,13 @@ app.post('/settings.html', validateCsrf, User.isAuthenticated, User.requirePermi
   else templateEnabled="false";
   serverConfig.templates.enabled = templateEnabled;
   serverConfig.templates.repositoryUrl = templateServer;
+
+  //Plugin Manager settings
+  if (!serverConfig.pluginRegistry) serverConfig.pluginRegistry = {};
+  if (pluginRegistryUrl) serverConfig.pluginRegistry.url = pluginRegistryUrl;
+  if (pluginGithubApiBase) serverConfig.pluginRegistry.githubApiBase = pluginGithubApiBase;
+  // Allow clearing the token by saving an empty string
+  serverConfig.pluginRegistry.githubToken = pluginGithubToken || '';
 
   //websocket Settings
   if(websocketEnabled=="on")websocketEnabled="true";

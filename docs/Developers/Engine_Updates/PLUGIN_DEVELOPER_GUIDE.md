@@ -444,7 +444,88 @@ exit $EXIT_CODE
 
 ---
 
-## 10. Checklist
+## 10. The Official Plugin Registry
+
+Community plugins are published in a dedicated GitHub repository:
+
+**[https://github.com/dpembo/orchelium-plugins](https://github.com/dpembo/orchelium-plugins)**
+
+### Repository layout
+
+```
+orchelium-plugins/
+  registry.json        ← master index fetched by the Plugin Manager
+  borg/
+    plugin.yaml
+    run.sh
+    icon.svg
+    docs.md
+    examples/
+      examples.yaml
+  restic/
+    ...
+  rsync/
+    ...
+  (one folder per plugin)
+```
+
+### registry.json
+
+Every plugin in the repository is listed in `registry.json`. The hub fetches this file when the Plugin Manager page loads to populate the catalogue.
+
+```json
+{
+  "registryVersion": "1",
+  "updated": "2026-05-17",
+  "source": "https://github.com/dpembo/orchelium-plugins",
+  "plugins": [
+    {
+      "name": "rsync",
+      "label": "Rsync",
+      "description": "Synchronise files between directories or hosts using rsync.",
+      "version": "1.0.0",
+      "category": "file-sync",
+      "tags": ["rsync", "file-sync", "backup"],
+      "official": true,
+      "path": "rsync",
+      "minOrcheliumVersion": "1.0.0"
+    }
+  ]
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `name` | Unique machine identifier. Must match the folder name. |
+| `label` | Human-readable name shown in the Plugin Manager. |
+| `description` | Short description for the plugin card. |
+| `version` | Semver version string. Bump this whenever `plugin.yaml` or `run.sh` changes. |
+| `category` | One of: `backup`, `containers`, `databases`, `file-sync`, `storage`, `system`. |
+| `tags` | Array of search keywords. |
+| `official` | `true` for plugins in this repository. |
+| `path` | Path within the repo to the plugin folder (usually just the folder name). |
+| `minOrcheliumVersion` | Minimum hub version required. |
+
+### Contributing a plugin
+
+1. Fork `dpembo/orchelium-plugins`.
+2. Create a folder named after your plugin (lowercase, hyphens, no spaces).
+3. Add `plugin.yaml`, `run.sh` (executable), `icon.svg`, `docs.md`, and `examples/examples.yaml`.
+4. Add an entry to `registry.json`.
+5. Open a pull request. The plugin will be reviewed for:
+   - Correct schema and field types
+   - `run.sh` exits with `0` on success and non-zero on failure
+   - JSON summary emitted to stdout where useful
+   - No hard-coded credentials or unsafe shell patterns
+   - `chmod +x` on `run.sh`
+
+### Installing custom plugins (without the registry)
+
+Drop a plugin folder directly into `plugins/` on your hub server. The hub watches that directory with `fs.watch` and hot-reloads within 500 ms — no restart needed. This is the fastest workflow when developing a new plugin locally.
+
+---
+
+## 11. Checklist
 
 Before submitting or deploying a plugin:
 

@@ -12,6 +12,7 @@ Orchelium is a lightweight yet powerful solution for managing and scheduling she
 - [Orchestrations](orchestrations.md) — Visual workflow builder with Execute, HTTP, Wait, Notify, Condition, Split/Join nodes
 - [User Management](user-management.md)
 - [Configuration / Settings](settings-config.md) — Rule-based thresholds, agent concurrency, webhook management, and all server/agent options
+- [Plugins](plugins.md) — Plugin Manager: browse, install, update, and remove plugins from the official registry
 - [Trigger Context Guide](TRIGGER_CONTEXT_GUIDE.md) — Template substitution in scripts and orchestrations (`#{context.*}`)
 - [Webhook User Guide](WEBHOOK_USER_GUIDE.md) — Complete guide to creating and using webhooks
 - [REST API Reference](REST_API_REFERENCE.md) — All API endpoints including orchestration, script testing, schedules, and more
@@ -27,6 +28,7 @@ Orchelium is a lightweight yet powerful solution for managing and scheduling she
 - **orchestrations.md** — Building complex workflows with the visual orchestration builder, including all node types and template substitution
 - **user-management.md** — User setup, login, and password management
 - **settings-config.md** — Server and agent configuration options, backup & restore, rule-based thresholds, webhooks
+- **plugins.md** — Plugin Manager UI: browsing the official registry, installing/updating/uninstalling plugins, categories, and writing custom plugins
 - **TRIGGER_CONTEXT_GUIDE.md** — How `#{context.*}` template variables work in Execute Script, HTTP Request, and Notify nodes
 - **WEBHOOK_USER_GUIDE.md** — Webhook creation, API key management, payload access in scripts and orchestrations
 - **REST_API_REFERENCE.md** — API endpoints for programmatic access
@@ -40,6 +42,13 @@ Orchelium is a lightweight yet powerful solution for managing and scheduling she
 - **Scheduled Jobs**: Run shell scripts on agents on a fixed schedule (daily, cron, etc.)
 - **Manual Execution**: Trigger any job immediately from the schedule list
 - **Script Testing**: Run a script interactively from the Script Editor with live output streaming, without creating a history entry. Supports saved scripts and unsaved editor buffers.
+
+### Plugin Manager
+- **Official Plugin Registry**: Browse 19+ community plugins from [github.com/dpembo/orchelium-plugins](https://github.com/dpembo/orchelium-plugins)
+- **One-click Install / Update / Uninstall**: Plugins are downloaded, validated, and hot-loaded — no restart required
+- **Categories**: Backup, Containers, Databases, File Sync, Storage, System
+- **Search & filter**: Find plugins by name, description, or tag; filter by installed/updates/not-installed
+- **Custom plugins**: Drop a folder into `plugins/` on the hub and it is hot-reloaded automatically
 
 ### Orchestrations
 - **Visual Workflow Builder**: Drag-and-drop workflow designer with a real-time monitor

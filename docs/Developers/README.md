@@ -5,6 +5,10 @@ Welcome to the Orchelium developer documentation! This section contains all guid
 ## Contents
 
 - [Developer Guide](developer-guide.md): Project structure, extension points, and contributing
+- **Plugin Development**
+	- [Plugin Developer Guide](Engine_Updates/PLUGIN_DEVELOPER_GUIDE.md): Building a plugin from scratch, script patterns, output, hot-reload
+	- [Plugin Specification](Engine_Updates/PLUGIN_SPEC.md): Full plugin.yaml schema reference
+	- [Official Plugin Repository](https://github.com/dpembo/orchelium-plugins): Source for all registry plugins
 - **Async/Await Documentation**
 	- [Standardization Guide](async/ASYNC_STANDARDIZATION.md)
 	- [Quick Reference](async/ASYNC_QUICK_REFERENCE.md)

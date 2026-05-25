@@ -169,6 +169,29 @@ async function installPlugin(pluginName, registryEntry, config) {
   } catch (err) {
     // Clean up partially downloaded directory on failure
     await fsPromises.rm(destDir, { recursive: true, force: true }).catch(() => {});
+    // Check for GitHub API rate limit error
+    if (err.response && err.response.status === 403) {
+      const data = err.response.data;
+      const headers = err.response.headers || {};
+      let message = '';
+      // GitHub REST API v3 returns a message in the body
+      if (data && typeof data.message === 'string' && data.message.match(/rate limit/i)) {
+        message = data.message;
+      }
+      // X-RateLimit-Reset is a UNIX timestamp (seconds)
+      const reset = headers['x-ratelimit-reset'];
+      if (reset) {
+        const resetDate = new Date(parseInt(reset, 10) * 1000);
+        const now = new Date();
+        const waitMins = Math.ceil((resetDate - now) / 60000);
+        message += `\nYou can retry after: ${resetDate.toLocaleString()} (${waitMins} min)`;
+      }
+      if (message) {
+        const userError = new Error(`GitHub API rate limit exceeded. ${message}`);
+        userError.code = 'GITHUB_RATE_LIMIT';
+        throw userError;
+      }
+    }
     throw err;
   }
 }
