@@ -2685,6 +2685,10 @@
       if (!logArea._lastLog) logArea._lastLog = '';
       let lastLog = logArea._lastLog;
       console.debug('[LOG INPLACE] lastLog.length:', lastLog.length, '| outputContent.length:', outputContent.length);
+      if (outputContent.length === 0) {
+        console.debug('[LOG INPLACE] Skipping update: outputContent is empty, preserving current log.');
+        return true;
+      }
       if (outputContent.startsWith(lastLog)) {
         // Only append the new part
         const newPart = outputContent.substring(lastLog.length);
