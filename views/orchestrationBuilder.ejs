@@ -160,6 +160,11 @@ function isSelected(inValue,compareValue){
     }
     .palette-section { margin-bottom: 20px; }
     .palette-section h4 { margin: 5px 0 10px 0; font-size: 12px; color: #666; text-transform: uppercase; font-weight: 600; }
+    #palette-filter-wrap { padding-bottom: 10px; border-bottom: 1px solid #eee; margin-bottom: 12px; }
+    #palette-filter { width: 100%; box-sizing: border-box; padding: 5px 8px 5px 28px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px; outline: none; background: #f9f9f9 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E") no-repeat 7px center; }
+    #palette-filter:focus { border-color: #ff9800; background-color: #fff; }
+    .palette-item.palette-hidden { display: none !important; }
+    .palette-section.palette-section-hidden { display: none !important; }
     #orchestration-footer { background: #f5f5f5; padding: 15px 20px; border-top: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
     .properties-section { margin-bottom: 20px; display: block; visibility: visible; }
     .properties-section label { font-size: 12px; font-weight: 600; color: #666; display: block; margin-bottom: 8px; text-transform: uppercase; }
@@ -493,6 +498,9 @@ function isSelected(inValue,compareValue){
     <div id="orchestration-main">
       <!-- Palette -->
       <div id="orchestration-palette">
+        <div id="palette-filter-wrap">
+          <input id="palette-filter" type="text" placeholder="Filter nodes..." autocomplete="off">
+        </div>
         <div class="palette-section">
           <h4>Start / End</h4>
           <div class="end-nodes-container">
@@ -510,9 +518,26 @@ function isSelected(inValue,compareValue){
             </div>
           </div>
         </div>
-        
         <div class="palette-section">
-          <h4>Actions</h4>
+          <h4>Logic</h4>
+          <div class="logic-nodes-container">
+            <div class="palette-item" draggable="true" data-node-type="condition">
+              <div class="logic-node-content">
+                <i class="material-icons">call_split</i>
+                <span>if</span>
+              </div>
+            </div>
+            <div class="palette-item" draggable="true" data-node-type="split-join">
+              <div class="logic-node-content">
+                <i class="material-icons">account_tree</i>
+                <span class="logic-label-splitjoin">Split<br>Join</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="palette-section">
+          <h4>Core Steps</h4>
           <div class="palette-item" draggable="true" data-node-type="execute">
             <i class="material-icons">settings</i>
             <span>Execute Script</span>
@@ -531,26 +556,8 @@ function isSelected(inValue,compareValue){
           </div>
         </div>
         
-        <div class="palette-section">
-          <h4>Logic</h4>
-          <div class="logic-nodes-container">
-            <div class="palette-item" draggable="true" data-node-type="condition">
-              <div class="logic-node-content">
-                <i class="material-icons">call_split</i>
-                <span>if</span>
-              </div>
-            </div>
-            <div class="palette-item" draggable="true" data-node-type="split-join">
-              <div class="logic-node-content">
-                <i class="material-icons">account_tree</i>
-                <span class="logic-label-splitjoin">Split<br>Join</span>
-              </div>
-            </div>
-          </div>
-        </div>
-        
         <div class="palette-section" id="plugin-palette-section" style="display:none;">
-          <h4>Plugins</h4>
+          <h4>Integration Steps</h4>
           <div id="plugin-palette-items"></div>
         </div>
         
@@ -4037,7 +4044,35 @@ When unchecked (default), execution continues through the graph to a Success or 
         container.appendChild(item);
       });
       section.style.display = '';
+      // Re-apply any active filter after repopulating
+      applyPaletteFilter(document.getElementById('palette-filter').value);
     }
+
+    function applyPaletteFilter(query) {
+      const q = query.trim();
+      const active = q.length >= 2;
+      const lower = q.toLowerCase();
+      document.querySelectorAll('#orchestration-palette .palette-item').forEach(function(item) {
+        if (!active) {
+          item.classList.remove('palette-hidden');
+          return;
+        }
+        // Get the label text from the span inside the item
+        const span = item.querySelector('span');
+        const label = (span ? span.textContent : (item.dataset.pluginName || item.dataset.nodeType || '')).toLowerCase();
+        item.classList.toggle('palette-hidden', label.indexOf(lower) === -1);
+      });
+      // Hide section headers whose every item is hidden
+      document.querySelectorAll('#orchestration-palette .palette-section').forEach(function(section) {
+        const items = section.querySelectorAll('.palette-item');
+        const allHidden = items.length > 0 && Array.from(items).every(function(i) { return i.classList.contains('palette-hidden'); });
+        section.classList.toggle('palette-section-hidden', allHidden);
+      });
+    }
+
+    document.getElementById('palette-filter').addEventListener('input', function() {
+      applyPaletteFilter(this.value);
+    });
 
     function loadOrchestration() {
       $.ajax({

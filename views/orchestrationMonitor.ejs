@@ -1205,9 +1205,24 @@
           if (selectedNode === nodeId) {
             const logArea = document.getElementById('selectedNodeOutputLog');
             if (logArea) {
-              const wasAtBottom = logArea.scrollTop + logArea.clientHeight >= logArea.scrollHeight - 5;
-              logArea.value = log;
-              if (wasAtBottom) logArea.scrollTop = logArea.scrollHeight;
+              // --- Flicker fix: append only new log lines ---
+              if (!logArea._lastLog) logArea._lastLog = '';
+              let lastLog = logArea._lastLog;
+              if (log.startsWith(lastLog)) {
+                // Only append the new part
+                const newPart = log.substring(lastLog.length);
+                if (newPart.length > 0) {
+                  const wasAtBottom = logArea.scrollTop + logArea.clientHeight >= logArea.scrollHeight - 5;
+                  logArea.value += newPart;
+                  if (wasAtBottom) logArea.scrollTop = logArea.scrollHeight;
+                }
+              } else {
+                // Log was reset or truncated, replace all
+                const wasAtBottom = logArea.scrollTop + logArea.clientHeight >= logArea.scrollHeight - 5;
+                logArea.value = log;
+                if (wasAtBottom) logArea.scrollTop = logArea.scrollHeight;
+              }
+              logArea._lastLog = log;
             }
             // Show spinner while live streaming
             const logSpinner = document.getElementById('logRefreshIndicator');

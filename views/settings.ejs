@@ -274,7 +274,8 @@ function noValue(inValue){
                     { id: 'icons', label: 'Icons', perm: 'settings.access', itemClass: 'tab col s1' },
                     { id: 'templates', label: 'Templates', perm: 'settings.access', itemClass: 'tab col s1' },
                     { id: 'webhooks', label: 'Webhooks', perm: 'settings.access', itemClass: 'tab col s1' },
-                    { id: 'backup', label: 'Backup', perm: 'settings.access', itemClass: 'tab col s1' }
+                    { id: 'backup', label: 'Backup', perm: 'settings.access', itemClass: 'tab col s1' },
+                    { id: 'pluginmanager', label: 'Plugin Manager', perm: 'settings.access', itemClass: 'tab col s1' }
                   ];
                   const visibleSettingsTabs = settingsTabs.filter((tab) => hasPerm(tab.perm));
                 %>
@@ -727,6 +728,46 @@ function noValue(inValue){
               <% } %>
 
               <!--<div id="test4" class="col s12">Test 4</div>-->
+
+              <% if (hasPerm('settings.access')) { %>
+              <div id="pluginmanager" class="col s12">
+                <div class="container">
+                  <h6 class="header blue-text" style="margin-bottom: 16px;">Plugin Manager</h6>
+                  <p style="color:#666; margin-bottom: 20px;">
+                    Configure the source repository for installing plugins and an optional GitHub Personal Access Token (PAT) to avoid API rate limiting.
+                  </p>
+
+                  <div class="row">
+                    <div class="input-field col s12">
+                      <input id="pluginRegistryUrl" type="text" name="pluginRegistryUrl"
+                        value="<%= serverConfig.pluginRegistry && serverConfig.pluginRegistry.url ? serverConfig.pluginRegistry.url : 'https://raw.githubusercontent.com/dpembo/orchelium-plugins/main/registry.json' %>">
+                      <label for="pluginRegistryUrl" class="active">Registry URL</label>
+                      <span class="helper-text">URL to the registry.json file. Defaults to the official orchelium-plugins repository.</span>
+                    </div>
+                  </div>
+
+                  <div class="row">
+                    <div class="input-field col s12">
+                      <input id="pluginGithubApiBase" type="text" name="pluginGithubApiBase"
+                        value="<%= serverConfig.pluginRegistry && serverConfig.pluginRegistry.githubApiBase ? serverConfig.pluginRegistry.githubApiBase : 'https://api.github.com/repos/dpembo/orchelium-plugins' %>">
+                      <label for="pluginGithubApiBase" class="active">GitHub API Base URL</label>
+                      <span class="helper-text">GitHub Contents API base for downloading plugin files. Leave as default unless using a self-hosted GitHub.</span>
+                    </div>
+                  </div>
+
+                  <div class="row">
+                    <div class="input-field col s12">
+                      <input id="pluginGithubToken" type="password" name="pluginGithubToken"
+                        value="<%= serverConfig.pluginRegistry && serverConfig.pluginRegistry.githubToken ? serverConfig.pluginRegistry.githubToken : '' %>">
+                      <label for="pluginGithubToken" class="active">GitHub Personal Access Token (optional)</label>
+                      <span class="helper-text">A PAT increases the GitHub API rate limit from 60 to 5,000 requests/hour. Leave empty for unauthenticated access. Only <code>public_repo</code> (read-only) scope is required.</span>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+              <% } %>
+
             </div>
 
 
