@@ -19,6 +19,40 @@ function isSelected(inValue,compareValue){
   <%- include('./partials/_scripts'); %>
   
   <style>
+                    /* Even higher specificity for Materialize select in dark mode */
+                    body.dark .select-wrapper input.select-dropdown,
+                    body.dark ul.dropdown-content.select-dropdown {
+                      background-color: #23272e !important;
+                      color: #e0e0e0 !important;
+                      border-color: #444 !important;
+                      box-shadow: none !important;
+                    }
+                /* Dark mode for Materialize custom select dropdowns */
+                body.dark .dropdown-content,
+                body.dark .select-dropdown {
+                  background-color: #23272e !important;
+                  color: #e0e0e0 !important;
+                  border-color: #444 !important;
+                }
+                body.dark .dropdown-content li > a,
+                body.dark .dropdown-content li > span {
+                  color: #e0e0e0 !important;
+                }
+            /* Stronger override for Materialize select background in dark mode */
+            body.dark #orchestration-properties .properties-section select,
+            body.dark #orchestration-properties .properties-section select:focus {
+              background-color: #23272e !important;
+              color: #e0e0e0 !important;
+              border-color: #444 !important;
+              box-shadow: none !important;
+            }
+        /* Force dark background for select boxes in info panel in dark mode */
+        body.dark #orchestration-properties select,
+        body.dark #orchestration-properties select:focus {
+          background-color: #23272e !important;
+          color: #e0e0e0 !important;
+          border-color: #444 !important;
+        }
     body { margin: 0; padding: 0; overflow: hidden; }
     #orchestration-container { display: flex; height: calc(100vh - 120px); flex-direction: column; overflow: hidden; width: 100%; margin-top: 1px; }
     #orchestration-header { position: relative; top: -5px; background: #f5f5f5; padding: 15px 20px; border-bottom: 1px solid #ddd; flex-shrink: 0; position: relative;}
@@ -54,14 +88,28 @@ function isSelected(inValue,compareValue){
     }
     
     #orchestration-main { display: flex; flex: 1; overflow: hidden; }
-    #orchestration-palette { width: 250px; background: white; border-right: 1px solid #ddd; overflow-y: auto; padding: 15px; flex-shrink: 0; }
+    #orchestration-palette { width: 250px; border-right: 1px solid #ddd; overflow-y: auto; padding: 15px; flex-shrink: 0; }
     #orchestration-canvas { flex: 1; background: #fafafa; position: relative; overflow: auto; }
     #orchestration-canvas svg { display: block; min-width: 100%; min-height: 100%; background: #fafafa; }
-    #orchestration-properties { width: 300px; background: white; border-left: 1px solid #ddd; overflow-y: auto; padding: 15px; flex-shrink: 0; position: fixed; right: 0; top: 142px; bottom: 55px; transform: translateX(100%); transition: transform 0.3s ease-in-out; z-index: 50; }
+    #orchestration-properties { width: 300px; border-left: 1px solid #ddd; background: #f5f5f5; color: #333; overflow-y: auto; padding: 15px; flex-shrink: 0; position: fixed; right: 0; top: 142px; bottom: 55px; transform: translateX(100%); transition: transform 0.3s ease-in-out; z-index: 50; }
     #orchestration-properties.show { transform: translateX(0); }
+    body.dark #orchestration-properties,
+    html.dark body #orchestration-properties {
+      background: #1f2430;
+      color: #e0e6f0;
+      border-left-color: #3e4658;
+    }
+    body.dark #orchestration-properties #properties-empty,
+    html.dark body #orchestration-properties #properties-empty {
+      color: #a8b1c2 !important;
+    }
+    body.dark #orchestration-properties #properties-empty .material-icons,
+    html.dark body #orchestration-properties #properties-empty .material-icons {
+      color: #7f8ba2 !important;
+    }
     #zoom-controls { right: 20px; }
     #zoom-controls.shift-left { right: 320px; }
-    .palette-item { padding: 10px; margin-bottom: 8px; background: #f9f9f9; border: 1px solid #e0e0e0; border-radius: 4px; cursor: move; user-select: none; display: flex; align-items: center; gap: 8px; font-size: 13px; transition: all 0.2s; }
+    .palette-item { padding: 10px; margin-bottom: 8px; border: 1px solid #e0e0e0; border-radius: 4px; cursor: move; user-select: none; display: flex; align-items: center; gap: 8px; font-size: 13px; transition: all 0.2s; }
     .palette-item:hover { background: #f0f0f0; border-color: #ff9800; }
     .palette-item i { font-size: 16px; }
     .palette-item[data-node-type="start"],
@@ -161,14 +209,92 @@ function isSelected(inValue,compareValue){
     .palette-section { margin-bottom: 20px; }
     .palette-section h4 { margin: 5px 0 10px 0; font-size: 12px; color: #666; text-transform: uppercase; font-weight: 600; }
     #palette-filter-wrap { padding-bottom: 10px; border-bottom: 1px solid #eee; margin-bottom: 12px; }
-    #palette-filter { width: 100%; box-sizing: border-box; padding: 5px 8px 5px 28px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px; outline: none; background: #f9f9f9 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E") no-repeat 7px center; }
+    #palette-filter { width: 100%; box-sizing: border-box; padding: 5px 8px 5px 28px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px; outline: none; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E") no-repeat 7px center; transition: background 0.2s, color 0.2s, border-color 0.2s; }
     #palette-filter:focus { border-color: #ff9800; background-color: #fff; }
+
+    /* Dark mode overrides for palette filter and all input fields */
+    body.dark #palette-filter {
+      background: #23272e url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23bbb' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E") no-repeat 7px center;
+      color: #e0e0e0;
+      border-color: #444;
+    }
+    body.dark #palette-filter:focus {
+      background-color: #23272e;
+      border-color: #ff9800;
+      color: #fff;
+    }
+
+    /* General dark mode for all input, select, textarea in palette and properties panel */
+    body.dark #orchestration-palette input,
+    body.dark #orchestration-palette select,
+    body.dark #orchestration-palette textarea,
+    body.dark #orchestration-properties input,
+    body.dark #orchestration-properties select,
+    body.dark #orchestration-properties textarea {
+      background-color: #23272e !important;
+      color: #e0e0e0 !important;
+      border-color: #444 !important;
+      box-shadow: none !important;
+      caret-color: #ff9800 !important;
+      transition: background 0.2s, color 0.2s, border-color 0.2s;
+    }
+    body.dark #orchestration-palette input:focus,
+    body.dark #orchestration-palette select:focus,
+    body.dark #orchestration-palette textarea:focus,
+    body.dark #orchestration-properties input:focus,
+    body.dark #orchestration-properties select:focus,
+    body.dark #orchestration-properties textarea:focus {
+      border-color: #ff9800 !important;
+      color: #fff !important;
+      background-color: #23272e !important;
+    }
+    body.dark #orchestration-properties option {
+      background: #23272e;
+      color: #e0e0e0;
+    }
+    body.dark #orchestration-properties .select-wrapper input.select-dropdown,
+    html.dark body #orchestration-properties .select-wrapper input.select-dropdown,
+    body.dark #orchestration-properties .select-wrapper input.select-dropdown:focus,
+    html.dark body #orchestration-properties .select-wrapper input.select-dropdown:focus,
+    body.dark #orchestration-properties .select-wrapper input.select-dropdown[readonly],
+    html.dark body #orchestration-properties .select-wrapper input.select-dropdown[readonly],
+    body.dark #orchestration-properties .select-wrapper input.select-dropdown:disabled,
+    html.dark body #orchestration-properties .select-wrapper input.select-dropdown:disabled {
+      background-color: #232b39 !important;
+      color: #e0e6f0 !important;
+      -webkit-text-fill-color: #e0e6f0 !important;
+      border: 1px solid #475067 !important;
+      border-radius: 4px !important;
+      box-shadow: none !important;
+    }
+    body.dark #orchestration-properties .select-wrapper .caret,
+    html.dark body #orchestration-properties .select-wrapper .caret {
+      fill: #a8b1c2 !important;
+    }
+    body.dark ul.dropdown-content.select-dropdown,
+    html.dark ul.dropdown-content.select-dropdown {
+      background-color: #232b39 !important;
+      border: 1px solid #475067 !important;
+    }
+    body.dark ul.dropdown-content.select-dropdown li > span,
+    body.dark ul.dropdown-content.select-dropdown li > a,
+    html.dark ul.dropdown-content.select-dropdown li > span,
+    html.dark ul.dropdown-content.select-dropdown li > a {
+      color: #e0e6f0 !important;
+    }
+    body.dark ul.dropdown-content.select-dropdown li.disabled > span,
+    html.dark ul.dropdown-content.select-dropdown li.disabled > span {
+      color: #8b95a8 !important;
+    }
+    body.dark .properties-section label {
+      color: #bbb;
+    }
     .palette-item.palette-hidden { display: none !important; }
     .palette-section.palette-section-hidden { display: none !important; }
     #orchestration-footer { background: #f5f5f5; padding: 15px 20px; border-top: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
     .properties-section { margin-bottom: 20px; display: block; visibility: visible; }
     .properties-section label { font-size: 12px; font-weight: 600; color: #666; display: block; margin-bottom: 8px; text-transform: uppercase; }
-    .properties-section input, .properties-section select { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; box-sizing: border-box; appearance: auto; background-color: white; color: #333; cursor: pointer; display: block; visibility: visible; }
+    .properties-section input, .properties-section select { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; box-sizing: border-box; appearance: auto; color: #333; cursor: pointer; display: block; visibility: visible; }
     .properties-section input[type="checkbox"] { width: auto; padding: 0; border: none; border-radius: 0; background: transparent; display: inline-block; appearance: checkbox; box-shadow: none; }
     .properties-section input[type="checkbox"]:focus { outline: revert; border-color: unset; box-shadow: none; }
     .properties-section select:focus { outline: none; border-color: #2196f3; box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.1); }
@@ -410,7 +536,7 @@ function isSelected(inValue,compareValue){
           <i id="orch-icon-element" class="material-icons" style="color: #FF9800; font-size: 24px;" onclick="toggleIconEdit()"><%=icon%></i>
           <i id="orch-icon-indicator" class="material-icons" style="color: #000000; font-size:14px; position: relative; left: -14px; top: 11px;" onclick="toggleIconEdit()">schema</i>
 
-          <div id="orch-icon-edit" style="display: none; background: white; border: 1px solid #ddd; border-radius: 4px; padding: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); min-width: 280px;">
+          <div id="orch-icon-edit" style="display: none; border: 1px solid #ddd; border-radius: 4px; padding: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); min-width: 280px;">
             <label style="font-size: 11px; color: #999; text-transform: uppercase; display: block; margin-bottom: 4px;">Icon Name</label>
             <input type="hidden" id="orch-icon-input" placeholder="e.g., schema, backup, settings..." style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 3px; box-sizing: border-box; margin-bottom: 10px;">
             <select id="icon_select" name="icon" onchange="updateIconPreview(this);">
@@ -812,14 +938,14 @@ When unchecked (default), execution continues through the graph to a Success or 
           <div id="prop-end" style="display: none;">
             <div class="properties-section">
               <label>End Type</label>
-              <div id="prop-end-type-display" style="padding: 8px; background: #f5f5f5; border-radius: 3px; color: #333; font-weight: 500;"></div>
+              <div id="prop-end-type-display" style="padding: 8px; border-radius: 3px; color: #333; font-weight: 500;"></div>
             </div>
           </div>
 
           <div id="prop-plugin" style="display: none;">
             <div class="properties-section">
               <label>Plugin</label>
-              <div id="prop-plugin-name-display" style="padding: 8px; background: #f5f5f5; border-radius: 3px; color: #333; font-weight: 500; font-family: monospace; font-size: 13px;"></div>
+              <div id="prop-plugin-name-display" style="padding: 8px; border-radius: 3px; color: #333; font-weight: 500; font-family: monospace; font-size: 13px;"></div>
             </div>
             <div class="properties-section">
               <label for="prop-plugin-agent">Agent</label>
