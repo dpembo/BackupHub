@@ -93,6 +93,7 @@ notificationData = require("./notificationData.js");
 running=require("./running.js");
 agentHistory = require ("./agentHistory.js");
 db = require("./db.js");
+definitionStore = require('./definitionStore.js');
 nodeschedule = require('node-schedule');
 scheduler = require ("./scheduler.js");
 orchestration = require("./orchestration.js");
@@ -128,6 +129,18 @@ function findClientByPrefix(prefix) {
 const pingInterval = 60;
 const connTimeoutInterval = 180;
 const failedPingOffline = 3;
+
+function getDefinitionStoreConfig() {
+  const defs = (serverConfig.server && serverConfig.server.definitions) || {};
+  return {
+    backend: process.env.DEFINITIONS_BACKEND || defs.backend || 'db',
+    jobsDir: path.resolve(__dirname, defs.jobsDir || './data/jobs'),
+    orchestrationsDir: path.resolve(__dirname, defs.orchestrationsDir || './data/orchestrations'),
+    stateDir: path.resolve(__dirname, defs.stateDir || './data/.state'),
+    watcherDebounceMs: defs.watcherDebounceMs || 500,
+    reconciliationIntervalSeconds: defs.reconciliationIntervalSeconds || 60
+  };
+}
 
 recordHolder = {};
 const DEFAULT_MQTT_SERVER = 'localhost';
@@ -2871,7 +2884,7 @@ app.get('/scheduler.html',User.isAuthenticated, User.requireAnyPermission([PERMI
   //Get the schedule
   let orchestrations = {};
   try {
-    orchestrations = await db.getData('ORCHESTRATION_JOBS') || {};
+    orchestrations = await orchestration.getAllJobs() || {};
   } catch (err) {
     logger.debug('Unable to fetch orchestrations for scheduler:', err.message);
   }
@@ -4385,9 +4398,7 @@ app.delete('/rest/schedules/:jobName', User.isAuthenticated, User.requirePermiss
  */
 app.delete('/rest/schedules', User.isAuthenticated, User.requirePermission(PERMISSIONS.JOBS_DELETE), asyncHandler(async (req, res) => {
   try {
-    // Clear all schedules by writing an empty array
-    await db.putData('SCHEDULES_CONFIG', []);
-    scheduler.init(); // Reinitialize scheduler with empty data
+    await scheduler.clearSchedules();
     res.json({ success: true, message: 'All schedules deleted' });
   } catch (err) {
     logger.error(`Error deleting all schedules: ${err.message}`);
@@ -4396,6 +4407,49 @@ app.delete('/rest/schedules', User.isAuthenticated, User.requirePermission(PERMI
       message: `Failed to delete schedules: ${err.message}` 
     });
   }
+}));
+
+/**
+ * Definition store status (backend, counts, invalid files)
+ */
+app.get('/rest/definitions/status', User.isAuthenticated, User.requireAnyPermission([PERMISSIONS.JOBS_VIEW, PERMISSIONS.ORCHESTRATIONS_VIEW]), asyncHandler(async (_req, res) => {
+  res.json({ success: true, status: definitionStore.getStatus() });
+}));
+
+/**
+ * Force reload of filesystem-backed definitions
+ */
+app.post('/rest/definitions/reload', User.isAuthenticated, User.requireAnyPermission([PERMISSIONS.JOBS_EDIT, PERMISSIONS.ORCHESTRATIONS_EDIT]), asyncHandler(async (_req, res) => {
+  await definitionStore.reload();
+  await scheduler.init();
+  await orchestration.init();
+  res.json({ success: true, message: 'Definitions reloaded', status: definitionStore.getStatus() });
+}));
+
+/**
+ * Migrate definitions from DB keys into filesystem assets.
+ */
+app.post('/rest/definitions/migrate-db-to-fs', User.isAuthenticated, User.requireAnyPermission([PERMISSIONS.JOBS_EDIT, PERMISSIONS.ORCHESTRATIONS_EDIT]), asyncHandler(async (req, res) => {
+  if (!['fs', 'hybrid'].includes(definitionStore.getBackend())) {
+    return res.status(400).json({
+      success: false,
+      message: `Definition backend must be fs or hybrid (current: ${definitionStore.getBackend()})`
+    });
+  }
+
+  const deleteSource = req.body && (req.body.deleteSource === true || req.body.deleteSource === 'true');
+  const migratedSchedules = await scheduler.migrateSchedulesToFilesystem({ deleteSource });
+  const migratedOrchestrations = await orchestration.migrateToFilesystem({ deleteSource });
+
+  res.json({
+    success: true,
+    message: 'Definition migration complete',
+    migrated: {
+      schedules: migratedSchedules,
+      orchestrations: migratedOrchestrations
+    },
+    deleteSource
+  });
 }));
 
 // =========================
@@ -4951,20 +5005,16 @@ app.get('/api/schedules/by-orchestration/:orchestrationId', User.isAuthenticated
   }
   
   // Get all schedules
-  const allSchedules = await scheduler.getSchedules(-1); // Get all (passing -1 might be placeholder, let's use direct access)
+  const allSchedules = scheduler.getSchedules();
   let matchingSchedules = [];
   
   try {
-    // Access schedules from database
-    const schedulesDb = require('./db.js');
-    const schedules = await schedulesDb.getData('SCHEDULES_CONFIG').catch(() => []);
+    const schedules = Array.isArray(allSchedules) ? allSchedules : [];
     
-    if (Array.isArray(schedules)) {
-      matchingSchedules = schedules.filter(schedule => 
-        schedule.scheduleMode === 'orchestration' && 
-        schedule.orchestrationId === orchestrationId
-      );
-    }
+    matchingSchedules = schedules.filter(schedule => 
+      schedule.scheduleMode === 'orchestration' && 
+      schedule.orchestrationId === orchestrationId
+    );
   } catch (err) {
     logger.warn('Error fetching schedules for orchestration:', err.message);
     matchingSchedules = [];
@@ -5081,6 +5131,9 @@ var server = app.listen(port, async function () {
   
   try {
     passman.checkKey();
+
+    await definitionStore.init(getDefinitionStoreConfig());
+    logger.info(`Definition store initialized using backend [${definitionStore.getBackend()}]`);
 
     // Run idempotent user schema migration before accepting traffic
     try {

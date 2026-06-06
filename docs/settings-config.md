@@ -24,6 +24,81 @@ This is used in emails/notifications to enable you to link back to the server. Y
 | Timezone  | Server timezone for displaying jobs | Europe/London |
 | Log Level | Numeric value (0=Error, 1=Warn, 2=Info, 3=Verbose, 4=Debug). Higher = more output. | 2 |
 
+### Definitions Storage
+
+Orchelium supports three storage backends for schedule/job and orchestration definitions.
+
+Add this block under `server` in `data/server-config.json`:
+
+```json
+"definitions": {
+  "backend": "fs",
+  "jobsDir": "./data/jobs",
+  "orchestrationsDir": "./data/orchestrations",
+  "stateDir": "./data/.state",
+  "watcherDebounceMs": 500,
+  "reconciliationIntervalSeconds": 60
+}
+```
+
+Backend modes:
+
+| Backend | Behavior | Typical use |
+|---|---|---|
+| `db` | Reads/writes definitions from LevelDB keys only. | Legacy/default compatibility mode. |
+| `hybrid` | Reads merge DB and file definitions (file wins on conflicts). Writes persist to file and mirror to DB. | Safe transition period while moving to file-backed definitions. |
+| `fs` | Reads/writes definitions from filesystem assets only. | Git-tracked definitions and long-term target mode. |
+
+Definitions properties:
+
+| Property | Purpose |
+|---|---|
+| `backend` | Selects active definitions backend (`db`, `hybrid`, `fs`). |
+| `jobsDir` | Directory containing schedule/job definition files (`*.job.json`). |
+| `orchestrationsDir` | Directory containing orchestration definition files (`*.orch.json`). |
+| `stateDir` | Internal operational state directory for definition-store metadata/locks. |
+| `watcherDebounceMs` | Debounce window (ms) for filesystem watcher reload events. |
+| `reconciliationIntervalSeconds` | Periodic full-rescan interval (seconds) to recover missed watcher events. |
+
+Notes:
+
+| Note | Detail |
+|---|---|
+| Directory creation | In `fs` and `hybrid` modes, missing `jobsDir`, `orchestrationsDir`, and `stateDir` are created automatically at startup. |
+| Environment override | `DEFINITIONS_BACKEND` environment variable overrides `server.definitions.backend` when set. |
+| Git tracking | Track `jobsDir` and `orchestrationsDir` in git. Do not track `stateDir` contents. |
+
+### Migration from versions earlier than `2026.06.06.01`
+
+If you are upgrading from a version before `2026.06.06.01`, your schedule/orchestration definitions are likely still DB-backed only.
+
+Use this short migration flow:
+
+1. Set backend to `hybrid` in `data/server-config.json` under `server.definitions.backend`.
+2. Restart the hub.
+3. Trigger migration once:
+
+```bash
+curl -X POST http://localhost:8082/rest/definitions/migrate-db-to-fs \
+  -H "Content-Type: application/json" \
+  -d '{"deleteSource":false}' \
+  -b cookie.txt
+```
+
+4. Verify status:
+
+```bash
+curl -X GET http://localhost:8082/rest/definitions/status -b cookie.txt
+```
+
+5. Confirm files exist in `data/jobs` and `data/orchestrations`.
+6. Switch backend to `fs` and restart the hub.
+
+Rollback safety:
+
+- Keeping `deleteSource:false` preserves DB definitions so you can temporarily switch back to `db` if required.
+- Only use `deleteSource:true` after you have validated file-backed operation.
+
 ---
 ---
 
