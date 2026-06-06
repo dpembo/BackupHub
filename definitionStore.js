@@ -14,7 +14,7 @@ const FILE_EXT = {
 };
 
 const DEFAULTS = {
-  backend: process.env.DEFINITIONS_BACKEND || 'db',
+  backend: process.env.DEFINITIONS_BACKEND || 'fs',
   jobsDir: path.join(__dirname, 'data', 'jobs'),
   orchestrationsDir: path.join(__dirname, 'data', 'orchestrations'),
   stateDir: path.join(__dirname, 'data', '.state'),
@@ -323,10 +323,10 @@ async function init(options = {}) {
     ...options
   };
 
-  backend = (cfg.backend || process.env.DEFINITIONS_BACKEND || 'db').toLowerCase();
+  backend = (cfg.backend || process.env.DEFINITIONS_BACKEND || 'fs').toLowerCase();
   if (!['db', 'fs', 'hybrid'].includes(backend)) {
-    logger.warn(`[DefinitionStore] Unknown backend [${backend}] - falling back to db`);
-    backend = 'db';
+    logger.warn(`[DefinitionStore] Unknown backend [${backend}] - falling back to fs`);
+    backend = 'fs';
   }
 
   stopFilesystemWatchers();

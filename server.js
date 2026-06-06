@@ -133,7 +133,7 @@ const failedPingOffline = 3;
 function getDefinitionStoreConfig() {
   const defs = (serverConfig.server && serverConfig.server.definitions) || {};
   return {
-    backend: process.env.DEFINITIONS_BACKEND || defs.backend || 'db',
+    backend: process.env.DEFINITIONS_BACKEND || defs.backend || 'fs',
     jobsDir: path.resolve(__dirname, defs.jobsDir || './data/jobs'),
     orchestrationsDir: path.resolve(__dirname, defs.orchestrationsDir || './data/orchestrations'),
     stateDir: path.resolve(__dirname, defs.stateDir || './data/.state'),

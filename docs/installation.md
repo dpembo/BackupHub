@@ -57,6 +57,11 @@ When using `server.definitions.backend` as `fs` or `hybrid`, the data volume als
 
 These are created automatically if missing.
 
+Warning for users adopting `2026.06.06.02` onward:
+
+- The default definitions backend is `fs`.
+- If your existing schedules/orchestrations are still DB-backed and not migrated, temporarily set `server.definitions.backend` to `hybrid`, run migration, verify files, then return to `fs`.
+
 #### Upgrade migration (versions earlier than `2026.06.06.01`)
 
 If upgrading from a version before `2026.06.06.01`, move definitions safely using this flow:
