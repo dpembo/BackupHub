@@ -1,5 +1,8 @@
 // Mock setup for orchestration module tests
 
+const ORIGINAL_DEFINITIONS_BACKEND = process.env.DEFINITIONS_BACKEND;
+process.env.DEFINITIONS_BACKEND = 'db';
+
 // Mock db module before importing orchestration
 jest.mock('../../db.js', () => ({
   getData: jest.fn(),
@@ -581,4 +584,12 @@ describe('Orchestration Module', () => {
       expect(saved2.versions.length).toBe(2);
     });
   });
+});
+
+afterAll(() => {
+  if (ORIGINAL_DEFINITIONS_BACKEND === undefined) {
+    delete process.env.DEFINITIONS_BACKEND;
+    return;
+  }
+  process.env.DEFINITIONS_BACKEND = ORIGINAL_DEFINITIONS_BACKEND;
 });
