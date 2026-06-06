@@ -40,7 +40,7 @@ function processServerConfig() {
 
   if (obj.server.definitions === undefined || obj.server.definitions === null || typeof obj.server.definitions !== 'object') {
     obj.server.definitions = {
-      backend: process.env.DEFINITIONS_BACKEND || 'db',
+      backend: process.env.DEFINITIONS_BACKEND || 'fs',
       jobsDir: './data/jobs',
       orchestrationsDir: './data/orchestrations',
       stateDir: './data/.state',
@@ -50,7 +50,7 @@ function processServerConfig() {
     needsave = true;
   } else {
     if (obj.server.definitions.backend === undefined || obj.server.definitions.backend === null) {
-      obj.server.definitions.backend = process.env.DEFINITIONS_BACKEND || 'db';
+      obj.server.definitions.backend = process.env.DEFINITIONS_BACKEND || 'fs';
       needsave = true;
     }
     if (obj.server.definitions.jobsDir === undefined || obj.server.definitions.jobsDir === null) {
@@ -155,7 +155,7 @@ function loadConfigJson(filename) {
     inConfigObj.server.hostname="localhost";
     inConfigObj.server.protocol="http";
     inConfigObj.server.definitions = {
-      backend: process.env.DEFINITIONS_BACKEND || 'db',
+      backend: process.env.DEFINITIONS_BACKEND || 'fs',
       jobsDir: './data/jobs',
       orchestrationsDir: './data/orchestrations',
       stateDir: './data/.state',

@@ -28,6 +28,8 @@ This is used in emails/notifications to enable you to link back to the server. Y
 
 Orchelium supports three storage backends for schedule/job and orchestration definitions.
 
+Default from `2026.06.06.02` onward: `fs`.
+
 Add this block under `server` in `data/server-config.json`:
 
 ```json
@@ -45,9 +47,9 @@ Backend modes:
 
 | Backend | Behavior | Typical use |
 |---|---|---|
-| `db` | Reads/writes definitions from LevelDB keys only. | Legacy/default compatibility mode. |
+| `db` | Reads/writes definitions from LevelDB keys only. | Legacy compatibility mode. |
 | `hybrid` | Reads merge DB and file definitions (file wins on conflicts). Writes persist to file and mirror to DB. | Safe transition period while moving to file-backed definitions. |
-| `fs` | Reads/writes definitions from filesystem assets only. | Git-tracked definitions and long-term target mode. |
+| `fs` | Reads/writes definitions from filesystem assets only. | Default mode from `2026.06.06.02` and long-term target mode. |
 
 Definitions properties:
 
@@ -67,6 +69,10 @@ Notes:
 | Directory creation | In `fs` and `hybrid` modes, missing `jobsDir`, `orchestrationsDir`, and `stateDir` are created automatically at startup. |
 | Environment override | `DEFINITIONS_BACKEND` environment variable overrides `server.definitions.backend` when set. |
 | Git tracking | Track `jobsDir` and `orchestrationsDir` in git. Do not track `stateDir` contents. |
+
+Warning for users adopting `2026.06.06.02` onward:
+
+- If your existing schedules/orchestrations were created before filesystem-backed definitions and you have not migrated yet, set `backend` to `hybrid`, run the migration endpoint, verify files, then switch back to `fs`.
 
 ### Migration from versions earlier than `2026.06.06.01`
 
