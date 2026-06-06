@@ -4,6 +4,7 @@
  */
 
 const dateTimeUtils = require('./utils/dateTimeUtils.js');
+const definitionStore = require('./definitionStore.js');
 
 // Note: logger, db, and serverConfig are injected as globals from server.js
 
@@ -394,8 +395,7 @@ function detectConcurrentNodes(nodes, execution, edges) {
  */
 async function getJobDefinitionVersion(jobId, version = 'current') {
   try {
-    const jobs = await db.getData('ORCHESTRATION_JOBS');
-    const job = jobs[jobId];
+    const job = await definitionStore.getOrchestration(jobId);
     
     if (!job) {
       throw new Error(`Orchestration job [${jobId}] not found`);
@@ -478,7 +478,7 @@ async function getExecutionHistory(jobId) {
  */
 async function listJobsWithStatus(timezone) {
   try {
-    const jobs = await db.getData('ORCHESTRATION_JOBS');
+    const jobs = await definitionStore.listOrchestrations();
     
     // Fetch execution history, treating missing data as empty object
     // This ensures jobs appear with 'never_run' status on first use

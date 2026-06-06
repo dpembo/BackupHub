@@ -12,6 +12,7 @@ const { AppError, handleError } = require('./utils/errorHandler.js');
 
 // Database instances
 const db = require('./db.js');
+const definitionStore = require('./definitionStore.js');
 const agentHistoryDb = require('./agentHistory.js');
 const configuration = require('./configuration.js');
 
@@ -216,7 +217,7 @@ async function addFilesToArchive(archive, options) {
     // Add schedules
     if (options.schedules) {
       try {
-        const schedules = await db.getData('SCHEDULES_CONFIG');
+        const schedules = await definitionStore.listJobs();
         if (schedules) {
           archive.append(JSON.stringify(schedules, null, 2), {
             name: `${backupDir}/schedules-config.json`,
@@ -246,7 +247,7 @@ async function addFilesToArchive(archive, options) {
     // Add orchestration jobs
     if (options.orchestrationJobs) {
       try {
-        const orchJobs = await db.getData('ORCHESTRATION_JOBS');
+        const orchJobs = await definitionStore.listOrchestrations();
         if (orchJobs) {
           archive.append(JSON.stringify(orchJobs, null, 2), {
             name: `${backupDir}/orchestration-jobs.json`,
@@ -577,8 +578,7 @@ async function restoreSchedules(schedulesPath) {
     throw new AppError('Invalid schedules format', 400);
   }
 
-  // Save to database
-  await db.putData('SCHEDULES_CONFIG', schedules);
+  await definitionStore.replaceJobs(schedules);
   logger.info(`Restored ${schedules.length} schedules`);
 }
 
@@ -660,8 +660,7 @@ async function restoreOrchestrationJobs(orchJobsPath) {
     throw new AppError('Invalid orchestration jobs format', 400);
   }
 
-  // Save to database
-  await db.putData('ORCHESTRATION_JOBS', orchJobs);
+  await definitionStore.replaceOrchestrations(orchJobs);
   logger.info(`Restored ${Object.keys(orchJobs).length} orchestration jobs`);
 }
 

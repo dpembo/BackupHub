@@ -31,6 +31,50 @@ function processServerConfig() {
   var decMqtt=null;
   //decrypt passwords in mem
   var needsave = false;
+
+  // Ensure definitions config exists for existing installations.
+  if (obj.server === undefined || obj.server === null) {
+    obj.server = {};
+    needsave = true;
+  }
+
+  if (obj.server.definitions === undefined || obj.server.definitions === null || typeof obj.server.definitions !== 'object') {
+    obj.server.definitions = {
+      backend: process.env.DEFINITIONS_BACKEND || 'db',
+      jobsDir: './data/jobs',
+      orchestrationsDir: './data/orchestrations',
+      stateDir: './data/.state',
+      watcherDebounceMs: 500,
+      reconciliationIntervalSeconds: 60
+    };
+    needsave = true;
+  } else {
+    if (obj.server.definitions.backend === undefined || obj.server.definitions.backend === null) {
+      obj.server.definitions.backend = process.env.DEFINITIONS_BACKEND || 'db';
+      needsave = true;
+    }
+    if (obj.server.definitions.jobsDir === undefined || obj.server.definitions.jobsDir === null) {
+      obj.server.definitions.jobsDir = './data/jobs';
+      needsave = true;
+    }
+    if (obj.server.definitions.orchestrationsDir === undefined || obj.server.definitions.orchestrationsDir === null) {
+      obj.server.definitions.orchestrationsDir = './data/orchestrations';
+      needsave = true;
+    }
+    if (obj.server.definitions.stateDir === undefined || obj.server.definitions.stateDir === null) {
+      obj.server.definitions.stateDir = './data/.state';
+      needsave = true;
+    }
+    if (obj.server.definitions.watcherDebounceMs === undefined || obj.server.definitions.watcherDebounceMs === null) {
+      obj.server.definitions.watcherDebounceMs = 500;
+      needsave = true;
+    }
+    if (obj.server.definitions.reconciliationIntervalSeconds === undefined || obj.server.definitions.reconciliationIntervalSeconds === null) {
+      obj.server.definitions.reconciliationIntervalSeconds = 60;
+      needsave = true;
+    }
+  }
+
   if (obj.smtp!==undefined && obj.smtp.password!==undefined && obj.smtp.password!==null && obj.smtp.password.length>0)
   {
     var pass = obj.smtp.password
@@ -110,6 +154,14 @@ function loadConfigJson(filename) {
     inConfigObj.server.port=8082
     inConfigObj.server.hostname="localhost";
     inConfigObj.server.protocol="http";
+    inConfigObj.server.definitions = {
+      backend: process.env.DEFINITIONS_BACKEND || 'db',
+      jobsDir: './data/jobs',
+      orchestrationsDir: './data/orchestrations',
+      stateDir: './data/.state',
+      watcherDebounceMs: 500,
+      reconciliationIntervalSeconds: 60
+    };
     inConfigObj.websocket_server.port=49981;
     
     //Default timezone (from env or set to UTC if not present)

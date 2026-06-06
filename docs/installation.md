@@ -48,6 +48,40 @@ docker run \
 | /usr/src/app/data | This volume is used to hold all the various data that Orchelium uses including job history, user setup, configuration and statistics |-v custom/data:/usr/src/app/data
 | usr/src/app/scripts | This is where all your backup/any other shell scripts you schedule are stored|/etc/scripts|
 | usr/src/app/logs | Directory where log information can be outputted|/var/logs/Orchelium|
+
+When using `server.definitions.backend` as `fs` or `hybrid`, the data volume also contains filesystem-backed definition assets:
+
+- `data/jobs` for schedule/job definitions (`*.job.json`)
+- `data/orchestrations` for orchestration definitions (`*.orch.json`)
+- `data/.state` for internal definition-store operational state
+
+These are created automatically if missing.
+
+#### Upgrade migration (versions earlier than `2026.06.06.01`)
+
+If upgrading from a version before `2026.06.06.01`, move definitions safely using this flow:
+
+1. Set `server.definitions.backend` to `hybrid` in `data/server-config.json`.
+2. Restart the hub.
+3. Run migration once:
+
+```bash
+curl -X POST http://localhost:8082/rest/definitions/migrate-db-to-fs \
+  -H "Content-Type: application/json" \
+  -d '{"deleteSource":false}' \
+  -b cookie.txt
+```
+
+4. Verify status and counts:
+
+```bash
+curl -X GET http://localhost:8082/rest/definitions/status -b cookie.txt
+```
+
+5. Confirm files exist under `data/jobs` and `data/orchestrations`.
+6. Switch backend to `fs` and restart.
+
+Keep `deleteSource:false` until you have validated file-backed operation.
 | | | |
 | **Port** | **Description** | **Example** |
 | 8082 | The port the web application is hosted on | -p 8080:8082 |

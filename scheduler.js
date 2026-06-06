@@ -1,6 +1,6 @@
 const scheduleFile = "./data/schedules.json";
 const db = require('./db.js');
-const DB_KEY = 'SCHEDULES_CONFIG';
+const definitionStore = require('./definitionStore.js');
 var schedules = [];
 var ruleIntervals = new Map(); // Track setInterval handles for rule-based jobs
 
@@ -108,19 +108,16 @@ function publishExecute(agent_id, command, commandParams, jobName, isManual, exe
 }
 
 /**
- * Migrate schedules from JSON file to database
- * Checks if the JSON file exists, and if so, migrates all schedules to the database
- * and deletes the file after successful migration
+ * Migrate legacy schedules.json into the active definitions backend.
  */
-async function migrateSchedulesToDatabase() {
+async function migrateLegacySchedulesJson() {
   try {
-    // Check if the JSON file exists
     if (!fsSync.existsSync(scheduleFile)) {
-      logger.info("Schedules JSON file not found - no migration needed");
+      logger.info("Legacy schedules JSON file not found - no migration needed");
       return false;
     }
 
-    logger.info("Found schedules JSON file, starting migration to database...");
+    logger.info("Found legacy schedules JSON file, migrating into definitions backend...");
     
     // Read the JSON file
     const data = await fs.readFile(scheduleFile, 'utf8');
@@ -133,54 +130,42 @@ async function migrateSchedulesToDatabase() {
       return false;
     }
 
-    // Migrate all schedules to database
-    await db.putData(DB_KEY, jsonData);
-    logger.info(`Successfully migrated ${scheduleCount} schedules to database`);
+    await definitionStore.replaceJobs(jsonData);
+    logger.info(`Successfully migrated ${scheduleCount} schedules from JSON file`);
 
     // Delete the JSON file after successful migration
     await fs.unlink(scheduleFile);
-    logger.info("Schedules JSON file deleted after successful migration");
+    logger.info("Legacy schedules JSON file deleted after successful migration");
     
     return true;
   } catch (err) {
-    logger.error(`Error during schedules migration: ${err.message}`);
-    throw new AppError(`Failed to migrate schedules: ${err.message}`, 500);
+    logger.error(`Error during legacy schedules migration: ${err.message}`);
+    throw new AppError(`Failed to migrate legacy schedules: ${err.message}`, 500);
   }
 }
 
-// Read schedules from the database
+// Read schedules from the active definitions backend
 async function readSchedules() {
   try {
-    logger.info("Loading Scheduler Data from database");
+    logger.info("Loading Scheduler Data from definition store");
     
-    // Attempt automatic migration from JSON file to database
-    const migrated = await migrateSchedulesToDatabase();
+    const migrated = await migrateLegacySchedulesJson();
 
-    // Load schedules from database
-    try {
-      const data = await db.getData(DB_KEY);
-      schedules = Array.isArray(data) ? data : [];
-      logger.info(`Loaded ${schedules.length} schedules from database${migrated ? ' (after migration)' : ''}`);
-    } catch (err) {
-      if (err.message && err.message.includes('NotFoundError')) {
-        logger.info("No schedules found in database, starting with empty config");
-        schedules = [];
-      } else {
-        throw err;
-      }
-    }
+    const data = await definitionStore.listJobs();
+    schedules = Array.isArray(data) ? data : [];
+    logger.info(`Loaded ${schedules.length} schedules from ${definitionStore.getBackend()} backend${migrated ? ' (after legacy migration)' : ''}`);
   } catch (err) {
     logger.error('Error reading schedules:', err.message);
     schedules = [];
   }
 }
 
-// Write schedules to the database and reschedule jobs
+// Write schedules to the active definitions backend and reschedule jobs
 async function writeSchedules() {
   try {
-    logger.debug("Writing Schedules to database");
-    await db.putData(DB_KEY, schedules);
-    logger.debug('Schedules stored to database successfully');
+    logger.debug("Writing Schedules to definition store");
+    await definitionStore.replaceJobs(schedules);
+    logger.debug('Schedules stored successfully');
     await scheduleJobs();
   } catch (err) {
     logger.error('Error writing schedules:', err.message);
@@ -188,15 +173,50 @@ async function writeSchedules() {
   }
 }
 
-// Persist schedules to the database WITHOUT rescheduling (for runtime state updates only)
+// Persist schedules WITHOUT rescheduling (for runtime state updates only)
 async function persistSchedules() {
   try {
-    logger.debug("Persisting Schedules to database (no reschedule)");
-    await db.putData(DB_KEY, schedules);
-    logger.debug('Schedules persisted to database successfully');
+    logger.debug("Persisting Schedules to definition store (no reschedule)");
+    await definitionStore.replaceJobs(schedules);
+    logger.debug('Schedules persisted successfully');
   } catch (err) {
     logger.error('Error persisting schedules:', err.message);
   }
+}
+
+async function writeSingleSchedule(schedule) {
+  try {
+    logger.debug(`Persisting single schedule [${schedule.jobName}] to definition store`);
+    await definitionStore.saveJob(schedule.jobName, schedule);
+    logger.debug(`Schedule [${schedule.jobName}] stored successfully`);
+    await scheduleJobs();
+  } catch (err) {
+    logger.error(`Error writing schedule [${schedule.jobName}]:`, err.message);
+    throw new AppError(`Failed to save schedule [${schedule.jobName}]: ${err.message}`, 500);
+  }
+}
+
+async function persistSingleSchedule(schedule) {
+  try {
+    logger.debug(`Persisting single schedule [${schedule.jobName}] to definition store (no reschedule)`);
+    await definitionStore.saveJob(schedule.jobName, schedule);
+    logger.debug(`Schedule [${schedule.jobName}] persisted successfully`);
+  } catch (err) {
+    logger.error(`Error persisting schedule [${schedule.jobName}]:`, err.message);
+  }
+}
+
+async function clearSchedules() {
+  schedules = [];
+  await definitionStore.clearJobs();
+  await scheduleJobs();
+}
+
+async function migrateSchedulesToFilesystem(options = {}) {
+  const count = await definitionStore.migrateSchedulesFromDbToFilesystem(options);
+  await readSchedules();
+  await scheduleJobs();
+  return count;
 }
 
 
@@ -220,6 +240,7 @@ async function deleteScheduleAtIndex(index) {
   try {
     logger.info(`Deleting Schedule at index [${index}]`);
     if (index > -1) {
+      const deletedSchedule = schedules[index];
       var newArr = [];
       for (var i = 0; i < schedules.length; i++) {
         if (i != index) newArr.push(schedules[i]);
@@ -228,7 +249,12 @@ async function deleteScheduleAtIndex(index) {
       for (var i = 0; i < newArr.length; i++) {
         schedules.push(newArr[i]);
       }
-      await writeSchedules();
+      if (definitionStore.getBackend() === 'hybrid' && deletedSchedule && deletedSchedule.jobName) {
+        await definitionStore.deleteJob(deletedSchedule.jobName);
+        await scheduleJobs();
+      } else {
+        await writeSchedules();
+      }
       logger.info(`Schedule at index [${index}] deleted successfully`);
     }
   } catch (err) {
@@ -345,7 +371,11 @@ async function _upsertScheduleAsync(index, jobName, colour, description, schedul
       schedules[index] = schedule;
     }
 
-    await writeSchedules();
+    if (definitionStore.getBackend() === 'hybrid') {
+      await writeSingleSchedule(schedule);
+    } else {
+      await writeSchedules();
+    }
     logger.info(`Schedule [${jobName}] upserted successfully`);
   } catch (err) {
     logger.error(`Error upserting schedule [${jobName}]:`, err.message);
@@ -870,7 +900,11 @@ async function pollRuleJob(schedItemRef) {
     const schedIndex = getScheduleIndex(jobName);
     if (schedIndex !== -1) {
       schedules[schedIndex].ruleLastTriggered = new Date().toISOString();
-      persistSchedules().catch(err => logger.warn(`[RULE] Failed to persist ruleLastTriggered for [${jobName}]: ${err.message}`));
+      if (definitionStore.getBackend() === 'hybrid') {
+        persistSingleSchedule(schedules[schedIndex]).catch(err => logger.warn(`[RULE] Failed to persist ruleLastTriggered for [${jobName}]: ${err.message}`));
+      } else {
+        persistSchedules().catch(err => logger.warn(`[RULE] Failed to persist ruleLastTriggered for [${jobName}]: ${err.message}`));
+      }
     }
 
     // Create trigger context for the job execution
@@ -1059,4 +1093,4 @@ function getLast7DaysScheduleCount(){
   return array;
 }
 
-module.exports = { init, getSchedule, getSchedules, getScheduleIndex, upsertSchedule, deleteSchedule,deleteScheduleAtIndex, manualJobRun, runJob, getNextRunDate, runUpdateJob, getTodaysScheduleCount,getLast7DaysScheduleCount, getInProgressExecution, saveInProgressExecution, removeInProgressExecution, updateInProgressExecution };
+module.exports = { init, getSchedule, getSchedules, getScheduleIndex, upsertSchedule, deleteSchedule,deleteScheduleAtIndex, clearSchedules, migrateSchedulesToFilesystem, manualJobRun, runJob, getNextRunDate, runUpdateJob, getTodaysScheduleCount,getLast7DaysScheduleCount, getInProgressExecution, saveInProgressExecution, removeInProgressExecution, updateInProgressExecution };

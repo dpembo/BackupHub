@@ -1,6 +1,7 @@
 
 const dateTimeUtils = require('./utils/dateTimeUtils.js');
 const orchestration = require('./orchestration.js');
+const definitionStore = require('./definitionStore.js');
 
 const MAX_HISTORY_ITEMS = 150;
 const DBKEY = "JOB_HISTORY";
@@ -490,7 +491,7 @@ async function getItemsGroupedByOrchestration() {
     let orchestrationIcons = {};
     let orchestrationColors = {};
     try {
-        const allOrchestrations = await db.getData('ORCHESTRATION_JOBS');
+        const allOrchestrations = await definitionStore.listOrchestrations();
         if (allOrchestrations) {
             for (const [jobId, jobData] of Object.entries(allOrchestrations)) {
                 orchestrationNames[jobId] = jobData.name || `Orchestration [${jobId}]`;

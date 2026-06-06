@@ -4,6 +4,7 @@
  */
 
 const db = require('./db.js');
+const definitionStore = require('./definitionStore.js');
 const fs = require('fs').promises;
 const EventEmitter = require('events');
 const axios = require('axios');
@@ -235,8 +236,7 @@ async function executeJob(jobId, isManual = false, executionId = null, onNodeCom
 
   try {
     // Fetch the job definition
-    const jobs = await db.getData('ORCHESTRATION_JOBS');
-    const jobData = jobs[jobId];
+    const jobData = await definitionStore.getOrchestration(jobId);
 
     if (!jobData) {
       throw new Error(`Orchestration job [${jobId}] not found`);

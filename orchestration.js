@@ -1,21 +1,24 @@
 /**
  * Orchestration Module
  * Manages orchestration job definitions (DAGs of scripts with conditions)
- * Stores and retrieves orchestration definitions from the database
+ * Stores and retrieves orchestration definitions from the configured definition store
  */
 
-const db = require('./db.js');
-
-const DB_KEY = 'ORCHESTRATION_JOBS';
+const definitionStore = require('./definitionStore.js');
 
 /**
- * Initialize orchestration by loading from database
+ * Initialize orchestration by loading from definition store
  */
 async function init() {
   try {
     logger.info("Initializing Orchestration Module");
-    const data = await db.getData(DB_KEY);
-    logger.info(`Loaded ${Object.keys(data).length} orchestration jobs`);
+    const data = await definitionStore.listOrchestrations();
+    const count = Object.keys(data || {}).length;
+    if (count === 0) {
+      logger.info("No orchestration jobs found, starting with empty config");
+      return {};
+    }
+    logger.info(`Loaded ${count} orchestration jobs`);
     return data;
   } catch (err) {
     if (err.message && err.message.includes('NotFoundError')) {
@@ -31,14 +34,7 @@ async function init() {
  * @returns {Promise<Object>} Dictionary of orchestration jobs
  */
 async function getAllJobs() {
-  try {
-    return await db.getData(DB_KEY);
-  } catch (err) {
-    if (err.message && err.message.includes('NotFoundError')) {
-      return {};
-    }
-    throw err;
-  }
+  return definitionStore.listOrchestrations();
 }
 
 /**
@@ -206,13 +202,10 @@ async function saveJob(jobId, jobDefinition) {
       job.updatedAt = now;
     }
     
-    jobs[jobId] = job;
-    
-    // Persist to database
-    await db.putData(DB_KEY, jobs);
+    await definitionStore.saveOrchestration(jobId, job);
     logger.info(`Successfully saved orchestration job [${jobId}] at version ${job.currentVersion}`);
     
-    return jobs[jobId];
+    return job;
   } catch (err) {
     logger.error(`Error saving orchestration job [${jobId}]: ${err.message}`);
     throw err;
@@ -227,14 +220,13 @@ async function saveJob(jobId, jobDefinition) {
 async function deleteJob(jobId) {
   try {
     logger.info(`Deleting orchestration job [${jobId}]`);
-    
-    const jobs = await getAllJobs();
-    if (!jobs[jobId]) {
+
+    const existing = await definitionStore.getOrchestration(jobId);
+    if (!existing) {
       throw new Error(`Orchestration job [${jobId}] not found`);
     }
-    
-    delete jobs[jobId];
-    await db.putData(DB_KEY, jobs);
+
+    await definitionStore.deleteOrchestration(jobId);
     
     logger.info(`Successfully deleted orchestration job [${jobId}]`);
     return true;
@@ -325,7 +317,7 @@ async function migrateToVersionedFormat() {
     }
     
     if (migratedCount > 0) {
-      await db.putData(DB_KEY, jobs);
+      await definitionStore.replaceOrchestrations(jobs);
       logger.info(`Successfully migrated ${migratedCount} orchestrations to versioned format`);
     } else {
       logger.info("No orchestrations needed migration");
@@ -338,12 +330,17 @@ async function migrateToVersionedFormat() {
   }
 }
 
+async function migrateToFilesystem(options = {}) {
+  return definitionStore.migrateOrchestrationsFromDbToFilesystem(options);
+}
+
 module.exports = {
   init,
   getAllJobs,
   getJob,
   getJobVersion,
   migrateToVersionedFormat,
+  migrateToFilesystem,
   saveJob,
   deleteJob,
   getAvailableScripts,
