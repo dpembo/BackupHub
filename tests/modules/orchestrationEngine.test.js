@@ -53,6 +53,12 @@ jest.mock('../../configuration.js', () => ({
   getConfig: jest.fn(),
 }));
 
+// Mock definitionStore module before importing orchestrationEngine
+jest.mock('../../definitionStore.js', () => ({
+  getOrchestration: jest.fn(),
+  getBackend: jest.fn(),
+}));
+
 // Mock axios for HTTP execute node tests
 jest.mock('axios', () => jest.fn());
 
@@ -61,6 +67,7 @@ const wsBrowserTransport = require('../../communications/wsBrowserTransport.js')
 const notifier = require('../../notify.js');
 const orchestrationMonitor = require('../../orchestrationMonitor.js');
 const configuration = require('../../configuration.js');
+const definitionStore = require('../../definitionStore.js');
 const history = require('../../history.js');
 const fs = require('fs');
 const axios = require('axios');
@@ -120,6 +127,17 @@ describe('Orchestration Engine Module', () => {
 
     // Setup configuration mock
     configuration.getConfig = jest.fn().mockReturnValue(global.serverConfig);
+
+    // Bridge definitionStore reads to existing db fixtures used in these tests
+    definitionStore.getBackend = jest.fn().mockReturnValue('db');
+    definitionStore.getOrchestration = jest.fn().mockImplementation(async (jobId) => {
+      try {
+        const all = await db.getData('ORCHESTRATION_JOBS');
+        return (all && all[jobId]) ? all[jobId] : null;
+      } catch (_err) {
+        return null;
+      }
+    });
 
     // Import orchestrationEngine module (only once after mocks are set up)
     if (!orchestrationEngine) {
