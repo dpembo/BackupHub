@@ -277,6 +277,26 @@ span.themeModeDark{
   align-items: center;
 }
 
+.agent-badge-hidden {
+  display:none;
+}
+.agent-badge {
+  position: relative;
+  margin-top:-50px;
+  margin-bottom: 0px;
+  left: 15px;
+  background-color: #CF6679;
+  color: white;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  font-size: 12px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-weight: bold;
+}
+
 .notify-text{
   width:315px;
   word-wrap: break-word; /* Wrap long words onto the next line */
