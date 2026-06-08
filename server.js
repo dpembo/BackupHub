@@ -1979,6 +1979,28 @@ app.get('/rest/agent/:id/ping', User.isAuthenticated, User.requirePermission(PER
   res.send('{"status":"ok"}');  
 });
 
+app.get('/rest/agents', User.isAuthenticated, User.requirePermission(PERMISSIONS.AGENTS_VIEW), (req, res) => {
+  const user = req.session.user;
+  if (!user) {
+    return res.redirect('/register.html');
+  }
+  logger.info("Getting all agents");
+  const agentDict = agents.getDict();
+  res.setHeader("Content-Type","Application/JSON");
+  res.send(agentDict);  
+});
+
+app.get('/rest/settings/connection-enabled', User.isAuthenticated, User.requirePermission(PERMISSIONS.AGENTS_VIEW), (req, res) => {
+  const user = req.session.user;
+  if (!user) {
+    return res.redirect('/register.html');
+  }
+  logger.info("Getting connection enabled setting");
+  const connectionEnabled = serverConfig.server.connectionEnabled === 'true';
+  res.setHeader("Content-Type","Application/JSON");
+  res.send({ connectionEnabled: connectionEnabled });  
+});
+
 // app.get('/rest/agent/:id/ping', User.isAuthenticated, (req, res) => {
 //   const user = req.session.user;
 //   if (!user) {

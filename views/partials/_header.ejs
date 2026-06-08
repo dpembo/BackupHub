@@ -69,7 +69,12 @@
       <li><a href="/scheduleList.html" title="Jobs"><span title="Jobs" style="font-size:24pt" class="navicon material-icons vertMid">calendar_month</span></a></li>
       <% } %>
       <% if (hasPerm('agents.view')) { %>
-      <li><a href="/agentstatus.html" title="Agents"><span title="Agents" style="font-size:24pt" class="navicon material-icons vertMid">hub</span></a></li>
+      <li id="agentsIconContainer">
+        <a href="/agentstatus.html" title="Agents">
+          <span title="Agents" style="font-size:24pt" class="navicon material-icons vertMid">hub</span>
+          <span class="agent-badge-hidden" id="agentBadge"></span>
+        </a>
+      </li>
       <% } %>
       <% if (hasPerm('orchestrations.view')) { %>
       <li><a href="/orchestrationList.html" title="Orchestrations"><span title="Orchestrations" style="font-size:24pt" class="navicon material-icons vertMid">schema</span></a></li>

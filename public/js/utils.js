@@ -212,12 +212,83 @@ function deleteAllNotifications() {
     }
 }
 
+// Agent Status Badge Functions
+async function fetchAgentConnectionSettings() {
+    try {
+        const response = await fetch('/rest/settings/connection-enabled');
+        if (!response.ok) {
+            throw new Error('Failed to fetch server config');
+        }
+        const config = await response.json();
+        return config.connectionEnabled === true;
+    } catch (error) {
+        console.error('Error fetching agent connection settings:', error);
+        return false;
+    }
+}
+
+async function fetchAgentsStatus() {
+    try {
+        const response = await fetch('/rest/agents');
+        if (!response.ok) {
+            throw new Error('Failed to fetch agent list');
+        }
+        const agents = await response.json();
+        return agents;
+    } catch (error) {
+        console.error('Error fetching agents status:', error);
+        return {};
+    }
+}
+
+function countOfflineAgents(agents) {
+    let offlineCount = 0;
+    for (const [key, agent] of Object.entries(agents)) {
+        if (agent && agent.status && agent.status.toLowerCase() === 'offline') {
+            offlineCount++;
+        }
+    }
+    return offlineCount;
+}
+
+async function updateAgentBadge() {
+    const agentBadgeElement = document.getElementById('agentBadge');
+    if (!agentBadgeElement) return;
+
+    // Check if connection enabled setting is true
+    const connectionEnabled = await fetchAgentConnectionSettings();
+    if (!connectionEnabled) {
+        agentBadgeElement.classList.add('agent-badge-hidden');
+        agentBadgeElement.classList.remove('agent-badge');
+        agentBadgeElement.innerText = '';
+        return;
+    }
+
+    // Fetch agents and count offline ones
+    const agents = await fetchAgentsStatus();
+    const offlineCount = countOfflineAgents(agents);
+
+    if (offlineCount > 0) {
+        agentBadgeElement.classList.remove('agent-badge-hidden');
+        agentBadgeElement.classList.add('agent-badge');
+        agentBadgeElement.innerText = offlineCount;
+    } else {
+        agentBadgeElement.classList.add('agent-badge-hidden');
+        agentBadgeElement.classList.remove('agent-badge');
+        agentBadgeElement.innerText = '';
+    }
+}
+
 
 
 document.addEventListener('DOMContentLoaded', function() {
     console.log("Materialize AutoInit disabled to prevent interference");
 
     fetchDataFromAPI();
+    updateAgentBadge();
+
+    // Refresh agent badge every 30 seconds
+    setInterval(updateAgentBadge, 30000);
 
     const btnOpenPanel = document.querySelector('.btn-open-panel');
     const panelWrapper = document.querySelector('.panel-wrapper');
