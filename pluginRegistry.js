@@ -43,6 +43,19 @@ function validatePlugin(raw, pluginDir) {
       if (field.type === 'list' && !field.item_type) {
         errors.push(`inputs[${i}] (list) requires item_type`);
       }
+      // Validate visibleWhen if present (optional field for conditional visibility)
+      if (field.visibleWhen !== undefined) {
+        if (typeof field.visibleWhen !== 'object' || field.visibleWhen === null) {
+          errors.push(`inputs[${i}] visibleWhen must be an object`);
+        } else {
+          // Check that visibleWhen references point to valid fields and have array values
+          Object.entries(field.visibleWhen).forEach(([refField, refValues]) => {
+            if (!Array.isArray(refValues)) {
+              errors.push(`inputs[${i}] visibleWhen.${refField} must be an array of values`);
+            }
+          });
+        }
+      }
     });
   }
 
