@@ -3932,6 +3932,37 @@ When unchecked (default), execution continues through the graph to a Success or 
         agentSel.onchange = function() { node.data.agent = agentSel.value; };
 
         // Build dynamic input fields
+        // Helper: check if a field should be visible based on visibleWhen
+        function isFieldVisible(inputDef, nodeData) {
+          if (!inputDef.visibleWhen) return true;
+          // visibleWhen is { fieldName: [allowedValues] }
+          // Field is visible if any of its referenced fields have one of the allowed values
+          for (const [refFieldName, allowedValues] of Object.entries(inputDef.visibleWhen)) {
+            const refKey = 'plugin_input_' + refFieldName;
+            const currentValue = nodeData?.[refKey];
+            if (allowedValues.includes(currentValue)) {
+              return true;
+            }
+          }
+          return false;
+        }
+
+        // Helper: re-evaluate visibility of all fields and call callback
+        function updatePluginFieldVisibility() {
+          if (!plugin) return;
+          plugin.inputs.forEach(function(inputDef) {
+            const section = document.getElementById('prop-plugin-section-' + inputDef.name);
+            if (!section) return;
+            const isVisible = isFieldVisible(inputDef, node.data);
+            section.style.display = isVisible ? 'block' : 'none';
+            // Clear value if hiding
+            if (!isVisible) {
+              const key = 'plugin_input_' + inputDef.name;
+              node.data[key] = '';
+            }
+          });
+        }
+
         const fieldsContainer = document.getElementById('prop-plugin-fields');
         fieldsContainer.innerHTML = '';
         const plugin = availablePlugins.find(function(p) { return p.name === pluginName; });
@@ -3939,7 +3970,12 @@ When unchecked (default), execution continues through the graph to a Success or 
           plugin.inputs.forEach(function(inputDef) {
             const key = 'plugin_input_' + inputDef.name;
             const section = document.createElement('div');
+            section.id = 'prop-plugin-section-' + inputDef.name;
             section.className = 'properties-section';
+            // Set initial visibility
+            const isVisible = isFieldVisible(inputDef, node.data);
+            section.style.display = isVisible ? 'block' : 'none';
+            
             const lbl = document.createElement('label');
             lbl.textContent = inputDef.label || inputDef.name;
             if (inputDef.required) { const req = document.createElement('span'); req.textContent = ' *'; req.style.color = '#f44336'; lbl.appendChild(req); }
@@ -3977,11 +4013,15 @@ When unchecked (default), execution continues through the graph to a Success or 
             const onChange = function() {
               if (inputDef.type === 'boolean') { node.data[key] = input.checked; }
               else { node.data[key] = input.value; }
+              // Re-evaluate visibility of all fields when this field changes
+              updatePluginFieldVisibility();
             };
             input.oninput = onChange; input.onchange = onChange;
             section.insertBefore(input, section.querySelector('small'));
             fieldsContainer.appendChild(section);
           });
+          // Initial visibility update
+          updatePluginFieldVisibility();
         }
 
         // Docs button
@@ -4460,6 +4500,39 @@ When unchecked (default), execution continues through the graph to a Success or 
           }
           if (falseEdges.length === 0) {
             errors.push(`Condition node "${node.label}" is missing a False path (right exit).`);
+          }
+        } else if (node.type === 'plugin') {
+          // Validate plugin node required fields (only for visible fields)
+          if (!node.data.agent || !node.data.agent.trim()) {
+            errors.push(`Plugin node "${node.label}" is missing a Target Agent selection.`);
+          }
+          const pluginName = node.data?.pluginName;
+          if (pluginName) {
+            const plugin = availablePlugins.find(function(p) { return p.name === pluginName; });
+            if (plugin && plugin.inputs) {
+              plugin.inputs.forEach(function(inputDef) {
+                // Helper to check if field is visible (duplicate from form rendering)
+                const isVisible = (function() {
+                  if (!inputDef.visibleWhen) return true;
+                  for (const [refFieldName, allowedValues] of Object.entries(inputDef.visibleWhen)) {
+                    const refKey = 'plugin_input_' + refFieldName;
+                    const currentValue = node.data?.[refKey];
+                    if (allowedValues.includes(currentValue)) {
+                      return true;
+                    }
+                  }
+                  return false;
+                })();
+                
+                if (isVisible && inputDef.required) {
+                  const key = 'plugin_input_' + inputDef.name;
+                  const value = node.data?.[key];
+                  if (!value || String(value).trim() === '') {
+                    errors.push(`Plugin node "${node.label}" is missing required field "${inputDef.label || inputDef.name}".`);
+                  }
+                }
+              });
+            }
           }
         } else if (node.type === 'split-join') {
           const mode = node.data?.mode || 'split';
