@@ -17,6 +17,9 @@
       <h5 class="header orange-text">Plugin Manager</h5>
     </div>
     <div class="col s12 m4" style="text-align:right;padding-top:14px;">
+      <a id="updateAllBtn" class="btn-flat waves-effect waves-light orange-text" onclick="updateAllPlugins()" title="Update all plugins with available updates" style="display:none;">
+        <span class="material-icons" style="vertical-align:middle;">update</span> Update All
+      </a>
       <a id="refreshBtn" class="btn-flat waves-effect waves-light orange-text" onclick="loadRegistry()">
         <span class="material-icons" style="vertical-align:middle;">refresh</span> Refresh
       </a>
@@ -259,6 +262,7 @@
     document.getElementById('badgeNotInstalled').textContent = notInstalled;
     document.getElementById('badgeInstalled').style.display    = installed ? '' : 'none';
     document.getElementById('badgeUpdates').style.display      = updates   ? '' : 'none';
+    document.getElementById('updateAllBtn').style.display      = updates   ? '' : 'none';
 
     // Re-attach click handlers for static items
     document.querySelectorAll('#categoryList .cat-item').forEach(el => {
@@ -401,6 +405,58 @@
       triggerEl.classList.remove('disabled');
       triggerEl.innerHTML = '<span class="material-icons tiny" style="vertical-align:middle;">download</span> Install';
     }
+  }
+
+  // ── Update All ─────────────────────────────────────────────────────────────
+  async function updateAllPlugins() {
+    const pluginsToUpdate = _allPlugins.filter(p => p.updateAvailable);
+    if (pluginsToUpdate.length === 0) {
+      M.toast({ html: 'No plugin updates available', classes: 'grey' });
+      return;
+    }
+
+    const updateAllBtn = document.getElementById('updateAllBtn');
+    updateAllBtn.classList.add('disabled');
+    const originalHtml = updateAllBtn.innerHTML;
+    updateAllBtn.innerHTML = '<span class="material-icons" style="vertical-align:middle;">hourglass_empty</span> Updating…';
+
+    let successCount = 0;
+    let failCount = 0;
+    const errors = [];
+
+    for (const plugin of pluginsToUpdate) {
+      try {
+        const resp = await fetch(`/rest/plugins/install/${encodeURIComponent(plugin.name)}`, {
+          method:      'POST',
+          credentials: 'same-origin',
+          headers:     { 'Content-Type': 'application/json' },
+          body:        JSON.stringify({ registryEntry: plugin }),
+        });
+        const body = await resp.json();
+        if (!resp.ok) throw new Error(body.message || `HTTP ${resp.status}`);
+        successCount++;
+      } catch (err) {
+        failCount++;
+        errors.push(`${plugin.label}: ${err.message}`);
+      }
+    }
+
+    // Reload registry after all updates
+    await loadRegistry();
+
+    // Show summary
+    if (failCount === 0) {
+      M.toast({ html: `<span class="material-icons tiny" style="vertical-align:middle;margin-right:6px;">check_circle</span> ${successCount} plugin${successCount !== 1 ? 's' : ''} updated`, classes: 'green' });
+    } else {
+      const msg = `${successCount} updated, ${failCount} failed`;
+      M.toast({ html: `<span class="material-icons tiny" style="vertical-align:middle;margin-right:6px;">warning</span> ${msg}`, classes: 'orange darken-1', displayLength: 6000 });
+      if (errors.length > 0) {
+        console.warn('Plugin update errors:', errors);
+      }
+    }
+
+    updateAllBtn.classList.remove('disabled');
+    updateAllBtn.innerHTML = originalHtml;
   }
 
   // ── Uninstall ──────────────────────────────────────────────────────────────
