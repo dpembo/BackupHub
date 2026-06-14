@@ -3966,13 +3966,31 @@ When unchecked (default), execution continues through the graph to a Success or 
         const fieldsContainer = document.getElementById('prop-plugin-fields');
         fieldsContainer.innerHTML = '';
         const plugin = availablePlugins.find(function(p) { return p.name === pluginName; });
+        
+        // Ensure node.data exists
+        if (!node.data) node.data = {};
+        
         if (plugin && plugin.inputs) {
+          // First pass: populate node.data with current field values (from storage or defaults)
+          plugin.inputs.forEach(function(inputDef) {
+            const key = 'plugin_input_' + inputDef.name;
+            if (node.data?.[key] === undefined) {
+              // Field not in node.data, populate it with default or empty
+              if (inputDef.type === 'boolean') {
+                node.data[key] = inputDef.default === true || inputDef.default === 'true';
+              } else {
+                node.data[key] = inputDef.default ?? '';
+              }
+            }
+          });
+          
+          // Second pass: render fields with updated visibility
           plugin.inputs.forEach(function(inputDef) {
             const key = 'plugin_input_' + inputDef.name;
             const section = document.createElement('div');
             section.id = 'prop-plugin-section-' + inputDef.name;
             section.className = 'properties-section';
-            // Set initial visibility
+            // Set initial visibility based on current node.data values
             const isVisible = isFieldVisible(inputDef, node.data);
             section.style.display = isVisible ? 'block' : 'none';
             
@@ -4020,8 +4038,6 @@ When unchecked (default), execution continues through the graph to a Success or 
             section.insertBefore(input, section.querySelector('small'));
             fieldsContainer.appendChild(section);
           });
-          // Initial visibility update
-          updatePluginFieldVisibility();
         }
 
         // Docs button
