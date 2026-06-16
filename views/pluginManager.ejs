@@ -321,6 +321,17 @@
           ? `<span class="badge new green" data-badge-caption="">Installed</span>`
           : '';
 
+      const sourceBadge = plugin.source === 'official'
+        ? `<span class="badge new cyan lighten-2" data-badge-caption="" style="background-color:#80deea !important;color:#333;">Official</span>`
+        : `<span class="badge new grey lighten-2" data-badge-caption="" style="background-color:#bdbdbd !important;color:#333;">Community</span>`;
+
+      const maintainerInfo = plugin.maintainer || plugin.repository_url
+        ? `<div style="font-size:0.8rem;color:#666;margin-top:6px;">
+             ${plugin.maintainer ? `<div>👤 <strong>Maintained by:</strong> ${escHtml(plugin.maintainer)}</div>` : ''}
+             ${plugin.repository_url ? `<div><a href="${escAttr(plugin.repository_url)}" target="_blank" rel="noopener" style="color:#1976d2;text-decoration:none;">📦 View repository</a></div>` : ''}
+           </div>`
+        : '';
+
       const iconEl  = plugin.iconUrl
         ? `<img src="${escAttr(plugin.iconUrl)}" width="32" height="32" style="margin-right:10px;flex-shrink:0;border-radius:4px;" alt="" onerror="pluginIconError(this,'${escAttr(plugin.category)}')">`
         : `<span class="material-icons orange-text" style="font-size:2rem;margin-right:10px;">${CATEGORY_ICONS[plugin.category] || 'extension'}</span>`;
@@ -336,16 +347,20 @@
       col.innerHTML = `
         <div class="card hoverable" style="min-height:200px; display:flex; flex-direction:column;">
           <div class="card-content" ${docsClick}>
-            <div style="display:flex; align-items:center; margin-bottom:8px;">
+            <div style="display:flex; align-items:flex-start; margin-bottom:8px;">
               ${iconEl}
               <div style="flex:1">
                 <span style="font-size:1rem;font-weight:600;line-height:1.2;display:block;">${escHtml(plugin.label)}</span>
                 <div style="font-size:0.75rem;color:#888;">v${escHtml(plugin.version || '—')}</div>
               </div>
-              <div>${statusBadge}</div>
+              <div style="display:flex; flex-direction:column; gap:4px;">
+                ${sourceBadge}
+                ${statusBadge}
+              </div>
             </div>
             <p class="plugin-card-desc" style="font-size:0.85rem;margin:0 0 8px 0;">${escHtml(plugin.description || '')}</p>
             <div>${tags}</div>
+            ${maintainerInfo}
           </div>
           <div class="card-action" style="padding:8px 16px;">
             ${actionBtn}
