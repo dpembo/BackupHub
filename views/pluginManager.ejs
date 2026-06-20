@@ -38,14 +38,31 @@
   <div class="row">
     <!-- Left sidebar: filters -->
     <div class="col s12 m3 l3">
-      <ul id="categoryList" class="plugin-filter-list" style="list-style:none;padding:0;margin:0;border-radius:4px;">
-        <li class="cat-item active" data-category="">
+
+      <!-- Source + status filters -->
+      <ul id="sourceList" class="plugin-filter-list" style="list-style:none;padding:0;margin:0 0 8px 0;border-radius:4px;">
+        <li class="cat-item active" data-source="">
           <span class="cat-item-inner">
             <span class="material-icons tiny">apps</span>
             <span>All Plugins</span>
           </span>
           <span class="cat-badge cat-badge-orange" id="badgeAll"></span>
         </li>
+        <li class="cat-item" data-source="official">
+          <span class="cat-item-inner">
+            <span class="material-icons tiny">verified</span>
+            <span>Official</span>
+          </span>
+          <span class="cat-badge cat-badge-orange" id="badgeOfficial"></span>
+        </li>
+        <li class="cat-item" data-source="community">
+          <span class="cat-item-inner">
+            <span class="material-icons tiny">group</span>
+            <span>Community</span>
+          </span>
+          <span class="cat-badge cat-badge-grey" id="badgeCommunity"></span>
+        </li>
+        <li class="plugin-filter-divider"></li>
         <li class="cat-item" data-category="installed">
           <span class="cat-item-inner">
             <span class="material-icons tiny">check_circle</span>
@@ -67,9 +84,13 @@
           </span>
           <span class="cat-badge cat-badge-grey" id="badgeNotInstalled"></span>
         </li>
-        <li class="plugin-filter-divider"></li>
-        <!-- Category items injected by JS -->
       </ul>
+
+      <!-- Category filters (injected by JS) -->
+      <ul id="categoryList" class="plugin-filter-list" style="list-style:none;padding:0;margin:0;border-radius:4px;">
+        <li class="plugin-filter-divider"></li>
+      </ul>
+
     </div>
 
     <!-- Main content: search + plugin cards -->
@@ -115,6 +136,37 @@
     </div>
   </div>
 
+</div>
+<!-- Community plugin install warning modal -->
+<div id="communityInstallModal" class="modal">
+  <div class="modal-content">
+    <h5>
+      <span class="material-icons orange-text" style="vertical-align:middle;margin-right:8px;">warning</span>
+      Community Plugin
+    </h5>
+    <p>
+      <strong id="communityInstallLabel"></strong> is a community plugin and is
+      <strong>not maintained or reviewed by Orchelium</strong>.
+    </p>
+    <p>Before installing, please be aware:</p>
+    <ul class="browser-default" style="margin-top:0;">
+      <li>Plugins execute shell scripts on your connected agents</li>
+      <li>Community plugins have not been audited for security</li>
+      <li>Only install if you trust the maintainer</li>
+    </ul>
+    <p id="communityInstallMaintainer" style="font-size:0.9rem;color:#555;"></p>
+    <a id="communityInstallRepoLink" href="#" target="_blank" rel="noopener"
+       class="btn-flat orange-text waves-effect waves-light" style="padding-left:0;">
+      <span class="material-icons tiny" style="vertical-align:middle;">open_in_new</span>
+      View repository before installing
+    </a>
+  </div>
+  <div class="modal-footer">
+    <a href="#!" class="modal-close btn-flat grey-text">Cancel</a>
+    <a id="confirmCommunityInstallBtn" href="#!" class="btn orange waves-effect waves-light">
+      <span class="material-icons tiny" style="vertical-align:middle;">download</span> Install Anyway
+    </a>
+  </div>
 </div>
 
 <!-- Confirm uninstall modal -->
@@ -173,17 +225,19 @@
     flex-shrink: 0;
     margin-left: 6px;
   }
-  .cat-badge-orange     { background: #ef6c00; }
-  .cat-badge-green      { background: #43a047; }
+  .cat-badge-orange      { background: #ef6c00; }
+  .cat-badge-green       { background: #43a047; }
   .cat-badge-deep-orange { background: #e64a19; }
-  .cat-badge-grey       { background: #9e9e9e; }
+  .cat-badge-grey        { background: #9e9e9e; }
+  .plugin-filter-divider { border-top: 1px solid #eee; margin: 4px 0; }
 </style>
 
 <script>
   // ── Data ──────────────────────────────────────────────────────────────────
-  let _allPlugins        = [];
-  let _activeCategory    = '';   // '' = all, 'installed', 'update', or a category name
-  let _pendingUninstall  = null; // { name, label }
+  let _allPlugins       = [];
+  let _activeSource     = '';   // '' = all, 'official', 'community'
+  let _activeCategory   = '';   // '' = none, 'installed', 'update', 'not-installed', or a category slug
+  let _pendingUninstall = null;
 
   const CATEGORY_ICONS = {
     backup:      'backup',
@@ -192,6 +246,10 @@
     storage:     'dns',
     containers:  'layers',
     system:      'settings',
+    community:   'group',
+    archiving:   'archive',
+    network:     'router',
+    tools:       'build',
   };
 
   // ── Bootstrap ─────────────────────────────────────────────────────────────
@@ -215,7 +273,7 @@
       }
       const data = await resp.json();
       _allPlugins = data.plugins || [];
-      buildCategoryList();
+      buildSidebar();
       renderPlugins();
     } catch (err) {
       document.getElementById('errorMessage').textContent =
@@ -226,21 +284,49 @@
     }
   }
 
-  // ── Build category sidebar ─────────────────────────────────────────────────
-  function buildCategoryList() {
-    const categories = [...new Set(_allPlugins.map(p => p.category).filter(Boolean))].sort();
-    const list       = document.getElementById('categoryList');
+  // ── Build sidebar ──────────────────────────────────────────────────────────
+  function buildSidebar() {
+    const official     = _allPlugins.filter(p => p.source === 'official').length;
+    const community    = _allPlugins.filter(p => p.source === 'community').length;
+    const installed    = _allPlugins.filter(p => p.installed).length;
+    const updates      = _allPlugins.filter(p => p.updateAvailable).length;
+    const notInstalled = _allPlugins.filter(p => !p.installed).length;
 
-    // Remove previously injected category items
+    document.getElementById('badgeAll').textContent          = _allPlugins.length;
+    document.getElementById('badgeOfficial').textContent     = official;
+    document.getElementById('badgeCommunity').textContent    = community;
+    document.getElementById('badgeInstalled').textContent    = installed;
+    document.getElementById('badgeUpdates').textContent      = updates;
+    document.getElementById('badgeNotInstalled').textContent = notInstalled;
+
+    document.getElementById('badgeInstalled').style.display = installed ? '' : 'none';
+    document.getElementById('badgeUpdates').style.display   = updates   ? '' : 'none';
+    document.getElementById('updateAllBtn').style.display   = updates   ? '' : 'none';
+
+    // Wire up source list clicks
+    document.querySelectorAll('#sourceList .cat-item').forEach(el => {
+      el.onclick = () => {
+        const src = el.dataset.source;
+        if (src !== undefined) {
+          setSource(src);
+        } else {
+          setCategory(el.dataset.category);
+        }
+      };
+    });
+
+    // Build category list from plugin data
+    const categories = [...new Set(_allPlugins.map(p => p.category).filter(Boolean))].sort();
+    const list = document.getElementById('categoryList');
     list.querySelectorAll('[data-injected]').forEach(el => el.remove());
 
     categories.forEach(cat => {
-      const li = document.createElement('li');
-      li.className = 'cat-item';
-      li.dataset.category = cat;
-      li.dataset.injected = '1';
-      const icon  = CATEGORY_ICONS[cat] || 'extension';
       const count = _allPlugins.filter(p => p.category === cat).length;
+      const icon  = CATEGORY_ICONS[cat] || 'extension';
+      const li    = document.createElement('li');
+      li.className         = 'cat-item';
+      li.dataset.category  = cat;
+      li.dataset.injected  = '1';
       li.innerHTML =
         `<span class="cat-item-inner">` +
           `<span class="material-icons tiny">${icon}</span>` +
@@ -251,46 +337,58 @@
       list.appendChild(li);
     });
 
-    // Update badge counts
-    const installed    = _allPlugins.filter(p => p.installed).length;
-    const updates      = _allPlugins.filter(p => p.updateAvailable).length;
-    const notInstalled = _allPlugins.filter(p => !p.installed).length;
-
-    document.getElementById('badgeAll').textContent          = _allPlugins.length;
-    document.getElementById('badgeInstalled').textContent    = installed;
-    document.getElementById('badgeUpdates').textContent      = updates;
-    document.getElementById('badgeNotInstalled').textContent = notInstalled;
-    document.getElementById('badgeInstalled').style.display    = installed ? '' : 'none';
-    document.getElementById('badgeUpdates').style.display      = updates   ? '' : 'none';
-    document.getElementById('updateAllBtn').style.display      = updates   ? '' : 'none';
-
-    // Re-attach click handlers for static items
-    document.querySelectorAll('#categoryList .cat-item').forEach(el => {
-      el.onclick = () => setCategory(el.dataset.category);
-    });
-
     document.getElementById('pluginGrid').style.display = 'flex';
   }
 
-  function setCategory(cat) {
-    _activeCategory = cat;
-    document.querySelectorAll('#categoryList .cat-item').forEach(el => {
-      el.classList.toggle('active', el.dataset.category === cat);
+  function setSource(src) {
+    // Toggle off if already active
+    _activeSource   = (_activeSource === src && src !== '') ? '' : src;
+    _activeCategory = '';
+    document.querySelectorAll('#sourceList .cat-item, #categoryList .cat-item').forEach(el => {
+      el.classList.remove('active');
     });
+    // Mark the matching source item active; fall back to "All" if cleared
+    const target = _activeSource === ''
+      ? document.querySelector('#sourceList .cat-item[data-source=""]')
+      : document.querySelector(`#sourceList .cat-item[data-source="${_activeSource}"]`);
+    if (target) target.classList.add('active');
+    renderPlugins();
+  }
+
+  function setCategory(cat) {
+    // Toggle off if already active
+    _activeCategory = (_activeCategory === cat) ? '' : cat;
+    document.querySelectorAll('#sourceList .cat-item, #categoryList .cat-item').forEach(el => {
+      el.classList.remove('active');
+    });
+    if (_activeCategory) {
+      const target = document.querySelector(`[data-category="${_activeCategory}"]`);
+      if (target) target.classList.add('active');
+    } else {
+      const allItem = document.querySelector('#sourceList .cat-item[data-source=""]');
+      if (allItem) allItem.classList.add('active');
+    }
     renderPlugins();
   }
 
   // ── Render plugin cards ────────────────────────────────────────────────────
   function renderPlugins() {
-    const query  = (document.getElementById('pluginSearch').value || '').toLowerCase();
-    const grid   = document.getElementById('pluginGrid');
+    const query = (document.getElementById('pluginSearch').value || '').toLowerCase();
+    const grid  = document.getElementById('pluginGrid');
 
     let filtered = _allPlugins;
-    if (_activeCategory === 'installed')     filtered = filtered.filter(p => p.installed);
+
+    // Source filter
+    if (_activeSource === 'official')       filtered = filtered.filter(p => p.source === 'official');
+    else if (_activeSource === 'community') filtered = filtered.filter(p => p.source === 'community');
+
+    // Status / category filter
+    if (_activeCategory === 'installed')          filtered = filtered.filter(p => p.installed);
     else if (_activeCategory === 'update')        filtered = filtered.filter(p => p.updateAvailable);
     else if (_activeCategory === 'not-installed') filtered = filtered.filter(p => !p.installed);
-    else if (_activeCategory) filtered = filtered.filter(p => p.category === _activeCategory);
+    else if (_activeCategory)                     filtered = filtered.filter(p => p.category === _activeCategory);
 
+    // Text search
     if (query) {
       filtered = filtered.filter(p =>
         p.label.toLowerCase().includes(query) ||
@@ -302,13 +400,13 @@
     grid.innerHTML = '';
 
     if (filtered.length === 0) {
-      document.getElementById('pluginGrid').style.display  = 'none';
-      document.getElementById('emptyState').style.display  = 'block';
+      document.getElementById('pluginGrid').style.display = 'none';
+      document.getElementById('emptyState').style.display = 'block';
       return;
     }
 
-    document.getElementById('emptyState').style.display  = 'none';
-    document.getElementById('pluginGrid').style.display  = 'flex';
+    document.getElementById('emptyState').style.display = 'none';
+    document.getElementById('pluginGrid').style.display = 'flex';
     grid.style.flexWrap = 'wrap';
 
     filtered.forEach(plugin => {
@@ -320,20 +418,13 @@
         : '';
 
       const sourceBadge = plugin.source === 'official'
-        ? //`<span class="badge new cyan lighten-2" data-badge-caption="" style="background-color:#80deea !important;color:#333;">Official</span>`
-          `<span class="card-badge-official">
-              <!-- Shield icon -->
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2"
-                   viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-              </svg>
+        ? `<span class="card-badge-official">
+              <span class="material-icons" style="font-size:14px;vertical-align:middle;">verified</span>
               Official
             </span>`
-        : //`<span class="badge new grey lighten-2" data-badge-caption="" style="background-color:#bdbdbd !important;color:#333;">Community</span>`;
-          `<span class="card-badge-community">
-              <!-- People icon -->
+        : `<span class="card-badge-community">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2"
-                   viewBox="0 0 24 24" aria-hidden="true">
+                  viewBox="0 0 24 24" aria-hidden="true" style="width:14px;height:14px;vertical-align:middle;">
                 <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
                 <circle cx="9" cy="7" r="4"/>
                 <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
@@ -341,7 +432,6 @@
               </svg>
               Community
             </span>`;
-
       const maintainerInfo = plugin.maintainer || plugin.repository_url
         ? `<div style="font-size:0.8rem;color:#666;margin-top:6px;">
              ${plugin.maintainer ? `<div>👤 <strong>Maintained by:</strong> ${escHtml(plugin.maintainer)}</div>` : ''}
@@ -349,20 +439,25 @@
            </div>`
         : '';
 
-      const iconEl  = plugin.iconUrl
+      const starsInfo = plugin.stars
+        ? `<div style="font-size:0.78rem;color:#888;margin-top:4px;">⭐ ${plugin.stars} stars</div>`
+        : '';
+
+      const iconEl = plugin.iconUrl
         ? `<img src="${escAttr(plugin.iconUrl)}" width="32" height="32" style="margin-right:10px;flex-shrink:0;border-radius:4px;" alt="" onerror="pluginIconError(this,'${escAttr(plugin.category)}')">`
         : `<span class="material-icons orange-text" style="font-size:2rem;margin-right:10px;">${CATEGORY_ICONS[plugin.category] || 'extension'}</span>`;
-      const tags    = (plugin.tags || []).map(t =>
+
+      const tags = (plugin.tags || []).map(t =>
         `<span class="chip" style="height:20px;font-size:11px;line-height:20px;margin:2px 2px 0 0;">${escHtml(t)}</span>`
       ).join('');
 
-      const actionBtn = buildActionButton(plugin);
-      const docsClick = plugin.docsUrl
+      const actionBtn  = buildActionButton(plugin);
+      const docsClick  = plugin.docsUrl
         ? `onclick="window.open('${escAttr(plugin.docsUrl)}','_blank','noopener')" title="View documentation" style="flex:1; padding:16px; cursor:pointer;"`
         : `style="flex:1; padding:16px;"`;
 
       col.innerHTML = `
-        <div class="card hoverable" style="min-height:200px; display:flex; flex-direction:column;">
+        <div class="card hoverable" style="min-height:375px; display:flex; flex-direction:column;">
           <div class="card-content" ${docsClick}>
             <div style="display:flex; align-items:flex-start; margin-bottom:8px;">
               ${iconEl}
@@ -378,6 +473,7 @@
             <p class="plugin-card-desc" style="font-size:0.85rem;margin:0 0 8px 0;">${escHtml(plugin.description || '')}</p>
             <div>${tags}</div>
             ${maintainerInfo}
+            ${starsInfo}
           </div>
           <div class="card-action" style="padding:8px 16px;">
             ${actionBtn}
@@ -417,11 +513,39 @@
     const plugin = _allPlugins.find(p => p.name === pluginName);
     if (!plugin) return;
 
+    // Show warning dialog for community plugins before proceeding
+    if (plugin.source === 'community') {
+      document.getElementById('communityInstallLabel').textContent = plugin.label;
+      document.getElementById('communityInstallMaintainer').innerHTML = plugin.maintainer
+        ? `👤 Maintained by: <strong>${escHtml(plugin.maintainer)}</strong>`
+        : '';
+
+      const repoLink = document.getElementById('communityInstallRepoLink');
+      if (plugin.repository_url) {
+        repoLink.href = plugin.repository_url;
+        repoLink.style.display = '';
+      } else {
+        repoLink.style.display = 'none';
+      }
+
+      document.getElementById('confirmCommunityInstallBtn').onclick = () => {
+        M.Modal.getInstance(document.getElementById('communityInstallModal')).close();
+        doInstallPlugin(plugin, triggerEl);
+      };
+
+      M.Modal.getInstance(document.getElementById('communityInstallModal')).open();
+      return;
+    }
+
+    doInstallPlugin(plugin, triggerEl);
+  }
+
+  async function doInstallPlugin(plugin, triggerEl) {
     triggerEl.classList.add('disabled');
     triggerEl.textContent = 'Installing…';
 
     try {
-      const resp = await fetch(`/rest/plugins/install/${encodeURIComponent(pluginName)}`, {
+      const resp = await fetch(`/rest/plugins/install/${encodeURIComponent(plugin.name)}`, {
         method:      'POST',
         credentials: 'same-origin',
         headers:     { 'Content-Type': 'application/json' },
@@ -453,8 +577,8 @@
     updateAllBtn.innerHTML = '<span class="material-icons" style="vertical-align:middle;">hourglass_empty</span> Updating…';
 
     let successCount = 0;
-    let failCount = 0;
-    const errors = [];
+    let failCount    = 0;
+    const errors     = [];
 
     for (const plugin of pluginsToUpdate) {
       try {
@@ -473,18 +597,14 @@
       }
     }
 
-    // Reload registry after all updates
     await loadRegistry();
 
-    // Show summary
     if (failCount === 0) {
       M.toast({ html: `<span class="material-icons tiny" style="vertical-align:middle;margin-right:6px;">check_circle</span> ${successCount} plugin${successCount !== 1 ? 's' : ''} updated`, classes: 'green' });
     } else {
       const msg = `${successCount} updated, ${failCount} failed`;
       M.toast({ html: `<span class="material-icons tiny" style="vertical-align:middle;margin-right:6px;">warning</span> ${msg}`, classes: 'orange darken-1', displayLength: 6000 });
-      if (errors.length > 0) {
-        console.warn('Plugin update errors:', errors);
-      }
+      if (errors.length > 0) console.warn('Plugin update errors:', errors);
     }
 
     updateAllBtn.classList.remove('disabled');
