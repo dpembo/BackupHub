@@ -229,7 +229,6 @@ else{
 const port = serverConfig.server.port;
 
 
-//------------------------------------------------------------------
 
 function maskPasswords(jsonStr) {
   try {
@@ -4578,14 +4577,18 @@ app.get('/plugins.html', User.isAuthenticated, User.requirePermission(PERMISSION
 // =========================
 
 // GET /rest/plugins/registry — fetch remote registry merged with local install status
+// GET /rest/plugins/registry — fetch remote registry merged with local install status
 app.get('/rest/plugins/registry', User.isAuthenticated, User.requirePermission(PERMISSIONS.PLUGINS_MANAGE), asyncHandler(async (req, res) => {
   const pluginRegistry = require('./pluginRegistry.js');
-  const remoteRegistry = await pluginManager.fetchRemoteRegistry(serverConfig.pluginRegistry);
   const installed = pluginRegistry.getRegistry();
 
-  const rawBase   = (serverConfig.pluginRegistry && serverConfig.pluginRegistry.url || '').replace(/\/registry\.json$/, '');
+  const rawBase = (serverConfig.pluginRegistry && serverConfig.pluginRegistry.url || '').replace(/\/registry\.json$/, '');
+
+  // Fetch official registry
+  const remoteRegistry = await pluginManager.fetchRemoteRegistry(serverConfig.pluginRegistry);
   const sourceBase = (remoteRegistry.source || '').replace(/\/$/, '');
-  const plugins = remoteRegistry.plugins.map(p => {
+
+  const officialPlugins = remoteRegistry.plugins.map(p => {
     const local = installed[p.name];
     return {
       ...p,
@@ -4597,9 +4600,54 @@ app.get('/rest/plugins/registry', User.isAuthenticated, User.requirePermission(P
     };
   });
 
-  res.json({ success: true, plugins, registryVersion: remoteRegistry.registryVersion, updated: remoteRegistry.updated });
-}));
+  // Discover community plugins from GitHub
+  let communityPlugins = [];
+  try {
+    const discovered = await pluginManager.discoverCommunityPlugins(serverConfig.pluginRegistry);
+    logger.info(`[PLUGIN MANAGER] discovered: ${JSON.stringify(discovered.plugins.map(p => p.name))}, fromCache: ${discovered.fromCache}`);
+    const officialNames = new Set(remoteRegistry.plugins.map(p => p.name));
+    communityPlugins = discovered.plugins
+      .filter(p => !officialNames.has(p.name))
+      .map(p => {
+        const local = installed[p.name] ||
+                      Object.values(installed).find(i => i.pluginDir && i.pluginDir.endsWith(p.name));
 
+        // Serve sanitised SVG inline as a data URI — no browser request to GitHub needed
+        let iconUrl = null;
+        if (p.iconSvg) {
+          const encoded = Buffer.from(p.iconSvg).toString('base64');
+          iconUrl = `data:image/svg+xml;base64,${encoded}`;
+        }
+
+        return {
+          ...p,
+          installed:        !!local,
+          installedVersion: local ? (local.version || null) : null,
+          updateAvailable:  !!(local && local.version && p.version && local.version !== p.version),
+          iconUrl,
+          docsUrl:          p.repository_url ? `${p.repository_url}#readme` : null,
+        };
+      });
+
+    if (discovered.errors.length > 0) {
+      discovered.errors.forEach(e =>
+        logger.warn(`[PLUGIN MANAGER] Community discovery error ${e.repo}: ${e.error}`)
+      );
+    }
+  } catch (err) {
+    logger.warn(`[PLUGIN MANAGER] Community discovery failed (non-fatal): ${err.message}`);
+  }
+
+  const plugins = [...officialPlugins, ...communityPlugins];
+  logger.info(`[PLUGIN MANAGER] total plugins being sent: ${plugins.length}, community: ${communityPlugins.length}`);
+
+  res.json({
+    success: true,
+    plugins,
+    registryVersion: remoteRegistry.registryVersion,
+    updated: remoteRegistry.updated
+  });
+}));
 // POST /rest/plugins/install/:name — download and install a plugin from the registry
 app.post('/rest/plugins/install/:name', User.isAuthenticated, User.requirePermission(PERMISSIONS.PLUGINS_MANAGE), express.json(), asyncHandler(async (req, res) => {
   const pluginName    = req.params.name;
@@ -5171,12 +5219,31 @@ var server = app.listen(port, async function () {
     await orchestration.init();
     logger.info('Orchestration module initialized successfully');
 
+        // Sync community plugins before initializing the registry
+    try {
+      // Pre-warm the community discovery cache so the Plugin Manager loads instantly.
+      // Nothing is installed — that requires explicit user action via the UI.
+      const { discoverCommunityPlugins } = require('./pluginManager.js');
+      const discovered = await discoverCommunityPlugins(serverConfig.pluginRegistry);
+      logger.info(`[PLUGIN MANAGER] Community discovery cache warmed: ${discovered.plugins.length} plugin(s) found, fromCache: ${discovered.fromCache}`);
+      if (discovered.errors.length > 0) {
+        discovered.errors.forEach(e =>
+          logger.warn(`[PLUGIN MANAGER] Community discovery skipped ${e.repo}: ${e.error}`)
+        );
+      }
+    } 
+    catch (err) {
+      logger.warn(`[PLUGIN MANAGER] Community discovery pre-warm failed (non-fatal): ${err.message}`);
+    }
+
+    // Then the existing block:
     try {
       await require('./pluginRegistry.js').init();
       logger.info('Plugin registry initialized successfully');
     } catch (pluginInitErr) {
       logger.warn(`Plugin registry initialization failed (non-fatal): ${pluginInitErr.message}`);
     }
+    
     try {
       const migratedCount = await orchestration.migrateToVersionedFormat();
       if (migratedCount > 0) {
