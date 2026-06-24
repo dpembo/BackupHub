@@ -5,6 +5,23 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0"/>
   <title>Orchelium | Plugin Manager</title>
   <%- include('./partials/_head'); %>
+
+  <style>
+    .plugin-warning-badge {
+      display: inline-block;
+      font-size: 0.72rem;
+      color: #7a5200;
+      background: #fff3cd;
+      border: 1px solid #ffe08a;
+      border-radius: 3px;
+      padding: 2px 6px;
+      margin-top: 4px;
+      text-decoration: none;
+    }
+    .plugin-warning-badge:hover {
+      background: #ffe8a1;
+    }
+  </style>
 </head>
 <body>
 <%- include('./partials/_header'); %>
@@ -137,6 +154,7 @@
   </div>
 
 </div>
+
 <!-- Community plugin install warning modal -->
 <div id="communityInstallModal" class="modal">
   <div class="modal-content">
@@ -341,13 +359,11 @@
   }
 
   function setSource(src) {
-    // Toggle off if already active
     _activeSource   = (_activeSource === src && src !== '') ? '' : src;
     _activeCategory = '';
     document.querySelectorAll('#sourceList .cat-item, #categoryList .cat-item').forEach(el => {
       el.classList.remove('active');
     });
-    // Mark the matching source item active; fall back to "All" if cleared
     const target = _activeSource === ''
       ? document.querySelector('#sourceList .cat-item[data-source=""]')
       : document.querySelector(`#sourceList .cat-item[data-source="${_activeSource}"]`);
@@ -356,7 +372,6 @@
   }
 
   function setCategory(cat) {
-    // Toggle off if already active
     _activeCategory = (_activeCategory === cat) ? '' : cat;
     document.querySelectorAll('#sourceList .cat-item, #categoryList .cat-item').forEach(el => {
       el.classList.remove('active');
@@ -378,17 +393,14 @@
 
     let filtered = _allPlugins;
 
-    // Source filter
     if (_activeSource === 'official')       filtered = filtered.filter(p => p.source === 'official');
     else if (_activeSource === 'community') filtered = filtered.filter(p => p.source === 'community');
 
-    // Status / category filter
     if (_activeCategory === 'installed')          filtered = filtered.filter(p => p.installed);
     else if (_activeCategory === 'update')        filtered = filtered.filter(p => p.updateAvailable);
     else if (_activeCategory === 'not-installed') filtered = filtered.filter(p => !p.installed);
     else if (_activeCategory)                     filtered = filtered.filter(p => p.category === _activeCategory);
 
-    // Text search
     if (query) {
       filtered = filtered.filter(p =>
         p.label.toLowerCase().includes(query) ||
@@ -432,10 +444,14 @@
               </svg>
               Community
             </span>`;
-      const maintainerInfo = plugin.maintainer || plugin.repository_url
+
+      const hasWarnings = plugin.validationWarnings && plugin.validationWarnings.length > 0;
+
+      const maintainerInfo = plugin.maintainer || plugin.repository_url || hasWarnings
         ? `<div style="font-size:0.8rem;color:#666;margin-top:6px;">
              ${plugin.maintainer ? `<div>👤 <strong>Maintained by:</strong> ${escHtml(plugin.maintainer)}</div>` : ''}
              ${plugin.repository_url ? `<div><a href="${escAttr(plugin.repository_url)}" target="_blank" rel="noopener" style="color:#1976d2;text-decoration:none;">📦 View repository</a></div>` : ''}
+             ${hasWarnings ? `<div><a href="https://orchelium.com/plugin-validation.php?plugin=${escAttr(plugin.name)}" target="_blank" rel="noopener" class="plugin-warning-badge" title="${escAttr(plugin.validationWarnings.join(' | '))}">⚠️ Validation warnings</a></div>` : ''}
            </div>`
         : '';
 
@@ -451,8 +467,8 @@
         `<span class="chip" style="height:20px;font-size:11px;line-height:20px;margin:2px 2px 0 0;">${escHtml(t)}</span>`
       ).join('');
 
-      const actionBtn  = buildActionButton(plugin);
-      const docsClick  = plugin.docsUrl
+      const actionBtn = buildActionButton(plugin);
+      const docsClick = plugin.docsUrl
         ? `onclick="window.open('${escAttr(plugin.docsUrl)}','_blank','noopener')" title="View documentation" style="flex:1; padding:16px; cursor:pointer;"`
         : `style="flex:1; padding:16px;"`;
 
@@ -513,7 +529,6 @@
     const plugin = _allPlugins.find(p => p.name === pluginName);
     if (!plugin) return;
 
-    // Show warning dialog for community plugins before proceeding
     if (plugin.source === 'community') {
       document.getElementById('communityInstallLabel').textContent = plugin.label;
       document.getElementById('communityInstallMaintainer').innerHTML = plugin.maintainer
