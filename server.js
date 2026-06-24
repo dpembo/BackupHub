@@ -1327,8 +1327,7 @@ app.post('/settings.html', validateCsrf, User.isAuthenticated, User.requirePermi
     minDisconnectDurationForNotification,
     templateEnabled,templateServer,
     connectionEnabled,loginSuccessEnabled,loginFailEnabled,jobFailEnabled,
-    pluginRegistryUrl,pluginGithubApiBase,pluginGithubToken
-    
+    pluginRegistryUrl,pluginCacheLocation,validationLocation,rejectedLocation,iconsLocation,installsLocation    
   } = req.body;
 
   logger.debug(`[SETTINGS_POST] iconslist extracted from req.body: "${iconslist}" (type: ${typeof iconslist})`);
@@ -1342,9 +1341,16 @@ app.post('/settings.html', validateCsrf, User.isAuthenticated, User.requirePermi
   //Plugin Manager settings
   if (!serverConfig.pluginRegistry) serverConfig.pluginRegistry = {};
   if (pluginRegistryUrl) serverConfig.pluginRegistry.url = pluginRegistryUrl;
-  if (pluginGithubApiBase) serverConfig.pluginRegistry.githubApiBase = pluginGithubApiBase;
+  if (pluginCacheLocation) serverConfig.pluginRegistry.plugins = pluginCacheLocation;
+  if (validationLocation) serverConfig.pluginRegistry.validation = validationLocation;
+  if (rejectedLocation) serverConfig.pluginRegistry.rejected = rejectedLocation;
+  if (iconsLocation) serverConfig.pluginRegistry.icons = iconsLocation;
+  if (installsLocation) serverConfig.pluginRegistry.installs = installsLocation;
+
   // Allow clearing the token by saving an empty string
-  serverConfig.pluginRegistry.githubToken = pluginGithubToken || '';
+  if(serverConfig.pluginRegistry.githubToken !== undefined && serverConfig.pluginRegistry.githubToken !== null) {
+    serverConfig.pluginRegistry.githubToken = pluginGithubToken || '';
+  }
 
   //websocket Settings
   if(websocketEnabled=="on")websocketEnabled="true";

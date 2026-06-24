@@ -75,6 +75,18 @@ function processServerConfig() {
     }
   }
 
+  if (obj.pluginRegistry === undefined || obj.pluginRegistry === null) {
+      obj.pluginRegistry = {};
+      obj.pluginRegistry.url = "https://orchelium.com";
+      obj.pluginRegistry.plugins = "/cache/plugins.json";
+      obj.pluginRegistry.validation = "/cache/validation-report.json";
+      obj.pluginRegistry.rejected = "/cache/rejected-plugins.json";
+      obj.pluginRegistry.icons = "/cache/icons/";
+      obj.pluginRegistry.installs = "/cache/community/";
+      
+      needsave = true;
+  }
+
   if (obj.smtp!==undefined && obj.smtp.password!==undefined && obj.smtp.password!==null && obj.smtp.password.length>0)
   {
     var pass = obj.smtp.password
