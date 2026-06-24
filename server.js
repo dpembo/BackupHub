@@ -1348,9 +1348,9 @@ app.post('/settings.html', validateCsrf, User.isAuthenticated, User.requirePermi
   if (installsLocation) serverConfig.pluginRegistry.installs = installsLocation;
 
   // Allow clearing the token by saving an empty string
-  if(serverConfig.pluginRegistry.githubToken !== undefined && serverConfig.pluginRegistry.githubToken !== null) {
-    serverConfig.pluginRegistry.githubToken = pluginGithubToken || '';
-  }
+  // if(serverConfig.pluginRegistry.githubToken !== undefined && serverConfig.pluginRegistry.githubToken !== null) {
+  //   serverConfig.pluginRegistry.githubToken = pluginGithubToken || '';
+  // }
 
   //websocket Settings
   if(websocketEnabled=="on")websocketEnabled="true";
