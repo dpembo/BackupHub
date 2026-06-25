@@ -5,12 +5,12 @@
     "main": "server.js",
     "scripts": {
         "start": "node server.js",
-        "test": "jest",
-        "test:verbose": "jest --verbose",
-        "test:detail": "jest --verbose --no-coverage",
-        "test:debug": "jest --verbose --bail --detectOpenHandles",
-        "test:watch": "jest --watch",
-        "test:coverage": "jest --coverage",
+        "test": "node --experimental-vm-modules node_modules/.bin/jest",
+        "test:verbose": "node --experimental-vm-modules node_modules/.bin/jest --verbose",
+        "test:detail": "node --experimental-vm-modules node_modules/.bin/jest --verbose --no-coverage",
+        "test:debug": "node --experimental-vm-modules node_modules/.bin/jest --verbose --bail --detectOpenHandles",
+        "test:watch": "node --experimental-vm-modules node_modules/.bin/jest --watch",
+        "test:coverage": "node --experimental-vm-modules node_modules/.bin/jest --coverage",
         "dev": "nodemon server.js"
     },
     "keywords": [
@@ -27,7 +27,7 @@
     },
     "dependencies": {
         "@mdi/js": "^7.4.47",
-        "archiver": "^6.0.2",
+        "archiver": "^8.0.0",
         "axios": "^1.15.0",
         "bcrypt": "^6.0.0",
         "chart.js": "^4.5.1",

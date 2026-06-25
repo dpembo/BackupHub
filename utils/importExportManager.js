@@ -1,4 +1,5 @@
-const archiver = require('archiver');
+const { Archiver } = require('archiver');
+const { ZipArchive } = require('archiver');
 const unzipper = require('unzipper');
 
 const PACKAGE_TYPE = 'orchelium-export';
@@ -113,7 +114,7 @@ function resolveUniqueOrchestrationIdentity({ desiredName, desiredJobId, existin
 }
 
 async function createArchiveBuffer(entries) {
-  const archive = archiver('zip', { zlib: { level: 6 } });
+  const archive = new ZipArchive({ zlib: { level: 6 } });
   const chunks = [];
 
   archive.on('data', (chunk) => {
