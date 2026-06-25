@@ -683,6 +683,17 @@ async function getSchedulerData(index, executionId = null)
  * Initialise Express
  */
 var app = express();
+
+const isProduction = process.env.NODE_ENV === 'production';
+if (process.env.ORCHELIUM_TRUST_PROXY === 'true') {
+  app.set('trust proxy', 1);
+}
+
+logger.info(`Running in ${isProduction ? 'production' : 'development'} mode`);
+logger.info(`Set NODE_ENV to 'production' for production mode`);
+logger.info(`Set ORCHELIUM_TRUST_PROXY to 'true' if running behind a reverse proxy (e.g., Nginx) to ensure secure cookies`);
+
+
 //app.use(express.static('public'));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/plugin-icons',express.static('plugins/.cache/icons'));
@@ -692,14 +703,16 @@ app.use('/material-design-icons', express.static('node_modules/material-design-i
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 app.use(cookieParser());
-//app.use(session({ secret: "dave's session secret", resave:false, saveUninitialized: false }));
 app.use(session({
-  secret: "dave's session secret", 
-  resave: false, 
-  saveUninitialized: false, 
-  /*cookie: { secure: true, httpOnly: true } */
+  secret: process.env.ORCHELIUM_ENCRYPTION_KEY || 'CHANGEIT',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: isProduction,
+    httpOnly: true,
+    sameSite: 'strict'
+  }
 }));
-
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 
