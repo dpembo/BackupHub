@@ -7,6 +7,7 @@ const fs = require('fs').promises;
 const fsSync = require('fs');
 const path = require('path');
 const archiver = require('archiver');
+const { ZipArchive } = require('archiver');
 const unzipper = require('unzipper');
 const { AppError, handleError } = require('./utils/errorHandler.js');
 
@@ -100,7 +101,7 @@ async function createBackup(options = {}) {
     logger.info('Starting backup process with options:', options);
 
     // Create an in-memory zip archive
-    const archive = archiver('zip', { zlib: { level: 6 } });
+    const archive = new ZipArchive({ zlib: { level: 6 } });
     const chunks = [];
 
     // Capture archived data in buffer

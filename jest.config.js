@@ -14,4 +14,7 @@ module.exports = {
   testTimeout: 10000,
   forceExit: true,
   detectOpenHandles: false,
+  transformIgnorePatterns: [
+    '/node_modules/(?!(archiver|zip-stream|compress-commons)/)',
+  ],
 };
