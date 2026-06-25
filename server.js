@@ -685,6 +685,7 @@ async function getSchedulerData(index, executionId = null)
 var app = express();
 //app.use(express.static('public'));
 app.use(express.static(path.join(__dirname, 'public')));
+app.use('/plugin-icons',express.static('plugins/.cache/icons'));
 app.use('/monaco-editor', express.static('node_modules/monaco-editor'));
 app.use('/material-icons', express.static('node_modules/material-icons'));
 app.use('/material-design-icons', express.static('node_modules/material-design-icons-iconfont/dist'));
