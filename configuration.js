@@ -77,12 +77,12 @@ function processServerConfig() {
 
   if (obj.pluginRegistry === undefined || obj.pluginRegistry === null) {
       obj.pluginRegistry = {};
-      obj.pluginRegistry.url = "https://orchelium.com";
-      obj.pluginRegistry.plugins = "/cache/plugins.json";
-      obj.pluginRegistry.validation = "/cache/validation-report.json";
-      obj.pluginRegistry.rejected = "/cache/rejected-plugins.json";
-      obj.pluginRegistry.icons = "/cache/icons/";
-      obj.pluginRegistry.installs = "/cache/community/";
+      obj.pluginRegistry.url = "https://orchelium.com/plugins/registry/";
+      obj.pluginRegistry.plugins = "plugins.json";
+      obj.pluginRegistry.validation = "validation-report.json";
+      obj.pluginRegistry.rejected = "rejected-plugins.json";
+      obj.pluginRegistry.icons = "icons/";
+      obj.pluginRegistry.installs = "installs/";
       
       needsave = true;
   }
