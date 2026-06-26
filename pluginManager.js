@@ -29,21 +29,21 @@ function getRegistryBase() {
 
 function getRegistryUrl() {
   const base = getRegistryBase();
-  const pluginsPath = (serverConfig.pluginRegistry.plugins || '/cache/plugins.json').replace(/\/$/, '');
+  const pluginsPath = (serverConfig.pluginRegistry.plugins || 'plugins.json').replace(/\/$/, '');
   const normalised = pluginsPath.startsWith('/') ? pluginsPath : `/${pluginsPath}`;
   return `${base}${normalised}`;
 }
 
 function getValidationUrl() {
   const base = getRegistryBase();
-  const validationPath = (serverConfig.pluginRegistry.validation || '/cache/validation-report.json').replace(/\/$/, '');
+  const validationPath = (serverConfig.pluginRegistry.validation || 'validation-report.json').replace(/\/$/, '');
   const normalised = validationPath.startsWith('/') ? validationPath : `/${validationPath}`;
   return `${base}${normalised}`;
 }
 
 function getHashUrl() {
   const base = getRegistryBase();
-  const hashPath = (serverConfig.pluginRegistry.hash || '/cache/registry-hash.php').replace(/\/$/, '');
+  const hashPath = (serverConfig.pluginRegistry.hash || 'registry-hash.php').replace(/\/$/, '');
   const normalised = hashPath.startsWith('/') ? hashPath : `/${hashPath}`;
   return `${base}${normalised}`;
 }
