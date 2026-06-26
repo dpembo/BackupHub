@@ -24,37 +24,42 @@ const SVG_MAX_BYTES = 50 * 1024;
 // ── Registry URL helpers ──────────────────────────────────────────────────────
 
 function getRegistryBase() {
-  return (serverConfig.pluginRegistry.url || 'https://orchelium.com').replace(/\/$/, '');
+  return (serverConfig.pluginRegistry.url || 'https://orchelium.com/plugins/registry/').replace(/\/$/, '');
 }
 
 function getRegistryUrl() {
   const base = getRegistryBase();
-  const pluginsPath = serverConfig.pluginRegistry.plugins || '/cache/plugins.json';
-  return `${base}${pluginsPath}`;
+  const pluginsPath = (serverConfig.pluginRegistry.plugins || '/cache/plugins.json').replace(/\/$/, '');
+  const normalised = pluginsPath.startsWith('/') ? pluginsPath : `/${pluginsPath}`;
+  return `${base}${normalised}`;
 }
 
 function getValidationUrl() {
   const base = getRegistryBase();
-  const validationPath = serverConfig.pluginRegistry.validation || '/cache/validation-report.json';
-  return `${base}${validationPath}`;
+  const validationPath = (serverConfig.pluginRegistry.validation || '/cache/validation-report.json').replace(/\/$/, '');
+  const normalised = validationPath.startsWith('/') ? validationPath : `/${validationPath}`;
+  return `${base}${normalised}`;
 }
 
 function getHashUrl() {
   const base = getRegistryBase();
-  const hashPath = serverConfig.pluginRegistry.hash || '/cache/registry-hash.php';
-  return `${base}${hashPath}`;
+  const hashPath = (serverConfig.pluginRegistry.hash || '/cache/registry-hash.php').replace(/\/$/, '');
+  const normalised = hashPath.startsWith('/') ? hashPath : `/${hashPath}`;
+  return `${base}${normalised}`;
 }
 
 function getIconUrl(reponame) {
   const base = getRegistryBase();
-  const iconsPath = (serverConfig.pluginRegistry.icons || '/cache/icons/').replace(/\/$/, '');
-  return `${base}${iconsPath}/${reponame}.svg`;
+  const iconsPath = (serverConfig.pluginRegistry.icons || 'icons/').replace(/\/$/, '');
+  const normalised = iconsPath.startsWith('/') ? iconsPath : `/${iconsPath}`;
+  return `${base}${normalised}/${reponame}.svg`;
 }
 
 function getCommunityZipUrl(reponame) {
   const base = getRegistryBase();
-  const installsPath = (serverConfig.pluginRegistry.installs || '/cache/community/').replace(/\/$/, '');
-  return `${base}${installsPath}/${reponame}.zip`;
+  const installsPath = (serverConfig.pluginRegistry.installs || 'installs/').replace(/\/$/, '');
+  const normalised = installsPath.startsWith('/') ? installsPath : `/${installsPath}`;
+  return `${base}${normalised}/${reponame}.zip`;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
