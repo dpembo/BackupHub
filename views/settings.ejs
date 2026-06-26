@@ -740,7 +740,7 @@ function noValue(inValue){
                   <div class="row"> 
                     <div class="input-field col s12">
                       <input id="pluginRegistryUrl" type="text" name="pluginRegistryUrl"
-                        value="<%= serverConfig.pluginRegistry && serverConfig.pluginRegistry.url ? serverConfig.pluginRegistry.url : 'https://orchelium.com' %>">
+                        value="<%= serverConfig.pluginRegistry && serverConfig.pluginRegistry.url ? serverConfig.pluginRegistry.url : 'https://orchelium.com/plugins/registry/' %>">
                       <label for="pluginRegistryUrl" class="active">Registry URL</label>
                       <span class="helper-text">URL to the registry. Defaults to the official orchelium-plugins repository.</span>
                     </div>
@@ -749,45 +749,45 @@ function noValue(inValue){
                   <div class="row"> 
                     <div class="input-field col s12">
                       <input id="pluginCacheLocation" type="text" name="pluginCacheLocation"
-                        value="<%= serverConfig.pluginRegistry && serverConfig.pluginRegistry.plugins ? serverConfig.pluginRegistry.plugins : '/cache/plugins.json' %>">
+                        value="<%= serverConfig.pluginRegistry && serverConfig.pluginRegistry.plugins ? serverConfig.pluginRegistry.plugins : 'plugins.json' %>">
                       <label for="pluginCacheLocation" class="active">Plugin Registry Location</label>
-                      <span class="helper-text">Location to the plugin registry. Defaults to '/cache/plugins.json'.</span>
+                      <span class="helper-text">Location to the plugin registry. Defaults to 'plugins.json'.</span>
                     </div>
                   </div>
 
                   <div class="row"> 
                     <div class="input-field col s12">
                       <input id="validationLocation" type="text" name="validationLocation"
-                        value="<%= serverConfig.pluginRegistry && serverConfig.pluginRegistry.validation ? serverConfig.pluginRegistry.validation : '/cache/validation-report.json' %>">
+                        value="<%= serverConfig.pluginRegistry && serverConfig.pluginRegistry.validation ? serverConfig.pluginRegistry.validation : 'validation-report.json' %>">
                       <label for="validationLocation" class="active">Validation Report Location</label>
-                      <span class="helper-text">Location to the validation report. Defaults to '/cache/validation-report.json'.</span>
+                      <span class="helper-text">Location to the validation report. Defaults to 'validation-report.json'.</span>
                     </div>
                   </div>
 
                   <div class="row"> 
                     <div class="input-field col s12">
                       <input id="rejectedLocation" type="text" name="rejectedLocation"
-                        value="<%= serverConfig.pluginRegistry && serverConfig.pluginRegistry.rejected ? serverConfig.pluginRegistry.rejected : '/cache/rejected-plugins.json' %>">
+                        value="<%= serverConfig.pluginRegistry && serverConfig.pluginRegistry.rejected ? serverConfig.pluginRegistry.rejected : 'rejected-plugins.json' %>">
                       <label for="rejectedLocation" class="active">Rejected Plugins Location</label>
-                      <span class="helper-text">Location to the rejected plugins report. Defaults to '/cache/rejected-plugins.json'.</span>
+                      <span class="helper-text">Location to the rejected plugins report. Defaults to 'rejected-plugins.json'.</span>
                     </div>
                   </div>
 
                   <div class="row"> 
                     <div class="input-field col s12">
                       <input id="iconsLocation" type="text" name="iconsLocation"
-                        value="<%= serverConfig.pluginRegistry && serverConfig.pluginRegistry.icons ? serverConfig.pluginRegistry.icons : '/cache/icons/' %>">
+                        value="<%= serverConfig.pluginRegistry && serverConfig.pluginRegistry.icons ? serverConfig.pluginRegistry.icons : 'icons/' %>">
                       <label for="iconsLocation" class="active">Icons Location</label>
-                      <span class="helper-text">Location to the plugin icons. Defaults to '/cache/icons/'.</span>
+                      <span class="helper-text">Location to the plugin icons. Defaults to 'icons/'.</span>
                     </div>
                   </div>
 
                   <div class="row"> 
                     <div class="input-field col s12">
                       <input id="installsLocation" type="text" name="installsLocation"
-                        value="<%= serverConfig.pluginRegistry && serverConfig.pluginRegistry.installs ? serverConfig.pluginRegistry.installs : '/cache/community/' %>">
+                        value="<%= serverConfig.pluginRegistry && serverConfig.pluginRegistry.installs ? serverConfig.pluginRegistry.installs : 'installs/' %>">
                       <label for="installsLocation" class="active">Installs Location</label>
-                      <span class="helper-text">Location to the plugin images. Defaults to '/cache/community/'.</span>
+                      <span class="helper-text">Location to the plugin images. Defaults to 'installs/'.</span>
                     </div>
                   </div>
 
